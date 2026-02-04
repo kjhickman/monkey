@@ -20,3 +20,9 @@ profile.cov
 # Go workspace file
 go.work
 go.work.sum
+
+# Local copy of book
+/book
+
+# macOS metadata
+**/.DS_Store
