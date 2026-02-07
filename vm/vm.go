@@ -47,6 +47,14 @@ func (vm *VM) Run() error {
 			if err := vm.executeComparison(op); err != nil {
 				return err
 			}
+		case code.OpBang:
+			if err := vm.executeBangOperator(); err != nil {
+				return err
+			}
+		case code.OpMinus:
+			if err := vm.executeMinusOperator(); err != nil {
+				return err
+			}
 		case code.OpTrue:
 			if err := vm.push(True); err != nil {
 				return err
@@ -115,6 +123,30 @@ func (vm *VM) executeBinaryIntegerOperation(
 	}
 
 	return vm.push(&object.Integer{Value: result})
+}
+
+func (vm *VM) executeBangOperator() error {
+	operand := vm.pop()
+
+	switch operand {
+	case True:
+		return vm.push(False)
+	case False:
+		return vm.push(True)
+	default:
+		return vm.push(False)
+	}
+}
+
+func (vm *VM) executeMinusOperator() error {
+	operand := vm.pop()
+
+	if operand.Type() != object.INTEGER_OBJ {
+		return fmt.Errorf("unsupported type for negation: %s", operand.Type())
+	}
+
+	value := operand.(*object.Integer).Value
+	return vm.push(&object.Integer{Value: -value})
 }
 
 func (vm *VM) executeComparison(op code.Opcode) error {
