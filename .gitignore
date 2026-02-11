@@ -1,28 +1,42 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+
+# .NET
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+
+# NuGet
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nupkg
+**/packages/repositories.config
+
+# Visual Studio
+.vs/
+*.rsuser
+*.csproj.user
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
 # Environment variables
 .env
 
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
-*.test
-
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
-
-# Go workspace file
-go.work
-go.work.sum
-
-# Local copy of book
-/book
-
 # macOS metadata
 **/.DS_Store
+
+# Local git worktrees
+.worktrees/

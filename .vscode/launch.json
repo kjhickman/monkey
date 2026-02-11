@@ -3,11 +3,14 @@
     "configurations": [
         {
             "name": "Launch REPL",
-            "type": "go",
+            "type": "coreclr",
             "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceFolder}",
-            "console": "integratedTerminal"
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/Monkey/bin/Debug/net10.0/Monkey.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
         }
     ]
 }
