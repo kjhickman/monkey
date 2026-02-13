@@ -104,18 +104,17 @@ public class Lexer
                 if (IsLetter(_ch))
                 {
                     var literal = ReadIdentifier();
-                    var type_ = Token.Token.LookupIdent(literal);
-                    return new Token.Token(type_, literal);
+                    var type = Token.Token.LookupIdent(literal);
+                    return new Token.Token(type, literal);
                 }
-                else if (IsDigit(_ch))
+
+                if (IsDigit(_ch))
                 {
                     var literal = ReadNumber();
                     return new Token.Token(TokenType.Int, literal);
                 }
-                else
-                {
-                    tok = NewToken(TokenType.Illegal, _ch);
-                }
+
+                tok = NewToken(TokenType.Illegal, _ch);
                 break;
         }
 
@@ -169,7 +168,7 @@ public class Lexer
         while (true)
         {
             ReadChar();
-            if (_ch == '"' || _ch == '\0')
+            if (_ch is '"' or '\0')
             {
                 break;
             }
@@ -177,14 +176,14 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private static Token.Token NewToken(TokenType type_, char ch)
+    private static Token.Token NewToken(TokenType type, char ch)
     {
-        return new Token.Token(type_, ch.ToString());
+        return new Token.Token(type, ch.ToString());
     }
 
     private static bool IsLetter(char ch)
     {
-        return ch is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '_';
+        return ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or '_';
     }
 
     private static bool IsDigit(char ch)

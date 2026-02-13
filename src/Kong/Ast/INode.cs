@@ -6,10 +6,6 @@ public interface INode
     string String();
 }
 
-public interface IStatement : INode
-{
-}
+public interface IStatement : INode;
 
-public interface IExpression : INode
-{
-}
+public interface IExpression : INode;

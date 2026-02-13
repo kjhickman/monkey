@@ -69,7 +69,7 @@ public class SymbolTable
                 return (outerObj, false);
             }
 
-            if (outerObj.Scope == SymbolScope.Global || outerObj.Scope == SymbolScope.Builtin)
+            if (outerObj.Scope is SymbolScope.Global or SymbolScope.Builtin)
             {
                 return (outerObj, true);
             }

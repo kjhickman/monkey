@@ -61,6 +61,6 @@ public record struct Token(TokenType Type, string Literal)
 
     public static TokenType LookupIdent(string ident)
     {
-        return Keywords.TryGetValue(ident, out var tokenType) ? tokenType : TokenType.Ident;
+        return Keywords.GetValueOrDefault(ident, TokenType.Ident);
     }
 }

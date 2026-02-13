@@ -141,12 +141,12 @@ public class Parser
 
     private Precedence PeekPrecedence()
     {
-        return Precedences.TryGetValue(_peekToken.Type, out var p) ? p : Precedence.Lowest;
+        return Precedences.GetValueOrDefault(_peekToken.Type, Precedence.Lowest);
     }
 
     private Precedence CurPrecedence()
     {
-        return Precedences.TryGetValue(_curToken.Type, out var p) ? p : Precedence.Lowest;
+        return Precedences.GetValueOrDefault(_curToken.Type, Precedence.Lowest);
     }
 
     private IStatement? ParseStatement()
@@ -161,14 +161,14 @@ public class Parser
 
     private LetStatement? ParseLetStatement()
     {
-        var stmt = new LetStatement { Token = _curToken };
+        var statement = new LetStatement { Token = _curToken };
 
         if (!ExpectPeek(TokenType.Ident))
         {
             return null;
         }
 
-        stmt.Name = new Identifier { Token = _curToken, Value = _curToken.Literal };
+        statement.Name = new Identifier { Token = _curToken, Value = _curToken.Literal };
 
         if (!ExpectPeek(TokenType.Assign))
         {
@@ -177,11 +177,11 @@ public class Parser
 
         NextToken();
 
-        stmt.Value = ParseExpression(Precedence.Lowest);
+        statement.Value = ParseExpression(Precedence.Lowest);
 
-        if (stmt.Value is FunctionLiteral fl)
+        if (statement.Value is FunctionLiteral fl)
         {
-            fl.Name = stmt.Name.Value;
+            fl.Name = statement.Name.Value;
         }
 
         if (PeekTokenIs(TokenType.Semicolon))
@@ -189,28 +189,28 @@ public class Parser
             NextToken();
         }
 
-        return stmt;
+        return statement;
     }
 
     private ReturnStatement ParseReturnStatement()
     {
-        var stmt = new ReturnStatement { Token = _curToken };
+        var statement = new ReturnStatement { Token = _curToken };
 
         NextToken();
 
-        stmt.ReturnValue = ParseExpression(Precedence.Lowest);
+        statement.ReturnValue = ParseExpression(Precedence.Lowest);
 
         if (PeekTokenIs(TokenType.Semicolon))
         {
             NextToken();
         }
 
-        return stmt;
+        return statement;
     }
 
     private ExpressionStatement ParseExpressionStatement()
     {
-        var stmt = new ExpressionStatement
+        var statement = new ExpressionStatement
         {
             Token = _curToken,
             Expression = ParseExpression(Precedence.Lowest),
@@ -221,7 +221,7 @@ public class Parser
             NextToken();
         }
 
-        return stmt;
+        return statement;
     }
 
     private BlockStatement ParseBlockStatement()
@@ -251,21 +251,21 @@ public class Parser
             return null;
         }
 
-        var leftExp = prefix();
+        var leftExpression = prefix();
 
         while (!PeekTokenIs(TokenType.Semicolon) && precedence < PeekPrecedence())
         {
             if (!_infixParseFns.TryGetValue(_peekToken.Type, out var infix))
             {
-                return leftExp;
+                return leftExpression;
             }
 
             NextToken();
 
-            leftExp = infix(leftExp);
+            leftExpression = infix(leftExpression);
         }
 
-        return leftExp;
+        return leftExpression;
     }
 
     private IExpression ParsePrefixExpression()
@@ -306,7 +306,7 @@ public class Parser
 
     private IExpression ParseIntegerLiteral()
     {
-        var lit = new IntegerLiteral { Token = _curToken };
+        var literal = new IntegerLiteral { Token = _curToken };
 
         if (!long.TryParse(_curToken.Literal, out var value))
         {
@@ -315,9 +315,9 @@ public class Parser
             return null!;
         }
 
-        lit.Value = value;
+        literal.Value = value;
 
-        return lit;
+        return literal;
     }
 
     private IExpression ParseStringLiteral()
@@ -327,23 +327,23 @@ public class Parser
 
     private IExpression ParseFunctionLiteral()
     {
-        var lit = new FunctionLiteral { Token = _curToken };
+        var literal = new FunctionLiteral { Token = _curToken };
 
         if (!ExpectPeek(TokenType.LParen))
         {
             return null!;
         }
 
-        lit.Parameters = ParseFunctionParameters();
+        literal.Parameters = ParseFunctionParameters();
 
         if (!ExpectPeek(TokenType.LBrace))
         {
             return null!;
         }
 
-        lit.Body = ParseBlockStatement();
+        literal.Body = ParseBlockStatement();
 
-        return lit;
+        return literal;
     }
 
     private IExpression ParseBoolean()
@@ -355,14 +355,14 @@ public class Parser
     {
         NextToken();
 
-        var exp = ParseExpression(Precedence.Lowest);
+        var expression = ParseExpression(Precedence.Lowest);
 
         if (!ExpectPeek(TokenType.RParen))
         {
             return null!;
         }
 
-        return exp!;
+        return expression!;
     }
 
     private IExpression ParseIfExpression()
@@ -377,29 +377,25 @@ public class Parser
         NextToken();
         expression.Condition = ParseExpression(Precedence.Lowest)!;
 
-        if (!ExpectPeek(TokenType.RParen))
-        {
-            return null!;
-        }
-
-        if (!ExpectPeek(TokenType.LBrace))
+        if (!ExpectPeek(TokenType.RParen) || !ExpectPeek(TokenType.LBrace))
         {
             return null!;
         }
 
         expression.Consequence = ParseBlockStatement();
 
-        if (PeekTokenIs(TokenType.Else))
+        if (!PeekTokenIs(TokenType.Else))
         {
-            NextToken();
-
-            if (!ExpectPeek(TokenType.LBrace))
-            {
-                return null!;
-            }
-
-            expression.Alternative = ParseBlockStatement();
+            return expression;
         }
+
+        NextToken();
+        if (!ExpectPeek(TokenType.LBrace))
+        {
+            return null!;
+        }
+
+        expression.Alternative = ParseBlockStatement();
 
         return expression;
     }
@@ -427,15 +423,15 @@ public class Parser
 
         NextToken();
 
-        var ident = new Identifier { Token = _curToken, Value = _curToken.Literal };
-        identifiers.Add(ident);
+        var identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
+        identifiers.Add(identifier);
 
         while (PeekTokenIs(TokenType.Comma))
         {
             NextToken();
             NextToken();
-            ident = new Identifier { Token = _curToken, Value = _curToken.Literal };
-            identifiers.Add(ident);
+            identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
+            identifiers.Add(identifier);
         }
 
         if (!ExpectPeek(TokenType.RParen))
@@ -486,17 +482,17 @@ public class Parser
 
     private IExpression ParseIndexExpression(IExpression left)
     {
-        var exp = new IndexExpression { Token = _curToken, Left = left };
+        var expression = new IndexExpression { Token = _curToken, Left = left };
 
         NextToken();
-        exp.Index = ParseExpression(Precedence.Lowest)!;
+        expression.Index = ParseExpression(Precedence.Lowest)!;
 
         if (!ExpectPeek(TokenType.RBracket))
         {
             return null!;
         }
 
-        return exp;
+        return expression;
     }
 
     private IExpression ParseHashLiteral()

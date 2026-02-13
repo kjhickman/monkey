@@ -51,11 +51,7 @@ public class Definition
 
 public class Instructions
 {
-    public List<byte> Bytes { get; }
-
-    public Instructions() => Bytes = [];
-    public Instructions(byte[] bytes) => Bytes = [.. bytes];
-    public Instructions(List<byte> bytes) => Bytes = bytes;
+    public List<byte> Bytes { get; } = [];
 
     public int Count => Bytes.Count;
     public byte this[int index]
@@ -65,7 +61,6 @@ public class Instructions
     }
 
     public void AddRange(byte[] bytes) => Bytes.AddRange(bytes);
-    public byte[] ToArray() => [.. Bytes];
 
     public override string ToString()
     {
@@ -147,7 +142,7 @@ public static class Code
 
     public static Definition? Lookup(byte op)
     {
-        return Definitions.TryGetValue((Opcode)op, out var def) ? def : null;
+        return Definitions.GetValueOrDefault((Opcode)op);
     }
 
     public static byte[] Make(Opcode op, params int[] operands)
