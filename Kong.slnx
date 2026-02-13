@@ -1,4 +1,5 @@
 <Solution>
-  <Project Path="src\Kong\Kong.csproj" />
-  <Project Path="tests\Kong.Tests\Kong.Tests.csproj" />
+  <Project Path="src/Kong.Cli/Kong.Cli.csproj" />
+  <Project Path="src/Kong/Kong.csproj" />
+  <Project Path="tests/Kong.Tests/Kong.Tests.csproj" />
 </Solution>

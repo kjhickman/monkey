@@ -6,8 +6,8 @@
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
-            "program": "${workspaceFolder}/src/Kong/bin/Debug/net10.0/Kong.dll",
-            "args": [],
+            "program": "${workspaceFolder}/src/Kong.Cli/bin/Debug/net10.0/Kong.Cli.dll",
+            "args": ["repl"],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "stopAtEntry": false

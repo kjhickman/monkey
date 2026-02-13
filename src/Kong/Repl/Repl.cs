@@ -1,7 +1,5 @@
 using Kong.Compiler;
 using Kong.Object;
-using Kong.Lexer;
-using Kong.Parser;
 
 namespace Kong.Repl;
 
