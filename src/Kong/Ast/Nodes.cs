@@ -5,6 +5,7 @@ namespace Kong.Ast;
 
 public class Program : INode
 {
+    public Span Span { get; set; }
     public List<IStatement> Statements { get; set; } = [];
 
     public string TokenLiteral()
@@ -25,6 +26,7 @@ public class Program : INode
 
 public class LetStatement : IStatement
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the TokenType.Let token
     public Identifier Name { get; set; } = null!;
     public IExpression? Value { get; set; }
@@ -48,6 +50,7 @@ public class LetStatement : IStatement
 
 public class Identifier : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the TokenType.Ident token
     public string Value { get; set; } = "";
 
@@ -57,6 +60,7 @@ public class Identifier : IExpression
 
 public class ReturnStatement : IStatement
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the 'return' token
     public IExpression? ReturnValue { get; set; }
 
@@ -77,6 +81,7 @@ public class ReturnStatement : IStatement
 
 public class ExpressionStatement : IStatement
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the first token of the expression
     public IExpression? Expression { get; set; }
 
@@ -90,6 +95,7 @@ public class ExpressionStatement : IStatement
 
 public class IntegerLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; }
     public long Value { get; set; }
 
@@ -99,6 +105,7 @@ public class IntegerLiteral : IExpression
 
 public class PrefixExpression : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The prefix token, e.g. !
     public string Operator { get; set; } = "";
     public IExpression Right { get; set; } = null!;
@@ -113,6 +120,7 @@ public class PrefixExpression : IExpression
 
 public class InfixExpression : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The operator token, e.g. +
     public IExpression Left { get; set; } = null!;
     public string Operator { get; set; } = "";
@@ -128,6 +136,7 @@ public class InfixExpression : IExpression
 
 public class BooleanLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; }
     public bool Value { get; set; }
 
@@ -137,6 +146,7 @@ public class BooleanLiteral : IExpression
 
 public class IfExpression : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The 'if' token
     public IExpression Condition { get; set; } = null!;
     public BlockStatement Consequence { get; set; } = null!;
@@ -162,6 +172,7 @@ public class IfExpression : IExpression
 
 public class BlockStatement : IStatement
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the { token
     public List<IStatement> Statements { get; set; } = [];
 
@@ -180,6 +191,7 @@ public class BlockStatement : IStatement
 
 public class FunctionLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The 'fn' token
     public List<Identifier> Parameters { get; set; } = [];
     public BlockStatement Body { get; set; } = null!;
@@ -206,6 +218,7 @@ public class FunctionLiteral : IExpression
 
 public class CallExpression : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The '(' token
     public IExpression Function { get; set; } = null!; // Identifier or FunctionLiteral
     public List<IExpression> Arguments { get; set; } = [];
@@ -221,6 +234,7 @@ public class CallExpression : IExpression
 
 public class StringLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; }
     public string Value { get; set; } = "";
 
@@ -230,6 +244,7 @@ public class StringLiteral : IExpression
 
 public class ArrayLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the '[' token
     public List<IExpression> Elements { get; set; } = [];
 
@@ -244,6 +259,7 @@ public class ArrayLiteral : IExpression
 
 public class IndexExpression : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // The [ token
     public IExpression Left { get; set; } = null!;
     public IExpression Index { get; set; } = null!;
@@ -258,6 +274,7 @@ public class IndexExpression : IExpression
 
 public class HashLiteral : IExpression
 {
+    public Span Span { get; set; }
     public Token.Token Token { get; set; } // the '{' token
     public List<KeyValuePair<IExpression, IExpression>> Pairs { get; set; } = [];
 

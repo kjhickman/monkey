@@ -9,6 +9,9 @@ public class Lexer
     private int _readPosition; // current reading position in input (after current char)
     private char _ch;          // current character under examination
 
+    private int _line = 1;     // line number of _ch (1-based)
+    private int _column;       // column number of _ch (1-based, set by ReadChar)
+
     public Lexer(string input)
     {
         _input = input;
@@ -21,100 +24,111 @@ public class Lexer
 
         SkipWhitespace();
 
+        // Snapshot the start position before consuming the token.
+        var start = new Position(_line, _column);
+
         switch (_ch)
         {
             case '=':
                 if (PeekChar() == '=')
                 {
-                    var ch = _ch;
                     ReadChar();
-                    var literal = $"{ch}{_ch}";
-                    tok = new Token.Token(TokenType.Eq, literal);
+                    tok = new Token.Token(TokenType.Eq, "==",
+                        new Span(start, new Position(_line, _column + 1)));
                 }
                 else
                 {
-                    tok = NewToken(TokenType.Assign, _ch);
+                    tok = NewToken(TokenType.Assign, _ch, start);
                 }
                 break;
             case '+':
-                tok = NewToken(TokenType.Plus, _ch);
+                tok = NewToken(TokenType.Plus, _ch, start);
                 break;
             case '-':
-                tok = NewToken(TokenType.Minus, _ch);
+                tok = NewToken(TokenType.Minus, _ch, start);
                 break;
             case '!':
                 if (PeekChar() == '=')
                 {
-                    var ch = _ch;
                     ReadChar();
-                    var literal = $"{ch}{_ch}";
-                    tok = new Token.Token(TokenType.NotEq, literal);
+                    tok = new Token.Token(TokenType.NotEq, "!=",
+                        new Span(start, new Position(_line, _column + 1)));
                 }
                 else
                 {
-                    tok = NewToken(TokenType.Bang, _ch);
+                    tok = NewToken(TokenType.Bang, _ch, start);
                 }
                 break;
             case '/':
-                tok = NewToken(TokenType.Slash, _ch);
+                tok = NewToken(TokenType.Slash, _ch, start);
                 break;
             case '*':
-                tok = NewToken(TokenType.Asterisk, _ch);
+                tok = NewToken(TokenType.Asterisk, _ch, start);
                 break;
             case '<':
-                tok = NewToken(TokenType.Lt, _ch);
+                tok = NewToken(TokenType.Lt, _ch, start);
                 break;
             case '>':
-                tok = NewToken(TokenType.Gt, _ch);
+                tok = NewToken(TokenType.Gt, _ch, start);
                 break;
             case ';':
-                tok = NewToken(TokenType.Semicolon, _ch);
+                tok = NewToken(TokenType.Semicolon, _ch, start);
                 break;
             case ',':
-                tok = NewToken(TokenType.Comma, _ch);
+                tok = NewToken(TokenType.Comma, _ch, start);
                 break;
             case ':':
-                tok = NewToken(TokenType.Colon, _ch);
+                tok = NewToken(TokenType.Colon, _ch, start);
                 break;
             case '(':
-                tok = NewToken(TokenType.LParen, _ch);
+                tok = NewToken(TokenType.LParen, _ch, start);
                 break;
             case ')':
-                tok = NewToken(TokenType.RParen, _ch);
+                tok = NewToken(TokenType.RParen, _ch, start);
                 break;
             case '{':
-                tok = NewToken(TokenType.LBrace, _ch);
+                tok = NewToken(TokenType.LBrace, _ch, start);
                 break;
             case '}':
-                tok = NewToken(TokenType.RBrace, _ch);
+                tok = NewToken(TokenType.RBrace, _ch, start);
                 break;
             case '[':
-                tok = NewToken(TokenType.LBracket, _ch);
+                tok = NewToken(TokenType.LBracket, _ch, start);
                 break;
             case ']':
-                tok = NewToken(TokenType.RBracket, _ch);
+                tok = NewToken(TokenType.RBracket, _ch, start);
                 break;
             case '"':
-                tok = new Token.Token(TokenType.String, ReadString());
+            {
+                var value = ReadString();
+                // After ReadString, _ch is the closing quote. End is one past it.
+                var end = new Position(_line, _column + 1);
+                tok = new Token.Token(TokenType.String, value, new Span(start, end));
                 break;
+            }
             case '\0':
-                tok = new Token.Token(TokenType.Eof, "");
+                tok = new Token.Token(TokenType.Eof, "", new Span(start, start));
                 break;
             default:
                 if (IsLetter(_ch))
                 {
                     var literal = ReadIdentifier();
                     var type = Token.Token.LookupIdent(literal);
-                    return new Token.Token(type, literal);
+                    // After ReadIdentifier, _ch is the first non-letter char.
+                    // _column points to that char, so the identifier ended at _column - 1.
+                    // End column is one past the last char of the identifier.
+                    var end = new Position(_line, _column);
+                    return new Token.Token(type, literal, new Span(start, end));
                 }
 
                 if (IsDigit(_ch))
                 {
                     var literal = ReadNumber();
-                    return new Token.Token(TokenType.Int, literal);
+                    var end = new Position(_line, _column);
+                    return new Token.Token(TokenType.Int, literal, new Span(start, end));
                 }
 
-                tok = NewToken(TokenType.Illegal, _ch);
+                tok = NewToken(TokenType.Illegal, _ch, start);
                 break;
         }
 
@@ -132,9 +146,23 @@ public class Lexer
 
     private void ReadChar()
     {
+        // Track newlines: if the current character (about to be left behind) is '\n',
+        // the next character starts a new line.
+        var advancingPastNewline = _ch == '\n' && _position < _input.Length;
+
         _ch = _readPosition >= _input.Length ? '\0' : _input[_readPosition];
         _position = _readPosition;
         _readPosition++;
+
+        if (advancingPastNewline)
+        {
+            _line++;
+            _column = 1;
+        }
+        else
+        {
+            _column++;
+        }
     }
 
     private char PeekChar()
@@ -176,9 +204,10 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private static Token.Token NewToken(TokenType type, char ch)
+    private static Token.Token NewToken(TokenType type, char ch, Position start)
     {
-        return new Token.Token(type, ch.ToString());
+        return new Token.Token(type, ch.ToString(),
+            new Span(start, new Position(start.Line, start.Column + 1)));
     }
 
     private static bool IsLetter(char ch)

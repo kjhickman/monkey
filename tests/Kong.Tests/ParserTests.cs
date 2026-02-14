@@ -558,4 +558,344 @@ public class ParserTests
         Assert.Equal(value, bo.Value);
         Assert.Equal(value.ToString().ToLower(), bo.TokenLiteral());
     }
+
+    // --- Span tests ---
+
+    private static void AssertSpan(
+        Kong.Token.Span span,
+        int startLine, int startCol,
+        int endLine, int endCol)
+    {
+        Assert.Equal(startLine, span.Start.Line);
+        Assert.Equal(startCol, span.Start.Column);
+        Assert.Equal(endLine, span.End.Line);
+        Assert.Equal(endCol, span.End.Column);
+    }
+
+    [Fact]
+    public void TestLetStatementSpan()
+    {
+        // Input:  let x = 5;
+        // Cols:   1234567890
+        var input = "let x = 5;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var stmt = Assert.IsType<LetStatement>(program.Statements[0]);
+        // Span covers the whole statement from 'let' to ';'
+        AssertSpan(stmt.Span, 1, 1, 1, 11);
+
+        // The identifier 'x'
+        AssertSpan(stmt.Name.Span, 1, 5, 1, 6);
+
+        // The value '5'
+        var value = Assert.IsType<IntegerLiteral>(stmt.Value);
+        AssertSpan(value.Span, 1, 9, 1, 10);
+    }
+
+    [Fact]
+    public void TestReturnStatementSpan()
+    {
+        var input = "return 42;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var stmt = Assert.IsType<ReturnStatement>(program.Statements[0]);
+        AssertSpan(stmt.Span, 1, 1, 1, 11);
+    }
+
+    [Fact]
+    public void TestIdentifierSpan()
+    {
+        var input = "foobar;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var ident = Assert.IsType<Identifier>(exprStmt.Expression);
+        AssertSpan(ident.Span, 1, 1, 1, 7);
+    }
+
+    [Fact]
+    public void TestIntegerLiteralSpan()
+    {
+        var input = "123;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var intLit = Assert.IsType<IntegerLiteral>(exprStmt.Expression);
+        AssertSpan(intLit.Span, 1, 1, 1, 4);
+    }
+
+    [Fact]
+    public void TestStringLiteralSpan()
+    {
+        var input = "\"hello\";";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var strLit = Assert.IsType<StringLiteral>(exprStmt.Expression);
+        AssertSpan(strLit.Span, 1, 1, 1, 8);
+    }
+
+    [Fact]
+    public void TestBooleanLiteralSpan()
+    {
+        var input = "true;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var boolLit = Assert.IsType<BooleanLiteral>(exprStmt.Expression);
+        AssertSpan(boolLit.Span, 1, 1, 1, 5);
+    }
+
+    [Fact]
+    public void TestPrefixExpressionSpan()
+    {
+        // Input:  !true;
+        // Cols:   123456
+        var input = "!true;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var prefix = Assert.IsType<PrefixExpression>(exprStmt.Expression);
+        // Span from '!' to end of 'true'
+        AssertSpan(prefix.Span, 1, 1, 1, 6);
+    }
+
+    [Fact]
+    public void TestInfixExpressionSpan()
+    {
+        // Input:  1 + 20;
+        // Cols:   1234567
+        var input = "1 + 20;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var infix = Assert.IsType<InfixExpression>(exprStmt.Expression);
+        // Span from start of '1' to end of '20'
+        AssertSpan(infix.Span, 1, 1, 1, 7);
+    }
+
+    [Fact]
+    public void TestIfExpressionSpan()
+    {
+        // Input:  if (x) { y }
+        // Cols:   123456789012
+        var input = "if (x) { y }";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var ifExpr = Assert.IsType<IfExpression>(exprStmt.Expression);
+        // Span from 'if' to closing '}'
+        AssertSpan(ifExpr.Span, 1, 1, 1, 13);
+    }
+
+    [Fact]
+    public void TestIfElseExpressionSpan()
+    {
+        var input = "if (x) { y } else { z }";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var ifExpr = Assert.IsType<IfExpression>(exprStmt.Expression);
+        // Span from 'if' to closing '}' of else block
+        AssertSpan(ifExpr.Span, 1, 1, 1, 24);
+    }
+
+    [Fact]
+    public void TestFunctionLiteralSpan()
+    {
+        // Input:  fn(x) { x }
+        // Cols:   12345678901
+        var input = "fn(x) { x }";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
+        // Span from 'fn' to closing '}'
+        AssertSpan(fnLit.Span, 1, 1, 1, 12);
+        // Parameter 'x'
+        AssertSpan(fnLit.Parameters[0].Span, 1, 4, 1, 5);
+    }
+
+    [Fact]
+    public void TestCallExpressionSpan()
+    {
+        // Input:  add(1, 2)
+        // Cols:   123456789
+        var input = "add(1, 2)";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var call = Assert.IsType<CallExpression>(exprStmt.Expression);
+        // Span from 'add' to closing ')'
+        AssertSpan(call.Span, 1, 1, 1, 10);
+    }
+
+    [Fact]
+    public void TestArrayLiteralSpan()
+    {
+        // Input:  [1, 2, 3]
+        // Cols:   123456789
+        var input = "[1, 2, 3]";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var arr = Assert.IsType<ArrayLiteral>(exprStmt.Expression);
+        AssertSpan(arr.Span, 1, 1, 1, 10);
+    }
+
+    [Fact]
+    public void TestIndexExpressionSpan()
+    {
+        // Input:  arr[0]
+        // Cols:   123456
+        var input = "arr[0]";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var idx = Assert.IsType<IndexExpression>(exprStmt.Expression);
+        AssertSpan(idx.Span, 1, 1, 1, 7);
+    }
+
+    [Fact]
+    public void TestHashLiteralSpan()
+    {
+        // Input:  {"a": 1}
+        // Cols:   12345678
+        var input = "{\"a\": 1}";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var hash = Assert.IsType<HashLiteral>(exprStmt.Expression);
+        AssertSpan(hash.Span, 1, 1, 1, 9);
+    }
+
+    [Fact]
+    public void TestBlockStatementSpan()
+    {
+        // Test via function literal body
+        var input = "fn() { 1; 2 }";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
+        // Block span from '{' to '}'
+        AssertSpan(fnLit.Body.Span, 1, 6, 1, 14);
+    }
+
+    [Fact]
+    public void TestMultiLineSpans()
+    {
+        var input = "let x = 1;\nlet y = 2;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        Assert.Equal(2, program.Statements.Count);
+
+        var stmt1 = Assert.IsType<LetStatement>(program.Statements[0]);
+        AssertSpan(stmt1.Span, 1, 1, 1, 11);
+
+        var stmt2 = Assert.IsType<LetStatement>(program.Statements[1]);
+        AssertSpan(stmt2.Span, 2, 1, 2, 11);
+
+        // Program span covers everything
+        AssertSpan(program.Span, 1, 1, 2, 11);
+    }
+
+    [Fact]
+    public void TestMultiLineFunctionSpan()
+    {
+        var input = "fn(x) {\n  return x;\n}";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
+        // Span from 'fn' on line 1 to '}' on line 3
+        AssertSpan(fnLit.Span, 1, 1, 3, 2);
+        // Body span from '{' on line 1 to '}' on line 3
+        AssertSpan(fnLit.Body.Span, 1, 7, 3, 2);
+        // Return statement on line 2
+        var retStmt = Assert.IsType<ReturnStatement>(fnLit.Body.Statements[0]);
+        AssertSpan(retStmt.Span, 2, 3, 2, 12);
+    }
+
+    [Fact]
+    public void TestExpressionStatementSpan()
+    {
+        // Expression statement with semicolon
+        var input = "5;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        var program = p.ParseProgram();
+        CheckParserErrors(p);
+
+        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        // Includes the semicolon
+        AssertSpan(exprStmt.Span, 1, 1, 1, 3);
+    }
+
+    [Fact]
+    public void TestParserErrorIncludesPosition()
+    {
+        var input = "let = 5;";
+        var l = new Lexer.Lexer(input);
+        var p = new Parser.Parser(l);
+        p.ParseProgram();
+
+        Assert.NotEmpty(p.Errors());
+        // Error message should contain position information
+        Assert.Contains("at line", p.Errors()[0]);
+    }
 }

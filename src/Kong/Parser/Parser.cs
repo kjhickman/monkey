@@ -85,6 +85,7 @@ public class Parser
     public Ast.Program ParseProgram()
     {
         var program = new Ast.Program();
+        var start = _curToken.Span.Start;
 
         while (!CurTokenIs(TokenType.Eof))
         {
@@ -94,6 +95,11 @@ public class Parser
                 program.Statements.Add(stmt);
             }
             NextToken();
+        }
+
+        if (program.Statements.Count > 0)
+        {
+            program.Span = new Span(start, program.Statements[^1].Span.End);
         }
 
         return program;
@@ -129,13 +135,15 @@ public class Parser
 
     private void PeekError(TokenType t)
     {
-        var msg = $"expected next token to be {t}, got {_peekToken.Type} instead";
+        var pos = _peekToken.Span.Start;
+        var msg = $"expected next token to be {t}, got {_peekToken.Type} instead (at {pos})";
         _errors.Add(msg);
     }
 
     private void NoPrefixParseFnError(TokenType t)
     {
-        var msg = $"no prefix parse function for {t} found";
+        var pos = _curToken.Span.Start;
+        var msg = $"no prefix parse function for {t} found (at {pos})";
         _errors.Add(msg);
     }
 
@@ -161,6 +169,7 @@ public class Parser
 
     private LetStatement? ParseLetStatement()
     {
+        var startSpan = _curToken.Span;
         var statement = new LetStatement { Token = _curToken };
 
         if (!ExpectPeek(TokenType.Ident))
@@ -168,7 +177,12 @@ public class Parser
             return null;
         }
 
-        statement.Name = new Identifier { Token = _curToken, Value = _curToken.Literal };
+        statement.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
 
         if (!ExpectPeek(TokenType.Assign))
         {
@@ -189,11 +203,13 @@ public class Parser
             NextToken();
         }
 
+        statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
 
     private ReturnStatement ParseReturnStatement()
     {
+        var startSpan = _curToken.Span;
         var statement = new ReturnStatement { Token = _curToken };
 
         NextToken();
@@ -205,11 +221,13 @@ public class Parser
             NextToken();
         }
 
+        statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
 
     private ExpressionStatement ParseExpressionStatement()
     {
+        var startSpan = _curToken.Span;
         var statement = new ExpressionStatement
         {
             Token = _curToken,
@@ -221,11 +239,13 @@ public class Parser
             NextToken();
         }
 
+        statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
 
     private BlockStatement ParseBlockStatement()
     {
+        var startSpan = _curToken.Span;
         var block = new BlockStatement { Token = _curToken };
 
         NextToken();
@@ -240,6 +260,8 @@ public class Parser
             NextToken();
         }
 
+        // _curToken is now the '}' token
+        block.Span = new Span(startSpan.Start, _curToken.Span.End);
         return block;
     }
 
@@ -270,6 +292,7 @@ public class Parser
 
     private IExpression ParsePrefixExpression()
     {
+        var startSpan = _curToken.Span;
         var expression = new PrefixExpression
         {
             Token = _curToken,
@@ -279,6 +302,7 @@ public class Parser
         NextToken();
 
         expression.Right = ParseExpression(Precedence.Prefix)!;
+        expression.Span = new Span(startSpan.Start, expression.Right.Span.End);
 
         return expression;
     }
@@ -296,17 +320,29 @@ public class Parser
         NextToken();
         expression.Right = ParseExpression(precedence)!;
 
+        // Span covers from start of left to end of right
+        expression.Span = new Span(left.Span.Start, expression.Right.Span.End);
+
         return expression;
     }
 
     private IExpression ParseIdentifier()
     {
-        return new Identifier { Token = _curToken, Value = _curToken.Literal };
+        return new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
     }
 
     private IExpression ParseIntegerLiteral()
     {
-        var literal = new IntegerLiteral { Token = _curToken };
+        var literal = new IntegerLiteral
+        {
+            Token = _curToken,
+            Span = _curToken.Span,
+        };
 
         if (!long.TryParse(_curToken.Literal, out var value))
         {
@@ -322,11 +358,17 @@ public class Parser
 
     private IExpression ParseStringLiteral()
     {
-        return new StringLiteral { Token = _curToken, Value = _curToken.Literal };
+        return new StringLiteral
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
     }
 
     private IExpression ParseFunctionLiteral()
     {
+        var startSpan = _curToken.Span;
         var literal = new FunctionLiteral { Token = _curToken };
 
         if (!ExpectPeek(TokenType.LParen))
@@ -343,12 +385,20 @@ public class Parser
 
         literal.Body = ParseBlockStatement();
 
+        // Span from 'fn' to closing '}' of body
+        literal.Span = new Span(startSpan.Start, literal.Body.Span.End);
+
         return literal;
     }
 
     private IExpression ParseBoolean()
     {
-        return new BooleanLiteral { Token = _curToken, Value = CurTokenIs(TokenType.True) };
+        return new BooleanLiteral
+        {
+            Token = _curToken,
+            Value = CurTokenIs(TokenType.True),
+            Span = _curToken.Span,
+        };
     }
 
     private IExpression ParseGroupedExpression()
@@ -367,6 +417,7 @@ public class Parser
 
     private IExpression ParseIfExpression()
     {
+        var startSpan = _curToken.Span;
         var expression = new IfExpression { Token = _curToken };
 
         if (!ExpectPeek(TokenType.LParen))
@@ -386,6 +437,7 @@ public class Parser
 
         if (!PeekTokenIs(TokenType.Else))
         {
+            expression.Span = new Span(startSpan.Start, expression.Consequence.Span.End);
             return expression;
         }
 
@@ -396,6 +448,7 @@ public class Parser
         }
 
         expression.Alternative = ParseBlockStatement();
+        expression.Span = new Span(startSpan.Start, expression.Alternative.Span.End);
 
         return expression;
     }
@@ -408,6 +461,8 @@ public class Parser
             Function = function,
             Arguments = ParseExpressionList(TokenType.RParen),
         };
+        // Span from start of function expression to closing ')'
+        exp.Span = new Span(function.Span.Start, _curToken.Span.End);
         return exp;
     }
 
@@ -423,14 +478,24 @@ public class Parser
 
         NextToken();
 
-        var identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
+        var identifier = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
         identifiers.Add(identifier);
 
         while (PeekTokenIs(TokenType.Comma))
         {
             NextToken();
             NextToken();
-            identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
+            identifier = new Identifier
+            {
+                Token = _curToken,
+                Value = _curToken.Literal,
+                Span = _curToken.Span,
+            };
             identifiers.Add(identifier);
         }
 
@@ -444,11 +509,14 @@ public class Parser
 
     private IExpression ParseArrayLiteral()
     {
+        var startSpan = _curToken.Span;
         var array = new ArrayLiteral
         {
             Token = _curToken,
             Elements = ParseExpressionList(TokenType.RBracket),
         };
+        // Span from '[' to ']'
+        array.Span = new Span(startSpan.Start, _curToken.Span.End);
         return array;
     }
 
@@ -492,11 +560,15 @@ public class Parser
             return null!;
         }
 
+        // Span from start of left expression to closing ']'
+        expression.Span = new Span(left.Span.Start, _curToken.Span.End);
+
         return expression;
     }
 
     private IExpression ParseHashLiteral()
     {
+        var startSpan = _curToken.Span;
         var hash = new HashLiteral { Token = _curToken };
 
         while (!PeekTokenIs(TokenType.RBrace))
@@ -524,6 +596,9 @@ public class Parser
         {
             return null!;
         }
+
+        // Span from '{' to '}'
+        hash.Span = new Span(startSpan.Start, _curToken.Span.End);
 
         return hash;
     }
