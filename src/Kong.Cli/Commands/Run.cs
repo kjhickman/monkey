@@ -1,6 +1,7 @@
 using DotMake.CommandLine;
 using Kong.Compiler;
 using Kong.Object;
+using Kong.Symbols;
 
 namespace Kong.Cli.Commands;
 
@@ -30,11 +31,7 @@ public class RunFile
             return;
         }
 
-        var symbolTable = SymbolTable.NewSymbolTable();
-        for (var i = 0; i < Builtins.All.Length; i++)
-        {
-            symbolTable.DefineBuiltin(i, Builtins.All[i].Name);
-        }
+        var symbolTable = SymbolTable.NewWithBuiltins();
 
         var compiler = Compiler.Compiler.NewWithState(symbolTable, new List<IObject>());
         var compileError = compiler.Compile(program);

@@ -1,5 +1,5 @@
-using Kong.Compiler;
 using Kong.Object;
+using Kong.Symbols;
 
 namespace Kong.Repl;
 
@@ -11,12 +11,7 @@ public static class Repl
     {
         var constants = new List<IObject>();
         var globals = new IObject[Vm.Vm.GlobalsSize];
-        var symbolTable = SymbolTable.NewSymbolTable();
-
-        for (var i = 0; i < Builtins.All.Length; i++)
-        {
-            symbolTable.DefineBuiltin(i, Builtins.All[i].Name);
-        }
+        var symbolTable = SymbolTable.NewWithBuiltins();
 
         while (true)
         {

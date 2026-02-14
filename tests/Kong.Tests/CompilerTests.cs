@@ -1,10 +1,5 @@
-using Kong.Ast;
 using Kong.Code;
-using Kong.Compiler;
-using Kong.Lexer;
 using Kong.Object;
-using Kong.Parser;
-using Xunit;
 
 namespace Kong.Tests;
 

@@ -1,4 +1,6 @@
-namespace Kong.Compiler;
+using Kong.Object;
+
+namespace Kong.Symbols;
 
 public enum SymbolScope
 {
@@ -23,6 +25,37 @@ public class SymbolTable
 
     public static SymbolTable NewEnclosedSymbolTable(SymbolTable outer) =>
         new() { Outer = outer };
+
+    /// <summary>
+    /// Creates a new SymbolTable with all builtins pre-registered.
+    /// Eliminates the duplicated builtin registration loop across Compiler, Repl, and Run.
+    /// </summary>
+    public static SymbolTable NewWithBuiltins()
+    {
+        var table = NewSymbolTable();
+        for (var i = 0; i < Builtins.All.Length; i++)
+        {
+            table.DefineBuiltin(i, Builtins.All[i].Name);
+        }
+        return table;
+    }
+
+    /// <summary>
+    /// Creates a new enclosed scope, pushing this table down as the Outer.
+    /// Returns the new (inner) SymbolTable.
+    /// </summary>
+    public SymbolTable EnterScope()
+    {
+        return NewEnclosedSymbolTable(this);
+    }
+
+    /// <summary>
+    /// Leaves the current scope by returning the Outer table.
+    /// </summary>
+    public SymbolTable LeaveScope()
+    {
+        return Outer!;
+    }
 
     public Symbol Define(string name)
     {

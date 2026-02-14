@@ -1,6 +1,7 @@
 using Kong.Ast;
 using Kong.Code;
 using Kong.Object;
+using Kong.Symbols;
 
 namespace Kong.Compiler;
 
@@ -39,11 +40,7 @@ public class Compiler
     {
         var mainScope = new CompilationScope();
 
-        SymbolTable = SymbolTable.NewSymbolTable();
-        for (var i = 0; i < Builtins.All.Length; i++)
-        {
-            SymbolTable.DefineBuiltin(i, Builtins.All[i].Name);
-        }
+        SymbolTable = SymbolTable.NewWithBuiltins();
 
         _constants = [];
         _scopes = [mainScope];
@@ -402,7 +399,7 @@ public class Compiler
         var scope = new CompilationScope();
         _scopes.Add(scope);
         _scopeIndex++;
-        SymbolTable = SymbolTable.NewEnclosedSymbolTable(SymbolTable);
+        SymbolTable = SymbolTable.EnterScope();
     }
 
     public Instructions LeaveScope()
@@ -410,7 +407,7 @@ public class Compiler
         var instructions = CurrentInstructions();
         _scopes.RemoveAt(_scopes.Count - 1);
         _scopeIndex--;
-        SymbolTable = SymbolTable.Outer!;
+        SymbolTable = SymbolTable.LeaveScope();
         return instructions;
     }
 

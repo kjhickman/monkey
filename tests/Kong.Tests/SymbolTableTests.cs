@@ -1,4 +1,4 @@
-using Kong.Compiler;
+using Kong.Symbols;
 
 namespace Kong.Tests;
 
