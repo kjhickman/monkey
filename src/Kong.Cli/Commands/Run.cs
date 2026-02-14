@@ -1,5 +1,6 @@
 using DotMake.CommandLine;
 using Kong.Compiler;
+using Kong.Diagnostics;
 using Kong.Object;
 using Kong.Symbols;
 
@@ -24,42 +25,40 @@ public class RunFile
         var parser = new Parser.Parser(lexer);
 
         var program = parser.ParseProgram();
-        var parserErrors = parser.Errors();
-        if (parserErrors.Count != 0)
+        if (parser.Diagnostics.HasErrors)
         {
-            PrintParserErrors(parserErrors);
+            PrintDiagnostics(parser.Diagnostics);
             return;
         }
 
         var symbolTable = SymbolTable.NewWithBuiltins();
 
         var compiler = Compiler.Compiler.NewWithState(symbolTable, new List<IObject>());
-        var compileError = compiler.Compile(program);
-        if (compileError != null)
+        compiler.Compile(program);
+        if (compiler.Diagnostics.HasErrors)
         {
-            Console.Error.WriteLine($"Woops! Compilation failed:\n {compileError}");
+            PrintDiagnostics(compiler.Diagnostics);
             return;
         }
 
         var bytecode = compiler.GetBytecode();
         var vm = new Vm.Vm(bytecode);
-        var runtimeError = vm.Run();
-        if (runtimeError != null)
+        vm.Run();
+        if (vm.Diagnostics.HasErrors)
         {
-            Console.Error.WriteLine($"Woops! Executing bytecode failed:\n {runtimeError}");
+            PrintDiagnostics(vm.Diagnostics);
             return;
         }
 
         Console.WriteLine(vm.LastPoppedStackElem().Inspect());
     }
 
-    private static void PrintParserErrors(List<string> errors)
+    private static void PrintDiagnostics(DiagnosticBag diagnostics)
     {
         Console.Error.WriteLine("Whoops! We ran into some monkey business here!");
-        Console.Error.WriteLine(" parser errors:");
-        foreach (var msg in errors)
+        foreach (var d in diagnostics.All)
         {
-            Console.Error.WriteLine($"\t{msg}");
+            Console.Error.WriteLine($"\t{d}");
         }
     }
 }

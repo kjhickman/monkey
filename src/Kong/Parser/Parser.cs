@@ -1,4 +1,5 @@
 using Kong.Ast;
+using Kong.Diagnostics;
 using Kong.Token;
 
 namespace Kong.Parser;
@@ -18,7 +19,7 @@ public enum Precedence
 public class Parser
 {
     private readonly Lexer.Lexer _lexer;
-    private readonly List<string> _errors;
+    private readonly DiagnosticBag _diagnostics;
 
     private Token.Token _curToken;
     private Token.Token _peekToken;
@@ -43,7 +44,7 @@ public class Parser
     public Parser(Lexer.Lexer lexer)
     {
         _lexer = lexer;
-        _errors = [];
+        _diagnostics = new DiagnosticBag();
 
         _prefixParseFns = new Dictionary<TokenType, Func<IExpression>>
         {
@@ -80,7 +81,7 @@ public class Parser
         NextToken();
     }
 
-    public List<string> Errors() => _errors;
+    public DiagnosticBag Diagnostics => _diagnostics;
 
     public Ast.Program ParseProgram()
     {
@@ -135,16 +136,14 @@ public class Parser
 
     private void PeekError(TokenType t)
     {
-        var pos = _peekToken.Span.Start;
-        var msg = $"expected next token to be {t}, got {_peekToken.Type} instead (at {pos})";
-        _errors.Add(msg);
+        var msg = $"expected next token to be {t}, got {_peekToken.Type} instead";
+        _diagnostics.Report(_peekToken.Span, msg, "P001");
     }
 
     private void NoPrefixParseFnError(TokenType t)
     {
-        var pos = _curToken.Span.Start;
-        var msg = $"no prefix parse function for {t} found (at {pos})";
-        _errors.Add(msg);
+        var msg = $"no prefix parse function for {t} found";
+        _diagnostics.Report(_curToken.Span, msg, "P002");
     }
 
     private Precedence PeekPrecedence()
@@ -347,7 +346,7 @@ public class Parser
         if (!long.TryParse(_curToken.Literal, out var value))
         {
             var msg = $"could not parse \"{_curToken.Literal}\" as integer";
-            _errors.Add(msg);
+            _diagnostics.Report(_curToken.Span, msg, "P003");
             return null!;
         }
 

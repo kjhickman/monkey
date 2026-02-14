@@ -1,5 +1,6 @@
 using Kong.Ast;
 using Kong.Code;
+using Kong.Diagnostics;
 using Kong.Object;
 using Kong.Symbols;
 
@@ -28,6 +29,7 @@ public class Compiler
 {
     private List<IObject> _constants;
     public SymbolTable SymbolTable { get; private set; }
+    public DiagnosticBag Diagnostics { get; } = new();
 
     private readonly List<CompilationScope> _scopes;
     private int _scopeIndex;
@@ -66,37 +68,37 @@ public class Compiler
         };
     }
 
-    public string? Compile(INode node)
+    public void Compile(INode node)
     {
         switch (node)
         {
             case Ast.Program program:
                 foreach (var s in program.Statements)
                 {
-                    var err = Compile(s);
-                    if (err != null) return err;
+                    Compile(s);
+                    if (Diagnostics.HasErrors) return;
                 }
                 break;
 
             case ExpressionStatement es:
-                var exprErr = Compile(es.Expression!);
-                if (exprErr != null) return exprErr;
+                Compile(es.Expression!);
+                if (Diagnostics.HasErrors) return;
                 Emit(Opcode.OpPop);
                 break;
 
             case BlockStatement bs:
                 foreach (var s in bs.Statements)
                 {
-                    var err = Compile(s);
-                    if (err != null) return err;
+                    Compile(s);
+                    if (Diagnostics.HasErrors) return;
                 }
                 break;
 
             case LetStatement ls:
             {
                 var symbol = SymbolTable.Define(ls.Name.Value);
-                var err = Compile(ls.Value!);
-                if (err != null) return err;
+                Compile(ls.Value!);
+                if (Diagnostics.HasErrors) return;
 
                 if (symbol.Scope == SymbolScope.Global)
                     Emit(Opcode.OpSetGlobal, symbol.Index);
@@ -107,8 +109,8 @@ public class Compiler
 
             case ReturnStatement rs:
             {
-                var err = Compile(rs.ReturnValue!);
-                if (err != null) return err;
+                Compile(rs.ReturnValue!);
+                if (Diagnostics.HasErrors) return;
                 Emit(Opcode.OpReturnValue);
                 break;
             }
@@ -116,20 +118,24 @@ public class Compiler
             case Identifier ident:
             {
                 var (symbol, ok) = SymbolTable.Resolve(ident.Value);
-                if (!ok) return $"undefined variable {ident.Value}";
+                if (!ok)
+                {
+                    Diagnostics.Report(ident.Span, $"undefined variable {ident.Value}", "C001");
+                    return;
+                }
                 LoadSymbol(symbol);
                 break;
             }
 
             case IfExpression ie:
             {
-                var err = Compile(ie.Condition);
-                if (err != null) return err;
+                Compile(ie.Condition);
+                if (Diagnostics.HasErrors) return;
 
                 var jumpNotTruthyPos = Emit(Opcode.OpJumpNotTruthy, 9999);
 
-                err = Compile(ie.Consequence);
-                if (err != null) return err;
+                Compile(ie.Consequence);
+                if (Diagnostics.HasErrors) return;
 
                 if (LastInstructionIs(Opcode.OpPop))
                     RemoveLastPop();
@@ -145,8 +151,8 @@ public class Compiler
                 }
                 else
                 {
-                    err = Compile(ie.Alternative);
-                    if (err != null) return err;
+                    Compile(ie.Alternative);
+                    if (Diagnostics.HasErrors) return;
 
                     if (LastInstructionIs(Opcode.OpPop))
                         RemoveLastPop();
@@ -167,8 +173,8 @@ public class Compiler
                 foreach (var p in fl.Parameters)
                     SymbolTable.Define(p.Value);
 
-                var err = Compile(fl.Body);
-                if (err != null) return err;
+                Compile(fl.Body);
+                if (Diagnostics.HasErrors) return;
 
                 if (LastInstructionIs(Opcode.OpPop))
                     ReplaceLastPopWithReturn();
@@ -195,13 +201,13 @@ public class Compiler
 
             case CallExpression ce:
             {
-                var err = Compile(ce.Function);
-                if (err != null) return err;
+                Compile(ce.Function);
+                if (Diagnostics.HasErrors) return;
 
                 foreach (var a in ce.Arguments)
                 {
-                    err = Compile(a);
-                    if (err != null) return err;
+                    Compile(a);
+                    if (Diagnostics.HasErrors) return;
                 }
 
                 Emit(Opcode.OpCall, ce.Arguments.Count);
@@ -210,14 +216,16 @@ public class Compiler
 
             case PrefixExpression pe:
             {
-                var err = Compile(pe.Right);
-                if (err != null) return err;
+                Compile(pe.Right);
+                if (Diagnostics.HasErrors) return;
 
                 switch (pe.Operator)
                 {
                     case "!": Emit(Opcode.OpBang); break;
                     case "-": Emit(Opcode.OpMinus); break;
-                    default: return $"unknown operator {pe.Operator}";
+                    default:
+                        Diagnostics.Report(pe.Span, $"unknown operator {pe.Operator}", "C002");
+                        return;
                 }
                 break;
             }
@@ -226,19 +234,19 @@ public class Compiler
             {
                 if (ie.Operator == "<")
                 {
-                    var err = Compile(ie.Right);
-                    if (err != null) return err;
-                    err = Compile(ie.Left);
-                    if (err != null) return err;
+                    Compile(ie.Right);
+                    if (Diagnostics.HasErrors) return;
+                    Compile(ie.Left);
+                    if (Diagnostics.HasErrors) return;
                     Emit(Opcode.OpGreaterThan);
-                    return null;
+                    return;
                 }
 
                 {
-                    var err = Compile(ie.Left);
-                    if (err != null) return err;
-                    err = Compile(ie.Right);
-                    if (err != null) return err;
+                    Compile(ie.Left);
+                    if (Diagnostics.HasErrors) return;
+                    Compile(ie.Right);
+                    if (Diagnostics.HasErrors) return;
                 }
 
                 switch (ie.Operator)
@@ -250,7 +258,9 @@ public class Compiler
                     case ">": Emit(Opcode.OpGreaterThan); break;
                     case "==": Emit(Opcode.OpEqual); break;
                     case "!=": Emit(Opcode.OpNotEqual); break;
-                    default: return $"unknown operator {ie.Operator}";
+                    default:
+                        Diagnostics.Report(ie.Span, $"unknown operator {ie.Operator}", "C003");
+                        return;
                 }
                 break;
             }
@@ -277,8 +287,8 @@ public class Compiler
             {
                 foreach (var el in al.Elements)
                 {
-                    var err = Compile(el);
-                    if (err != null) return err;
+                    Compile(el);
+                    if (Diagnostics.HasErrors) return;
                 }
                 Emit(Opcode.OpArray, al.Elements.Count);
                 break;
@@ -293,10 +303,10 @@ public class Compiler
 
                 foreach (var pair in sortedPairs)
                 {
-                    var err = Compile(pair.Key);
-                    if (err != null) return err;
-                    err = Compile(pair.Value);
-                    if (err != null) return err;
+                    Compile(pair.Key);
+                    if (Diagnostics.HasErrors) return;
+                    Compile(pair.Value);
+                    if (Diagnostics.HasErrors) return;
                 }
 
                 Emit(Opcode.OpHash, hl.Pairs.Count * 2);
@@ -305,16 +315,14 @@ public class Compiler
 
             case IndexExpression idx:
             {
-                var err = Compile(idx.Left);
-                if (err != null) return err;
-                err = Compile(idx.Index);
-                if (err != null) return err;
+                Compile(idx.Left);
+                if (Diagnostics.HasErrors) return;
+                Compile(idx.Index);
+                if (Diagnostics.HasErrors) return;
                 Emit(Opcode.OpIndex);
                 break;
             }
         }
-
-        return null;
     }
 
     private int AddConstant(IObject obj)

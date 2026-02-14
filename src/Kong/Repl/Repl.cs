@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Object;
 using Kong.Symbols;
 
@@ -26,17 +27,17 @@ public static class Repl
             var p = new Parser.Parser(l);
 
             var program = p.ParseProgram();
-            if (p.Errors().Count != 0)
+            if (p.Diagnostics.HasErrors)
             {
-                PrintParserErrors(output, p.Errors());
+                PrintDiagnostics(output, p.Diagnostics);
                 continue;
             }
 
             var comp = Compiler.Compiler.NewWithState(symbolTable, constants);
-            var err = comp.Compile(program);
-            if (err != null)
+            comp.Compile(program);
+            if (comp.Diagnostics.HasErrors)
             {
-                output.WriteLine($"Woops! Compilation failed:\n {err}");
+                PrintDiagnostics(output, comp.Diagnostics);
                 continue;
             }
 
@@ -44,10 +45,10 @@ public static class Repl
             constants = code.Constants;
 
             var machine = Vm.Vm.NewWithGlobalsStore(code, globals);
-            err = machine.Run();
-            if (err != null)
+            machine.Run();
+            if (machine.Diagnostics.HasErrors)
             {
-                output.WriteLine($"Woops! Executing bytecode failed:\n {err}");
+                PrintDiagnostics(output, machine.Diagnostics);
                 continue;
             }
 
@@ -56,13 +57,12 @@ public static class Repl
         }
     }
 
-    private static void PrintParserErrors(TextWriter output, List<string> errors)
+    private static void PrintDiagnostics(TextWriter output, DiagnosticBag diagnostics)
     {
         output.WriteLine("Whoops! We ran into some monkey business here!");
-        output.WriteLine(" parser errors:");
-        foreach (var msg in errors)
+        foreach (var d in diagnostics.All)
         {
-            output.WriteLine($"\t{msg}");
+            output.WriteLine($"\t{d}");
         }
     }
 }

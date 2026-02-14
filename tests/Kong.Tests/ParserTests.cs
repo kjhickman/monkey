@@ -1,6 +1,7 @@
 using Kong.Ast;
 using Kong.Lexer;
 using Kong.Parser;
+using Kong.Token;
 
 namespace Kong.Tests;
 
@@ -489,13 +490,13 @@ public class ParserTests
 
     private static void CheckParserErrors(Parser.Parser p)
     {
-        var errors = p.Errors();
-        if (errors.Count == 0) return;
+        var diagnostics = p.Diagnostics;
+        if (diagnostics.Count == 0) return;
 
-        var message = $"parser has {errors.Count} errors\n";
-        foreach (var err in errors)
+        var message = $"parser has {diagnostics.Count} errors\n";
+        foreach (var d in diagnostics.All)
         {
-            message += $"parser error: \"{err}\"\n";
+            message += $"parser error: \"{d.Message}\"\n";
         }
         Assert.Fail(message);
     }
@@ -894,8 +895,10 @@ public class ParserTests
         var p = new Parser.Parser(l);
         p.ParseProgram();
 
-        Assert.NotEmpty(p.Errors());
-        // Error message should contain position information
-        Assert.Contains("at line", p.Errors()[0]);
+        Assert.True(p.Diagnostics.HasErrors);
+        // Diagnostic should carry position information in its Span
+        var diag = p.Diagnostics.All[0];
+        Assert.NotEqual(Token.Span.Empty, diag.Span);
+        Assert.True(diag.Span.Start.Line > 0);
     }
 }

@@ -360,13 +360,13 @@ public class VmTests
         {
             var program = Parse(tt.Input);
             var compiler = new Compiler.Compiler();
-            var compErr = compiler.Compile(program);
-            Assert.Null(compErr);
+            compiler.Compile(program);
+            Assert.False(compiler.Diagnostics.HasErrors);
 
             var vm = new Vm.Vm(compiler.GetBytecode());
-            var err = vm.Run();
-            Assert.NotNull(err);
-            Assert.Equal(tt.ExpectedError, err);
+            vm.Run();
+            Assert.True(vm.Diagnostics.HasErrors);
+            Assert.Equal(tt.ExpectedError, vm.Diagnostics.All[0].Message);
         }
     }
 
@@ -548,12 +548,14 @@ public class VmTests
         {
             var program = Parse(tt.Input);
             var compiler = new Compiler.Compiler();
-            var compErr = compiler.Compile(program);
-            Assert.Null(compErr);
+            compiler.Compile(program);
+            Assert.False(compiler.Diagnostics.HasErrors,
+                $"compiler had errors: {string.Join(", ", compiler.Diagnostics.All)}");
 
             var vm = new Vm.Vm(compiler.GetBytecode());
-            var err = vm.Run();
-            Assert.Null(err);
+            vm.Run();
+            Assert.False(vm.Diagnostics.HasErrors,
+                $"vm had errors: {string.Join(", ", vm.Diagnostics.All)}");
 
             var stackElem = vm.LastPoppedStackElem();
             TestExpectedObject(tt.Expected, stackElem);

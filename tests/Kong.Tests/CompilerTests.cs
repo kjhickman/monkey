@@ -843,8 +843,9 @@ public class CompilerTests
         {
             var program = Parse(tt.Input);
             var compiler = new Compiler.Compiler();
-            var err = compiler.Compile(program);
-            Assert.Null(err);
+            compiler.Compile(program);
+            Assert.False(compiler.Diagnostics.HasErrors,
+                $"compiler had errors: {string.Join(", ", compiler.Diagnostics.All)}");
 
             var bytecode = compiler.GetBytecode();
 
