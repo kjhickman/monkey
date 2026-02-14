@@ -1,15 +1,17 @@
-# Monkey Interpreter
+# Kong
 
-This repository contains my implementation of the Monkey programming language interpreter, following along with Thorsten Ball's book ["Writing an Interpreter in Go"](https://interpreterbook.com/).
-
-## About
-
-The Monkey programming language is a simple, C-like language designed specifically for learning how to build interpreters. This project implements a tree-walking interpreter that can execute Monkey programs.
+Kong is a programming language with a bytecode compiler and stack-based virtual machine, implemented in C# targeting .NET 10.
 
 ## Running
 
-To start the Monkey REPL:
+```bash
+dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- run <file>  # Execute a .kg file
+dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- repl        # Start the REPL
+```
+
+## Building
 
 ```bash
-go run main.go
+dotnet build
+dotnet test
 ```
