@@ -1,5 +1,3 @@
-using Kong.Symbols;
-
 namespace Kong.Tests;
 
 public class SymbolTableTests

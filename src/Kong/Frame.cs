@@ -1,7 +1,4 @@
-using Kong.Code;
-using Kong.Object;
-
-namespace Kong.Vm;
+namespace Kong;
 
 public class Frame
 {

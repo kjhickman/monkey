@@ -1,6 +1,4 @@
-using Kong.Token;
-
-namespace Kong.Diagnostics;
+namespace Kong;
 
 /// <summary>
 /// The severity level of a diagnostic.

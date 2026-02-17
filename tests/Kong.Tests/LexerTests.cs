@@ -1,6 +1,3 @@
-using Kong.Lexer;
-using Kong.Token;
-
 namespace Kong.Tests;
 
 public class LexerTests
@@ -125,7 +122,7 @@ public class LexerTests
             (TokenType.EndOfFile, ""),
         };
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         for (var i = 0; i < tests.Length; i++)
         {
@@ -143,7 +140,7 @@ public class LexerTests
         // Cols:   1234567890
         var input = "let x = 5;";
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {
@@ -172,7 +169,7 @@ public class LexerTests
     {
         var input = "let a = 1;\nlet b = 2;";
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {
@@ -208,7 +205,7 @@ public class LexerTests
     {
         var input = "10 == 9 != 8";
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {
@@ -239,7 +236,7 @@ public class LexerTests
         // Cols:   12345678901
         var input = "\"hello\" 42";
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {
@@ -265,7 +262,7 @@ public class LexerTests
     {
         var input = "fn(x) {\n  return x;\n}";
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {

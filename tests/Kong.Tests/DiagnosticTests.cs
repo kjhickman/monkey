@@ -1,6 +1,3 @@
-using Kong.Diagnostics;
-using Kong.Token;
-
 namespace Kong.Tests;
 
 public class DiagnosticTests
@@ -75,8 +72,8 @@ public class DiagnosticTests
     [Fact]
     public void TestParserProducesDiagnosticsOnError()
     {
-        var l = new Lexer.Lexer("let = 5;");
-        var p = new Parser.Parser(l);
+        var l = new Lexer("let = 5;");
+        var p = new Parser(l);
         p.ParseProgram();
 
         Assert.True(p.Diagnostics.HasErrors);
@@ -88,8 +85,8 @@ public class DiagnosticTests
     [Fact]
     public void TestParserNoPrefixParseFnDiagnostic()
     {
-        var l = new Lexer.Lexer("=;");
-        var p = new Parser.Parser(l);
+        var l = new Lexer("=;");
+        var p = new Parser(l);
         p.ParseProgram();
 
         Assert.True(p.Diagnostics.HasErrors);
@@ -105,11 +102,11 @@ public class DiagnosticTests
     [Fact]
     public void TestCompilerProducesDiagnosticsOnUndefinedVariable()
     {
-        var l = new Lexer.Lexer("x;");
-        var p = new Parser.Parser(l);
+        var l = new Lexer("x;");
+        var p = new Parser(l);
         var program = p.ParseProgram();
 
-        var compiler = new Compiler.Compiler();
+        var compiler = new Compiler();
         compiler.Compile(program);
 
         Assert.True(compiler.Diagnostics.HasErrors);
@@ -121,15 +118,15 @@ public class DiagnosticTests
     [Fact]
     public void TestVmProducesDiagnosticsOnWrongArgCount()
     {
-        var l = new Lexer.Lexer("fn() { 1; }(1);");
-        var p = new Parser.Parser(l);
+        var l = new Lexer("fn() { 1; }(1);");
+        var p = new Parser(l);
         var program = p.ParseProgram();
 
-        var compiler = new Compiler.Compiler();
+        var compiler = new Compiler();
         compiler.Compile(program);
         Assert.False(compiler.Diagnostics.HasErrors);
 
-        var vm = new Vm.Vm(compiler.GetBytecode());
+        var vm = new Vm(compiler.GetBytecode());
         vm.Run();
 
         Assert.True(vm.Diagnostics.HasErrors);

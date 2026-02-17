@@ -1,8 +1,4 @@
-using Kong.Diagnostics;
-using Kong.Object;
-using Kong.Symbols;
-
-namespace Kong.Repl;
+namespace Kong;
 
 public static class Repl
 {
@@ -11,7 +7,7 @@ public static class Repl
     public static void Start(TextReader input, TextWriter output)
     {
         var constants = new List<IObject>();
-        var globals = new IObject[Vm.Vm.GlobalsSize];
+        var globals = new IObject[Vm.GlobalsSize];
         var symbolTable = SymbolTable.NewWithBuiltins();
 
         while (true)
@@ -23,8 +19,8 @@ public static class Repl
             if (line == null)
                 return;
 
-            var l = new Lexer.Lexer(line);
-            var p = new Parser.Parser(l);
+            var l = new Lexer(line);
+            var p = new Parser(l);
 
             var program = p.ParseProgram();
             if (p.Diagnostics.HasErrors)
@@ -33,7 +29,7 @@ public static class Repl
                 continue;
             }
 
-            var comp = Compiler.Compiler.NewWithState(symbolTable, constants);
+            var comp = Compiler.NewWithState(symbolTable, constants);
             comp.Compile(program);
             if (comp.Diagnostics.HasErrors)
             {
@@ -44,7 +40,7 @@ public static class Repl
             var code = comp.GetBytecode();
             constants = code.Constants;
 
-            var machine = Vm.Vm.NewWithGlobalsStore(code, globals);
+            var machine = Vm.NewWithGlobalsStore(code, globals);
             machine.Run();
             if (machine.Diagnostics.HasErrors)
             {

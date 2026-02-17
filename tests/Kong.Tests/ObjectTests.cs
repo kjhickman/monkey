@@ -1,5 +1,3 @@
-using Kong.Object;
-
 namespace Kong.Tests;
 
 public class ObjectTests

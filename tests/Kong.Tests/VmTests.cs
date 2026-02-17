@@ -1,6 +1,3 @@
-using Kong.Object;
-using Xunit;
-
 namespace Kong.Tests;
 
 public class VmTests
@@ -359,11 +356,11 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new Compiler.Compiler();
+            var compiler = new Compiler();
             compiler.Compile(program);
             Assert.False(compiler.Diagnostics.HasErrors);
 
-            var vm = new Vm.Vm(compiler.GetBytecode());
+            var vm = new Vm(compiler.GetBytecode());
             vm.Run();
             Assert.True(vm.Diagnostics.HasErrors);
             Assert.Equal(tt.ExpectedError, vm.Diagnostics.All[0].Message);
@@ -547,12 +544,12 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new Compiler.Compiler();
+            var compiler = new Compiler();
             compiler.Compile(program);
             Assert.False(compiler.Diagnostics.HasErrors,
                 $"compiler had errors: {string.Join(", ", compiler.Diagnostics.All)}");
 
-            var vm = new Vm.Vm(compiler.GetBytecode());
+            var vm = new Vm(compiler.GetBytecode());
             vm.Run();
             Assert.False(vm.Diagnostics.HasErrors,
                 $"vm had errors: {string.Join(", ", vm.Diagnostics.All)}");
@@ -562,10 +559,10 @@ public class VmTests
         }
     }
 
-    private static Ast.Program Parse(string input)
+    private static Program Parse(string input)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         return p.ParseProgram();
     }
 

@@ -1,8 +1,3 @@
-using Kong.Ast;
-using Kong.Lexer;
-using Kong.Parser;
-using Kong.Token;
-
 namespace Kong.Tests;
 
 public class ParserTests
@@ -13,8 +8,8 @@ public class ParserTests
     [InlineData("let foobar = y;", "foobar", "y")]
     public void TestLetStatements(string input, string expectedIdentifier, object expectedValue)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -33,8 +28,8 @@ public class ParserTests
     [InlineData("return foobar;", "foobar")]
     public void TestReturnStatements(string input, object expectedValue)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -50,8 +45,8 @@ public class ParserTests
     {
         var input = "foobar;";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -68,8 +63,8 @@ public class ParserTests
     {
         var input = "5;";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -90,8 +85,8 @@ public class ParserTests
     [InlineData("!false;", "!", false)]
     public void TestParsingPrefixExpressions(string input, string op, object value)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -125,8 +120,8 @@ public class ParserTests
     [InlineData("false == false", false, "==", false)]
     public void TestParsingInfixExpressions(string input, object leftValue, string op, object rightValue)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -166,8 +161,8 @@ public class ParserTests
     [InlineData("add(a * b[2], b[1], 2 * [1, 2][1])", "add((a * (b[2])), (b[1]), (2 * ([1, 2][1])))")]
     public void TestOperatorPrecedenceParsing(string input, string expected)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -179,8 +174,8 @@ public class ParserTests
     [InlineData("false;", false)]
     public void TestBooleanExpression(string input, bool expectedBoolean)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -196,8 +191,8 @@ public class ParserTests
     {
         var input = "if (x < y) { x }";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -221,8 +216,8 @@ public class ParserTests
     {
         var input = "if (x < y) { x } else { y }";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -248,8 +243,8 @@ public class ParserTests
     {
         var input = "fn(x, y) { x + y; }";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -275,8 +270,8 @@ public class ParserTests
     [InlineData("fn(x, y, z) {};", new[] { "x", "y", "z" })]
     public void TestFunctionParameterParsing(string input, string[] expectedParams)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -296,8 +291,8 @@ public class ParserTests
     {
         var input = "add(1, 2 * 3, 4 + 5);";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -321,8 +316,8 @@ public class ParserTests
     [InlineData("add(1, 2 * 3, 4 + 5);", "add", new[] { "1", "(2 * 3)", "(4 + 5)" })]
     public void TestCallExpressionParameterParsing(string input, string expectedIdent, string[] expectedArgs)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -344,8 +339,8 @@ public class ParserTests
     {
         var input = "\"hello world\";";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -360,8 +355,8 @@ public class ParserTests
     {
         var input = "[1, 2 * 2, 3 + 3]";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -380,8 +375,8 @@ public class ParserTests
     {
         var input = "myArray[1 + 1]";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -397,8 +392,8 @@ public class ParserTests
     {
         var input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -427,8 +422,8 @@ public class ParserTests
     {
         var input = "{}";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -443,8 +438,8 @@ public class ParserTests
     {
         var input = "{\"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5}";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -473,8 +468,8 @@ public class ParserTests
     {
         var input = "let myFunction = fn() { };";
 
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -488,7 +483,7 @@ public class ParserTests
 
     // --- Helper methods ---
 
-    private static void CheckParserErrors(Parser.Parser p)
+    private static void CheckParserErrors(Parser p)
     {
         var diagnostics = p.Diagnostics;
         if (diagnostics.Count == 0) return;
@@ -563,7 +558,7 @@ public class ParserTests
     // --- Span tests ---
 
     private static void AssertSpan(
-        Kong.Token.Span span,
+        global::Kong.Span span,
         int startLine, int startCol,
         int endLine, int endCol)
     {
@@ -579,8 +574,8 @@ public class ParserTests
         // Input:  let x = 5;
         // Cols:   1234567890
         var input = "let x = 5;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -600,8 +595,8 @@ public class ParserTests
     public void TestReturnStatementSpan()
     {
         var input = "return 42;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -613,8 +608,8 @@ public class ParserTests
     public void TestIdentifierSpan()
     {
         var input = "foobar;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -627,8 +622,8 @@ public class ParserTests
     public void TestIntegerLiteralSpan()
     {
         var input = "123;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -641,8 +636,8 @@ public class ParserTests
     public void TestStringLiteralSpan()
     {
         var input = "\"hello\";";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -655,8 +650,8 @@ public class ParserTests
     public void TestBooleanLiteralSpan()
     {
         var input = "true;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -671,8 +666,8 @@ public class ParserTests
         // Input:  !true;
         // Cols:   123456
         var input = "!true;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -688,8 +683,8 @@ public class ParserTests
         // Input:  1 + 20;
         // Cols:   1234567
         var input = "1 + 20;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -705,8 +700,8 @@ public class ParserTests
         // Input:  if (x) { y }
         // Cols:   123456789012
         var input = "if (x) { y }";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -720,8 +715,8 @@ public class ParserTests
     public void TestIfElseExpressionSpan()
     {
         var input = "if (x) { y } else { z }";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -737,8 +732,8 @@ public class ParserTests
         // Input:  fn(x) { x }
         // Cols:   12345678901
         var input = "fn(x) { x }";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -756,8 +751,8 @@ public class ParserTests
         // Input:  add(1, 2)
         // Cols:   123456789
         var input = "add(1, 2)";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -773,8 +768,8 @@ public class ParserTests
         // Input:  [1, 2, 3]
         // Cols:   123456789
         var input = "[1, 2, 3]";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -789,8 +784,8 @@ public class ParserTests
         // Input:  arr[0]
         // Cols:   123456
         var input = "arr[0]";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -805,8 +800,8 @@ public class ParserTests
         // Input:  {"a": 1}
         // Cols:   12345678
         var input = "{\"a\": 1}";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -820,8 +815,8 @@ public class ParserTests
     {
         // Test via function literal body
         var input = "fn() { 1; 2 }";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -835,8 +830,8 @@ public class ParserTests
     public void TestMultiLineSpans()
     {
         var input = "let x = 1;\nlet y = 2;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -856,8 +851,8 @@ public class ParserTests
     public void TestMultiLineFunctionSpan()
     {
         var input = "fn(x) {\n  return x;\n}";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -877,8 +872,8 @@ public class ParserTests
     {
         // Expression statement with semicolon
         var input = "5;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         var program = p.ParseProgram();
         CheckParserErrors(p);
 
@@ -891,14 +886,14 @@ public class ParserTests
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         p.ParseProgram();
 
         Assert.True(p.Diagnostics.HasErrors);
         // Diagnostic should carry position information in its Span
         var diag = p.Diagnostics.All[0];
-        Assert.NotEqual(Token.Span.Empty, diag.Span);
+        Assert.NotEqual(global::Kong.Span.Empty, diag.Span);
         Assert.True(diag.Span.Start.Line > 0);
     }
 }

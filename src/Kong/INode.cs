@@ -1,8 +1,8 @@
-namespace Kong.Ast;
+namespace Kong;
 
 public interface INode
 {
-    Token.Span Span { get; set; }
+    global::Kong.Span Span { get; set; }
     string TokenLiteral();
     string String();
 }

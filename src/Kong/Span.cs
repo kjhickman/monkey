@@ -1,4 +1,4 @@
-namespace Kong.Token;
+namespace Kong;
 
 /// <summary>
 /// A single point in source code (1-based line and column).

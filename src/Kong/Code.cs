@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 
-namespace Kong.Code;
+namespace Kong;
 
 public enum Opcode : byte
 {

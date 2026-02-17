@@ -1,6 +1,4 @@
-using Kong.Token;
-
-namespace Kong.Lexer;
+namespace Kong;
 
 public class Lexer
 {
@@ -18,9 +16,9 @@ public class Lexer
         ReadChar();
     }
 
-    public Token.Token NextToken()
+    public Token NextToken()
     {
-        Token.Token tok;
+        Token tok;
 
         SkipWhitespace();
 
@@ -33,7 +31,7 @@ public class Lexer
                 if (PeekChar() == '=')
                 {
                     ReadChar();
-                    tok = new Token.Token(TokenType.Equal, "==",
+                    tok = new Token(TokenType.Equal, "==",
                         new Span(start, new Position(_line, _column + 1)));
                 }
                 else
@@ -51,7 +49,7 @@ public class Lexer
                 if (PeekChar() == '=')
                 {
                     ReadChar();
-                    tok = new Token.Token(TokenType.NotEqual, "!=",
+                    tok = new Token(TokenType.NotEqual, "!=",
                         new Span(start, new Position(_line, _column + 1)));
                 }
                 else
@@ -103,29 +101,29 @@ public class Lexer
                 var value = ReadString();
                 // After ReadString, _ch is the closing quote. End is one past it.
                 var end = new Position(_line, _column + 1);
-                tok = new Token.Token(TokenType.String, value, new Span(start, end));
+                tok = new Token(TokenType.String, value, new Span(start, end));
                 break;
             }
             case '\0':
-                tok = new Token.Token(TokenType.EndOfFile, "", new Span(start, start));
+                tok = new Token(TokenType.EndOfFile, "", new Span(start, start));
                 break;
             default:
                 if (IsLetter(_ch))
                 {
                     var literal = ReadIdentifier();
-                    var type = Token.Token.LookupIdent(literal);
+                    var type = Token.LookupIdent(literal);
                     // After ReadIdentifier, _ch is the first non-letter char.
                     // _column points to that char, so the identifier ended at _column - 1.
                     // End column is one past the last char of the identifier.
                     var end = new Position(_line, _column);
-                    return new Token.Token(type, literal, new Span(start, end));
+                    return new Token(type, literal, new Span(start, end));
                 }
 
                 if (IsDigit(_ch))
                 {
                     var literal = ReadNumber();
                     var end = new Position(_line, _column);
-                    return new Token.Token(TokenType.Integer, literal, new Span(start, end));
+                    return new Token(TokenType.Integer, literal, new Span(start, end));
                 }
 
                 tok = NewToken(TokenType.Illegal, _ch, start);
@@ -204,9 +202,9 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private static Token.Token NewToken(TokenType type, char ch, Position start)
+    private static Token NewToken(TokenType type, char ch, Position start)
     {
-        return new Token.Token(type, ch.ToString(),
+        return new Token(type, ch.ToString(),
             new Span(start, new Position(start.Line, start.Column + 1)));
     }
 

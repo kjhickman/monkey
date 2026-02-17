@@ -1,4 +1,4 @@
-namespace Kong.Token;
+namespace Kong;
 
 public enum TokenType
 {

@@ -1,8 +1,4 @@
-using Kong.Ast;
-using Kong.Diagnostics;
-using Kong.Token;
-
-namespace Kong.Parser;
+namespace Kong;
 
 public enum Precedence
 {
@@ -18,11 +14,11 @@ public enum Precedence
 
 public class Parser
 {
-    private readonly Lexer.Lexer _lexer;
+    private readonly Lexer _lexer;
     private readonly DiagnosticBag _diagnostics;
 
-    private Token.Token _curToken;
-    private Token.Token _peekToken;
+    private Token _curToken;
+    private Token _peekToken;
 
     private readonly Dictionary<TokenType, Func<IExpression>> _prefixParseFns;
     private readonly Dictionary<TokenType, Func<IExpression, IExpression>> _infixParseFns;
@@ -41,7 +37,7 @@ public class Parser
         { TokenType.LeftBracket, Precedence.Index },
     };
 
-    public Parser(Lexer.Lexer lexer)
+    public Parser(Lexer lexer)
     {
         _lexer = lexer;
         _diagnostics = new DiagnosticBag();
@@ -83,9 +79,9 @@ public class Parser
 
     public DiagnosticBag Diagnostics => _diagnostics;
 
-    public Ast.Program ParseProgram()
+    public Program ParseProgram()
     {
-        var program = new Ast.Program();
+        var program = new Program();
         var start = _curToken.Span.Start;
 
         while (!CurTokenIs(TokenType.EndOfFile))

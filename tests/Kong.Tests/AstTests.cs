@@ -1,6 +1,3 @@
-using Kong.Ast;
-using Kong.Token;
-
 namespace Kong.Tests;
 
 public class AstTests
@@ -14,15 +11,15 @@ public class AstTests
             {
                 new LetStatement
                 {
-                    Token = new Token.Token(TokenType.Let, "let"),
+                    Token = new Token(TokenType.Let, "let"),
                     Name = new Identifier
                     {
-                        Token = new Token.Token(TokenType.Identifier, "myVar"),
+                        Token = new Token(TokenType.Identifier, "myVar"),
                         Value = "myVar",
                     },
                     Value = new Identifier
                     {
-                        Token = new Token.Token(TokenType.Identifier, "anotherVar"),
+                        Token = new Token(TokenType.Identifier, "anotherVar"),
                         Value = "anotherVar",
                     },
                 },

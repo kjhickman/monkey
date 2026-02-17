@@ -1,6 +1,3 @@
-using Kong.Code;
-using Kong.Object;
-
 namespace Kong.Tests;
 
 public class CompilerTests
@@ -12,44 +9,44 @@ public class CompilerTests
         {
             new("1 + 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpAdd),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpAdd),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 - 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpSub),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpSub),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 * 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpMul),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpMul),
+                Code.Make(Opcode.OpPop),
             }),
             new("2 / 1", new object[] { 2, 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpDiv),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpDiv),
+                Code.Make(Opcode.OpPop),
             }),
             new("1; 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpPop),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpPop),
             }),
             new("-1", new object[] { 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpMinus),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpMinus),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -63,51 +60,51 @@ public class CompilerTests
         {
             new("!true", Array.Empty<object>(), new[]
             {
-                Code.Code.Make(Opcode.OpTrue),
-                Code.Code.Make(Opcode.OpBang),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpTrue),
+                Code.Make(Opcode.OpBang),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 > 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpGreaterThan),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpGreaterThan),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 < 2", new object[] { 2, 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpGreaterThan),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpGreaterThan),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 == 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpEqual),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpEqual),
+                Code.Make(Opcode.OpPop),
             }),
             new("1 != 2", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpNotEqual),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpNotEqual),
+                Code.Make(Opcode.OpPop),
             }),
             new("true == false", Array.Empty<object>(), new[]
             {
-                Code.Code.Make(Opcode.OpTrue),
-                Code.Code.Make(Opcode.OpFalse),
-                Code.Code.Make(Opcode.OpEqual),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpTrue),
+                Code.Make(Opcode.OpFalse),
+                Code.Make(Opcode.OpEqual),
+                Code.Make(Opcode.OpPop),
             }),
             new("true != false", Array.Empty<object>(), new[]
             {
-                Code.Code.Make(Opcode.OpTrue),
-                Code.Code.Make(Opcode.OpFalse),
-                Code.Code.Make(Opcode.OpNotEqual),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpTrue),
+                Code.Make(Opcode.OpFalse),
+                Code.Make(Opcode.OpNotEqual),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -122,21 +119,21 @@ public class CompilerTests
             new("if (true) { 10 }; 3333;", new object[] { 10, 3333 }, new[]
             {
                 // 0000
-                Code.Code.Make(Opcode.OpTrue),
+                Code.Make(Opcode.OpTrue),
                 // 0001
-                Code.Code.Make(Opcode.OpJumpNotTruthy, 10),
+                Code.Make(Opcode.OpJumpNotTruthy, 10),
                 // 0004
-                Code.Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 0),
                 // 0007
-                Code.Code.Make(Opcode.OpJump, 11),
+                Code.Make(Opcode.OpJump, 11),
                 // 0010
-                Code.Code.Make(Opcode.OpNull),
+                Code.Make(Opcode.OpNull),
                 // 0011
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpPop),
                 // 0012
-                Code.Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 1),
                 // 0015
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -153,20 +150,20 @@ public class CompilerTests
             let two = 2;
             ", new object[] { 1, 2 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpSetGlobal, 1),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpSetGlobal, 1),
             }),
             new(@"
             let one = 1;
             one;
             ", new object[] { 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let one = 1;
@@ -174,12 +171,12 @@ public class CompilerTests
             two;
             ", new object[] { 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 1),
-                Code.Code.Make(Opcode.OpGetGlobal, 1),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpSetGlobal, 1),
+                Code.Make(Opcode.OpGetGlobal, 1),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -193,15 +190,15 @@ public class CompilerTests
         {
             new("\"monkey\"", new object[] { "monkey" }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new("\"mon\" + \"key\"", new object[] { "mon", "key" }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpAdd),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpAdd),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -215,30 +212,30 @@ public class CompilerTests
         {
             new("[]", Array.Empty<object>(), new[]
             {
-                Code.Code.Make(Opcode.OpArray, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpArray, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new("[1, 2, 3]", new object[] { 1, 2, 3 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpArray, 3),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpArray, 3),
+                Code.Make(Opcode.OpPop),
             }),
             new("[1 + 2, 3 - 4, 5 * 6]", new object[] { 1, 2, 3, 4, 5, 6 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpAdd),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpSub),
-                Code.Code.Make(Opcode.OpConstant, 4),
-                Code.Code.Make(Opcode.OpConstant, 5),
-                Code.Code.Make(Opcode.OpMul),
-                Code.Code.Make(Opcode.OpArray, 3),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpAdd),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpSub),
+                Code.Make(Opcode.OpConstant, 4),
+                Code.Make(Opcode.OpConstant, 5),
+                Code.Make(Opcode.OpMul),
+                Code.Make(Opcode.OpArray, 3),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -252,32 +249,32 @@ public class CompilerTests
         {
             new("{}", Array.Empty<object>(), new[]
             {
-                Code.Code.Make(Opcode.OpHash, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpHash, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new("{1: 2, 3: 4, 5: 6}", new object[] { 1, 2, 3, 4, 5, 6 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpConstant, 4),
-                Code.Code.Make(Opcode.OpConstant, 5),
-                Code.Code.Make(Opcode.OpHash, 6),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpConstant, 4),
+                Code.Make(Opcode.OpConstant, 5),
+                Code.Make(Opcode.OpHash, 6),
+                Code.Make(Opcode.OpPop),
             }),
             new("{1: 2 + 3, 4: 5 * 6}", new object[] { 1, 2, 3, 4, 5, 6 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpAdd),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpConstant, 4),
-                Code.Code.Make(Opcode.OpConstant, 5),
-                Code.Code.Make(Opcode.OpMul),
-                Code.Code.Make(Opcode.OpHash, 4),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpAdd),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpConstant, 4),
+                Code.Make(Opcode.OpConstant, 5),
+                Code.Make(Opcode.OpMul),
+                Code.Make(Opcode.OpHash, 4),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -291,26 +288,26 @@ public class CompilerTests
         {
             new("[1, 2, 3][1 + 1]", new object[] { 1, 2, 3, 1, 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpArray, 3),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpConstant, 4),
-                Code.Code.Make(Opcode.OpAdd),
-                Code.Code.Make(Opcode.OpIndex),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpArray, 3),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpConstant, 4),
+                Code.Make(Opcode.OpAdd),
+                Code.Make(Opcode.OpIndex),
+                Code.Make(Opcode.OpPop),
             }),
             new("{1: 2}[2 - 1]", new object[] { 1, 2, 2, 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpHash, 2),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpSub),
-                Code.Code.Make(Opcode.OpIndex),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpHash, 2),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpSub),
+                Code.Make(Opcode.OpIndex),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -327,45 +324,45 @@ public class CompilerTests
                 5, 10,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpConstant, 1),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpConstant, 1),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 2, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 2, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new("fn() { 5 + 10 }", new object[]
             {
                 5, 10,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpConstant, 1),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpConstant, 1),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 2, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 2, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new("fn() { 1; 2 }", new object[]
             {
                 1, 2,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpPop),
-                    Code.Code.Make(Opcode.OpConstant, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpPop),
+                    Code.Make(Opcode.OpConstant, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 2, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 2, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -381,12 +378,12 @@ public class CompilerTests
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpReturn),
+                    Code.Make(Opcode.OpReturn),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 0, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 0, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -403,14 +400,14 @@ public class CompilerTests
                 24,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpCall, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpCall, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let noArg = fn() { 24 };
@@ -420,16 +417,16 @@ public class CompilerTests
                 24,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpCall, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpCall, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let oneArg = fn(a) { a };
@@ -438,18 +435,18 @@ public class CompilerTests
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 24,
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 0, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpCall, 1),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 0, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpCall, 1),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let manyArg = fn(a, b, c) { a; b; c };
@@ -458,24 +455,24 @@ public class CompilerTests
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpPop),
-                    Code.Code.Make(Opcode.OpGetLocal, 1),
-                    Code.Code.Make(Opcode.OpPop),
-                    Code.Code.Make(Opcode.OpGetLocal, 2),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpPop),
+                    Code.Make(Opcode.OpGetLocal, 1),
+                    Code.Make(Opcode.OpPop),
+                    Code.Make(Opcode.OpGetLocal, 2),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 24, 25, 26,
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 0, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpConstant, 1),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpConstant, 3),
-                Code.Code.Make(Opcode.OpCall, 3),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 0, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpConstant, 1),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpConstant, 3),
+                Code.Make(Opcode.OpCall, 3),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -495,15 +492,15 @@ public class CompilerTests
                 55,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetGlobal, 0),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetGlobal, 0),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             fn() {
@@ -515,15 +512,15 @@ public class CompilerTests
                 55,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             fn() {
@@ -536,19 +533,19 @@ public class CompilerTests
                 55, 77,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpConstant, 1),
-                    Code.Code.Make(Opcode.OpSetLocal, 1),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 1),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpConstant, 1),
+                    Code.Make(Opcode.OpSetLocal, 1),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpGetLocal, 1),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 2, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 2, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -558,7 +555,7 @@ public class CompilerTests
     [Fact]
     public void TestCompilerScopes()
     {
-        var compiler = new Compiler.Compiler();
+        var compiler = new Compiler();
         Assert.Equal(0, compiler.ScopeIndex);
 
         var globalSymbolTable = compiler.SymbolTable;
@@ -604,29 +601,29 @@ public class CompilerTests
             push([], 1);
             ", new object[] { 1 }, new[]
             {
-                Code.Code.Make(Opcode.OpGetBuiltin, 0),
-                Code.Code.Make(Opcode.OpArray, 0),
-                Code.Code.Make(Opcode.OpCall, 1),
-                Code.Code.Make(Opcode.OpPop),
-                Code.Code.Make(Opcode.OpGetBuiltin, 5),
-                Code.Code.Make(Opcode.OpArray, 0),
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpCall, 2),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpGetBuiltin, 0),
+                Code.Make(Opcode.OpArray, 0),
+                Code.Make(Opcode.OpCall, 1),
+                Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpGetBuiltin, 5),
+                Code.Make(Opcode.OpArray, 0),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpCall, 2),
+                Code.Make(Opcode.OpPop),
             }),
             new("fn() { len([]) }", new object[]
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetBuiltin, 0),
-                    Code.Code.Make(Opcode.OpArray, 0),
-                    Code.Code.Make(Opcode.OpCall, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetBuiltin, 0),
+                    Code.Make(Opcode.OpArray, 0),
+                    Code.Make(Opcode.OpCall, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 0, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 0, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -648,21 +645,21 @@ public class CompilerTests
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetFree, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetFree, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpClosure, 0, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpClosure, 0, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             fn(a) {
@@ -676,30 +673,30 @@ public class CompilerTests
             {
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetFree, 0),
-                    Code.Code.Make(Opcode.OpGetFree, 1),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetFree, 0),
+                    Code.Make(Opcode.OpGetFree, 1),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetFree, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpClosure, 0, 2),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetFree, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpClosure, 0, 2),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpClosure, 1, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpClosure, 1, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 2, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 2, 0),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let global = 55;
@@ -722,40 +719,40 @@ public class CompilerTests
                 55, 66, 77, 88,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 3),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetGlobal, 0),
-                    Code.Code.Make(Opcode.OpGetFree, 0),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpGetFree, 1),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpAdd),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 3),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpGetGlobal, 0),
+                    Code.Make(Opcode.OpGetFree, 0),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpGetFree, 1),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpAdd),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 2),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetFree, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpClosure, 4, 2),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 2),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpGetFree, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpClosure, 4, 2),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpConstant, 1),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpClosure, 5, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpConstant, 1),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpClosure, 5, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpConstant, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpClosure, 6, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpConstant, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpClosure, 6, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -775,22 +772,22 @@ public class CompilerTests
                 1,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpCurrentClosure),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpSub),
-                    Code.Code.Make(Opcode.OpCall, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpCurrentClosure),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpSub),
+                    Code.Make(Opcode.OpCall, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 1,
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 1, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpConstant, 2),
-                Code.Code.Make(Opcode.OpCall, 1),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 1, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpConstant, 2),
+                Code.Make(Opcode.OpCall, 1),
+                Code.Make(Opcode.OpPop),
             }),
             new(@"
             let wrapper = fn() {
@@ -803,30 +800,30 @@ public class CompilerTests
                 1,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpCurrentClosure),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpConstant, 0),
-                    Code.Code.Make(Opcode.OpSub),
-                    Code.Code.Make(Opcode.OpCall, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpCurrentClosure),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpConstant, 0),
+                    Code.Make(Opcode.OpSub),
+                    Code.Make(Opcode.OpCall, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
                 1,
                 new byte[][]
                 {
-                    Code.Code.Make(Opcode.OpClosure, 1, 0),
-                    Code.Code.Make(Opcode.OpSetLocal, 0),
-                    Code.Code.Make(Opcode.OpGetLocal, 0),
-                    Code.Code.Make(Opcode.OpConstant, 2),
-                    Code.Code.Make(Opcode.OpCall, 1),
-                    Code.Code.Make(Opcode.OpReturnValue),
+                    Code.Make(Opcode.OpClosure, 1, 0),
+                    Code.Make(Opcode.OpSetLocal, 0),
+                    Code.Make(Opcode.OpGetLocal, 0),
+                    Code.Make(Opcode.OpConstant, 2),
+                    Code.Make(Opcode.OpCall, 1),
+                    Code.Make(Opcode.OpReturnValue),
                 },
             }, new[]
             {
-                Code.Code.Make(Opcode.OpClosure, 3, 0),
-                Code.Code.Make(Opcode.OpSetGlobal, 0),
-                Code.Code.Make(Opcode.OpGetGlobal, 0),
-                Code.Code.Make(Opcode.OpCall, 0),
-                Code.Code.Make(Opcode.OpPop),
+                Code.Make(Opcode.OpClosure, 3, 0),
+                Code.Make(Opcode.OpSetGlobal, 0),
+                Code.Make(Opcode.OpGetGlobal, 0),
+                Code.Make(Opcode.OpCall, 0),
+                Code.Make(Opcode.OpPop),
             }),
         };
 
@@ -842,7 +839,7 @@ public class CompilerTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new Compiler.Compiler();
+            var compiler = new Compiler();
             compiler.Compile(program);
             Assert.False(compiler.Diagnostics.HasErrors,
                 $"compiler had errors: {string.Join(", ", compiler.Diagnostics.All)}");
@@ -854,10 +851,10 @@ public class CompilerTests
         }
     }
 
-    private static Ast.Program Parse(string input)
+    private static Program Parse(string input)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexer(input);
+        var p = new Parser(l);
         return p.ParseProgram();
     }
 

@@ -1,6 +1,4 @@
-using Kong.Object;
-
-namespace Kong.Symbols;
+namespace Kong;
 
 public enum SymbolScope
 {
