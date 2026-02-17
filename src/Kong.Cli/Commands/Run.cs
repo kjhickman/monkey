@@ -20,7 +20,7 @@ public class RunFile
         var lexer = new Lexer(source);
         var parser = new Parser(lexer);
 
-        var program = parser.ParseProgram();
+        var program = parser.ParseCompilationUnit();
         if (parser.Diagnostics.HasErrors)
         {
             PrintDiagnostics(parser.Diagnostics);

@@ -27,7 +27,7 @@ public class Vm
     private Vm(Bytecode bytecode, IObject[] globals)
     {
         var mainFn = new CompiledFunctionObj { Instructions = bytecode.Instructions };
-        var mainClosure = new ClosureObj { Fn = mainFn };
+        var mainClosure = new ClosureObj { Function = mainFn };
         var mainFrame = new Frame(mainClosure, 0);
 
         _constants = bytecode.Constants;
@@ -66,11 +66,11 @@ public class Vm
         Instructions ins;
         Opcode op;
 
-        while (CurrentFrame().Ip < CurrentFrame().Instructions().Count - 1)
+        while (CurrentFrame().InstructionPointer < CurrentFrame().Instructions().Count - 1)
         {
-            CurrentFrame().Ip++;
+            CurrentFrame().InstructionPointer++;
 
-            ip = CurrentFrame().Ip;
+            ip = CurrentFrame().InstructionPointer;
             ins = CurrentFrame().Instructions();
             op = (Opcode)ins[ip];
 
@@ -79,7 +79,7 @@ public class Vm
                 case Opcode.OpConstant:
                 {
                     var constIndex = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
 
                     Push(_constants[constIndex]);
                     if (Diagnostics.HasErrors) return;
@@ -147,19 +147,19 @@ public class Vm
                 case Opcode.OpJump:
                 {
                     var pos = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip = pos - 1;
+                    CurrentFrame().InstructionPointer = pos - 1;
                     break;
                 }
 
                 case Opcode.OpJumpNotTruthy:
                 {
                     var pos = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
 
                     var condition = Pop();
                     if (!IsTruthy(condition))
                     {
-                        CurrentFrame().Ip = pos - 1;
+                        CurrentFrame().InstructionPointer = pos - 1;
                     }
                     break;
                 }
@@ -167,7 +167,7 @@ public class Vm
                 case Opcode.OpSetGlobal:
                 {
                     var globalIndex = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
                     Globals[globalIndex] = Pop();
                     break;
                 }
@@ -175,7 +175,7 @@ public class Vm
                 case Opcode.OpGetGlobal:
                 {
                     var globalIndex = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
 
                     Push(Globals[globalIndex]);
                     if (Diagnostics.HasErrors) return;
@@ -185,7 +185,7 @@ public class Vm
                 case Opcode.OpGetBuiltin:
                 {
                     var builtinIndex = Code.ReadUint8(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 1;
+                    CurrentFrame().InstructionPointer += 1;
 
                     var definition = Builtins.All[builtinIndex];
                     Push(definition.Builtin);
@@ -197,7 +197,7 @@ public class Vm
                 {
                     var constIndex = Code.ReadUint16(ins.Bytes, ip + 1);
                     var numFree = Code.ReadUint8(ins.Bytes, ip + 3);
-                    CurrentFrame().Ip += 3;
+                    CurrentFrame().InstructionPointer += 3;
 
                     PushClosure(constIndex, numFree);
                     if (Diagnostics.HasErrors) return;
@@ -207,9 +207,9 @@ public class Vm
                 case Opcode.OpGetFree:
                 {
                     var freeIndex = Code.ReadUint8(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 1;
+                    CurrentFrame().InstructionPointer += 1;
 
-                    var currentClosure = CurrentFrame().Cl;
+                    var currentClosure = CurrentFrame().Closure;
                     Push(currentClosure.Free[freeIndex]);
                     if (Diagnostics.HasErrors) return;
                     break;
@@ -217,7 +217,7 @@ public class Vm
 
                 case Opcode.OpCurrentClosure:
                 {
-                    var currentClosure = CurrentFrame().Cl;
+                    var currentClosure = CurrentFrame().Closure;
                     Push(currentClosure);
                     if (Diagnostics.HasErrors) return;
                     break;
@@ -226,7 +226,7 @@ public class Vm
                 case Opcode.OpSetLocal:
                 {
                     var localIndex = Code.ReadUint8(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 1;
+                    CurrentFrame().InstructionPointer += 1;
 
                     var frame = CurrentFrame();
                     _stack[frame.BasePointer + localIndex] = Pop();
@@ -236,7 +236,7 @@ public class Vm
                 case Opcode.OpGetLocal:
                 {
                     var localIndex = Code.ReadUint8(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 1;
+                    CurrentFrame().InstructionPointer += 1;
 
                     var frame = CurrentFrame();
                     Push(_stack[frame.BasePointer + localIndex]);
@@ -247,7 +247,7 @@ public class Vm
                 case Opcode.OpArray:
                 {
                     var numElements = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
 
                     var array = BuildArray(_sp - numElements, _sp);
                     _sp -= numElements;
@@ -260,7 +260,7 @@ public class Vm
                 case Opcode.OpHash:
                 {
                     var numElements = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 2;
+                    CurrentFrame().InstructionPointer += 2;
 
                     var hash = BuildHash(_sp - numElements, _sp);
                     if (Diagnostics.HasErrors) return;
@@ -284,7 +284,7 @@ public class Vm
                 case Opcode.OpCall:
                 {
                     var numArgs = Code.ReadUint8(ins.Bytes, ip + 1);
-                    CurrentFrame().Ip += 1;
+                    CurrentFrame().InstructionPointer += 1;
 
                     ExecuteCall(numArgs);
                     if (Diagnostics.HasErrors) return;
@@ -334,15 +334,15 @@ public class Vm
 
     private void CallClosure(ClosureObj cl, int numArgs)
     {
-        if (numArgs != cl.Fn.NumParameters)
+        if (numArgs != cl.Function.NumParameters)
         {
-            Diagnostics.Report(Span.Empty, $"wrong number of arguments: want={cl.Fn.NumParameters}, got={numArgs}", "R002");
+            Diagnostics.Report(Span.Empty, $"wrong number of arguments: want={cl.Function.NumParameters}, got={numArgs}", "R002");
             return;
         }
 
         var frame = new Frame(cl, _sp - numArgs);
         PushFrame(frame);
-        _sp = frame.BasePointer + cl.Fn.NumLocals;
+        _sp = frame.BasePointer + cl.Function.NumLocals;
     }
 
     private void PushClosure(int constIndex, int numFree)
@@ -361,7 +361,7 @@ public class Vm
         }
         _sp -= numFree;
 
-        var closure = new ClosureObj { Fn = function, Free = free };
+        var closure = new ClosureObj { Function = function, Free = free };
         Push(closure);
     }
 
@@ -370,7 +370,7 @@ public class Vm
         var args = new IObject[numArgs];
         Array.Copy(_stack, _sp - numArgs, args, 0, numArgs);
 
-        var result = builtin.Fn(args);
+        var result = builtin.Function(args);
         _sp = _sp - numArgs - 1;
 
         if (result != null)

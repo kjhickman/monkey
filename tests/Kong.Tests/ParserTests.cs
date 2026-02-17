@@ -10,12 +10,12 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = program.Statements[0];
+        var stmt = unit.Statements[0];
         TestLetStatement(stmt, expectedIdentifier);
 
         var val = Assert.IsType<LetStatement>(stmt).Value!;
@@ -30,12 +30,12 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var returnStmt = Assert.IsType<ReturnStatement>(program.Statements[0]);
+        var returnStmt = Assert.IsType<ReturnStatement>(unit.Statements[0]);
         Assert.Equal("return", returnStmt.TokenLiteral());
         TestLiteralExpression(returnStmt.ReturnValue!, expectedValue);
     }
@@ -47,12 +47,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var ident = Assert.IsType<Identifier>(stmt.Expression);
         Assert.Equal("foobar", ident.Value);
         Assert.Equal("foobar", ident.TokenLiteral());
@@ -65,12 +65,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var literal = Assert.IsType<IntegerLiteral>(stmt.Expression);
         Assert.Equal(5L, literal.Value);
         Assert.Equal("5", literal.TokenLiteral());
@@ -87,12 +87,12 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var exp = Assert.IsType<PrefixExpression>(stmt.Expression);
         Assert.Equal(op, exp.Operator);
         TestLiteralExpression(exp.Right, value);
@@ -122,12 +122,12 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         TestInfixExpression(stmt.Expression!, leftValue, op, rightValue);
     }
 
@@ -163,10 +163,10 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Equal(expected, program.String());
+        Assert.Equal(expected, unit.String());
     }
 
     [Theory]
@@ -176,12 +176,12 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var boolean = Assert.IsType<BooleanLiteral>(stmt.Expression);
         Assert.Equal(expectedBoolean, boolean.Value);
     }
@@ -193,12 +193,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var exp = Assert.IsType<IfExpression>(stmt.Expression);
 
         TestInfixExpression(exp.Condition, "x", "<", "y");
@@ -218,12 +218,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var exp = Assert.IsType<IfExpression>(stmt.Expression);
 
         TestInfixExpression(exp.Condition, "x", "<", "y");
@@ -245,12 +245,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var function = Assert.IsType<FunctionLiteral>(stmt.Expression);
 
         Assert.Equal(2, function.Parameters.Count);
@@ -272,10 +272,10 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var function = Assert.IsType<FunctionLiteral>(stmt.Expression);
 
         Assert.Equal(expectedParams.Length, function.Parameters.Count);
@@ -293,12 +293,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var exp = Assert.IsType<CallExpression>(stmt.Expression);
 
         TestIdentifier(exp.Function, "add");
@@ -318,10 +318,10 @@ public class ParserTests
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var exp = Assert.IsType<CallExpression>(stmt.Expression);
 
         TestIdentifier(exp.Function, expectedIdent);
@@ -341,10 +341,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var literal = Assert.IsType<StringLiteral>(stmt.Expression);
 
         Assert.Equal("hello world", literal.Value);
@@ -357,10 +357,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var array = Assert.IsType<ArrayLiteral>(stmt.Expression);
 
         Assert.Equal(3, array.Elements.Count);
@@ -377,10 +377,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var indexExp = Assert.IsType<IndexExpression>(stmt.Expression);
 
         TestIdentifier(indexExp.Left, "myArray");
@@ -394,10 +394,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var hash = Assert.IsType<HashLiteral>(stmt.Expression);
 
         Assert.Equal(3, hash.Pairs.Count);
@@ -424,10 +424,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var hash = Assert.IsType<HashLiteral>(stmt.Expression);
 
         Assert.Empty(hash.Pairs);
@@ -440,10 +440,10 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var hash = Assert.IsType<HashLiteral>(stmt.Expression);
 
         Assert.Equal(3, hash.Pairs.Count);
@@ -470,12 +470,12 @@ public class ParserTests
 
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Single(program.Statements);
+        Assert.Single(unit.Statements);
 
-        var stmt = Assert.IsType<LetStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<LetStatement>(unit.Statements[0]);
         var function = Assert.IsType<FunctionLiteral>(stmt.Value);
 
         Assert.Equal("myFunction", function.Name);
@@ -576,10 +576,10 @@ public class ParserTests
         var input = "let x = 5;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<LetStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<LetStatement>(unit.Statements[0]);
         // Span covers the whole statement from 'let' to ';'
         AssertSpan(stmt.Span, 1, 1, 1, 11);
 
@@ -597,10 +597,10 @@ public class ParserTests
         var input = "return 42;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var stmt = Assert.IsType<ReturnStatement>(program.Statements[0]);
+        var stmt = Assert.IsType<ReturnStatement>(unit.Statements[0]);
         AssertSpan(stmt.Span, 1, 1, 1, 11);
     }
 
@@ -610,10 +610,10 @@ public class ParserTests
         var input = "foobar;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var ident = Assert.IsType<Identifier>(exprStmt.Expression);
         AssertSpan(ident.Span, 1, 1, 1, 7);
     }
@@ -624,10 +624,10 @@ public class ParserTests
         var input = "123;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var intLit = Assert.IsType<IntegerLiteral>(exprStmt.Expression);
         AssertSpan(intLit.Span, 1, 1, 1, 4);
     }
@@ -638,10 +638,10 @@ public class ParserTests
         var input = "\"hello\";";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var strLit = Assert.IsType<StringLiteral>(exprStmt.Expression);
         AssertSpan(strLit.Span, 1, 1, 1, 8);
     }
@@ -652,10 +652,10 @@ public class ParserTests
         var input = "true;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var boolLit = Assert.IsType<BooleanLiteral>(exprStmt.Expression);
         AssertSpan(boolLit.Span, 1, 1, 1, 5);
     }
@@ -668,10 +668,10 @@ public class ParserTests
         var input = "!true;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var prefix = Assert.IsType<PrefixExpression>(exprStmt.Expression);
         // Span from '!' to end of 'true'
         AssertSpan(prefix.Span, 1, 1, 1, 6);
@@ -685,10 +685,10 @@ public class ParserTests
         var input = "1 + 20;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var infix = Assert.IsType<InfixExpression>(exprStmt.Expression);
         // Span from start of '1' to end of '20'
         AssertSpan(infix.Span, 1, 1, 1, 7);
@@ -702,10 +702,10 @@ public class ParserTests
         var input = "if (x) { y }";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var ifExpr = Assert.IsType<IfExpression>(exprStmt.Expression);
         // Span from 'if' to closing '}'
         AssertSpan(ifExpr.Span, 1, 1, 1, 13);
@@ -717,10 +717,10 @@ public class ParserTests
         var input = "if (x) { y } else { z }";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var ifExpr = Assert.IsType<IfExpression>(exprStmt.Expression);
         // Span from 'if' to closing '}' of else block
         AssertSpan(ifExpr.Span, 1, 1, 1, 24);
@@ -734,10 +734,10 @@ public class ParserTests
         var input = "fn(x) { x }";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
         // Span from 'fn' to closing '}'
         AssertSpan(fnLit.Span, 1, 1, 1, 12);
@@ -753,10 +753,10 @@ public class ParserTests
         var input = "add(1, 2)";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var call = Assert.IsType<CallExpression>(exprStmt.Expression);
         // Span from 'add' to closing ')'
         AssertSpan(call.Span, 1, 1, 1, 10);
@@ -770,10 +770,10 @@ public class ParserTests
         var input = "[1, 2, 3]";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var arr = Assert.IsType<ArrayLiteral>(exprStmt.Expression);
         AssertSpan(arr.Span, 1, 1, 1, 10);
     }
@@ -786,10 +786,10 @@ public class ParserTests
         var input = "arr[0]";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var idx = Assert.IsType<IndexExpression>(exprStmt.Expression);
         AssertSpan(idx.Span, 1, 1, 1, 7);
     }
@@ -802,10 +802,10 @@ public class ParserTests
         var input = "{\"a\": 1}";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var hash = Assert.IsType<HashLiteral>(exprStmt.Expression);
         AssertSpan(hash.Span, 1, 1, 1, 9);
     }
@@ -817,10 +817,10 @@ public class ParserTests
         var input = "fn() { 1; 2 }";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
         // Block span from '{' to '}'
         AssertSpan(fnLit.Body.Span, 1, 6, 1, 14);
@@ -832,19 +832,19 @@ public class ParserTests
         var input = "let x = 1;\nlet y = 2;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        Assert.Equal(2, program.Statements.Count);
+        Assert.Equal(2, unit.Statements.Count);
 
-        var stmt1 = Assert.IsType<LetStatement>(program.Statements[0]);
+        var stmt1 = Assert.IsType<LetStatement>(unit.Statements[0]);
         AssertSpan(stmt1.Span, 1, 1, 1, 11);
 
-        var stmt2 = Assert.IsType<LetStatement>(program.Statements[1]);
+        var stmt2 = Assert.IsType<LetStatement>(unit.Statements[1]);
         AssertSpan(stmt2.Span, 2, 1, 2, 11);
 
         // Program span covers everything
-        AssertSpan(program.Span, 1, 1, 2, 11);
+        AssertSpan(unit.Span, 1, 1, 2, 11);
     }
 
     [Fact]
@@ -853,10 +853,10 @@ public class ParserTests
         var input = "fn(x) {\n  return x;\n}";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
         // Span from 'fn' on line 1 to '}' on line 3
         AssertSpan(fnLit.Span, 1, 1, 3, 2);
@@ -874,10 +874,10 @@ public class ParserTests
         var input = "5;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(program.Statements[0]);
+        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         // Includes the semicolon
         AssertSpan(exprStmt.Span, 1, 1, 1, 3);
     }
@@ -888,7 +888,7 @@ public class ParserTests
         var input = "let = 5;";
         var l = new Lexer(input);
         var p = new Parser(l);
-        p.ParseProgram();
+        p.ParseCompilationUnit();
 
         Assert.True(p.Diagnostics.HasErrors);
         // Diagnostic should carry position information in its Span

@@ -74,7 +74,7 @@ public class DiagnosticTests
     {
         var l = new Lexer("let = 5;");
         var p = new Parser(l);
-        p.ParseProgram();
+        p.ParseCompilationUnit();
 
         Assert.True(p.Diagnostics.HasErrors);
         var diag = p.Diagnostics.All[0];
@@ -87,7 +87,7 @@ public class DiagnosticTests
     {
         var l = new Lexer("=;");
         var p = new Parser(l);
-        p.ParseProgram();
+        p.ParseCompilationUnit();
 
         Assert.True(p.Diagnostics.HasErrors);
         // Should have a P002 diagnostic for no prefix parse function
@@ -104,10 +104,10 @@ public class DiagnosticTests
     {
         var l = new Lexer("x;");
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
 
         var compiler = new Compiler();
-        compiler.Compile(program);
+        compiler.Compile(unit);
 
         Assert.True(compiler.Diagnostics.HasErrors);
         var diag = compiler.Diagnostics.All[0];
@@ -120,10 +120,10 @@ public class DiagnosticTests
     {
         var l = new Lexer("fn() { 1; }(1);");
         var p = new Parser(l);
-        var program = p.ParseProgram();
+        var unit = p.ParseCompilationUnit();
 
         var compiler = new Compiler();
-        compiler.Compile(program);
+        compiler.Compile(unit);
         Assert.False(compiler.Diagnostics.HasErrors);
 
         var vm = new Vm(compiler.GetBytecode());

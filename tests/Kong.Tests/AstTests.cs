@@ -5,7 +5,7 @@ public class AstTests
     [Fact]
     public void TestString()
     {
-        var program = new Program
+        var program = new CompilationUnit
         {
             Statements = new List<IStatement>
             {

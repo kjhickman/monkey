@@ -79,27 +79,27 @@ public class Parser
 
     public DiagnosticBag Diagnostics => _diagnostics;
 
-    public Program ParseProgram()
+    public CompilationUnit ParseCompilationUnit()
     {
-        var program = new Program();
+        var unit = new CompilationUnit();
         var start = _curToken.Span.Start;
 
         while (!CurTokenIs(TokenType.EndOfFile))
         {
-            var stmt = ParseStatement();
-            if (stmt != null)
+            var statement = ParseStatement();
+            if (statement != null)
             {
-                program.Statements.Add(stmt);
+                unit.Statements.Add(statement);
             }
             NextToken();
         }
 
-        if (program.Statements.Count > 0)
+        if (unit.Statements.Count > 0)
         {
-            program.Span = new Span(start, program.Statements[^1].Span.End);
+            unit.Span = new Span(start, unit.Statements[^1].Span.End);
         }
 
-        return program;
+        return unit;
     }
 
     private void NextToken()

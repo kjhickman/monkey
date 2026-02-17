@@ -838,9 +838,9 @@ public class CompilerTests
     {
         foreach (var tt in tests)
         {
-            var program = Parse(tt.Input);
+            var unit = Parse(tt.Input);
             var compiler = new Compiler();
-            compiler.Compile(program);
+            compiler.Compile(unit);
             Assert.False(compiler.Diagnostics.HasErrors,
                 $"compiler had errors: {string.Join(", ", compiler.Diagnostics.All)}");
 
@@ -851,11 +851,11 @@ public class CompilerTests
         }
     }
 
-    private static Program Parse(string input)
+    private static CompilationUnit Parse(string input)
     {
         var l = new Lexer(input);
         var p = new Parser(l);
-        return p.ParseProgram();
+        return p.ParseCompilationUnit();
     }
 
     private static void TestInstructions(byte[][] expected, Instructions actual)

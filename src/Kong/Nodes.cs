@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Kong;
 
-public class Program : INode
+public class CompilationUnit : INode
 {
     public Span Span { get; set; }
     public List<IStatement> Statements { get; set; } = [];

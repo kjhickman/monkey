@@ -1,17 +1,10 @@
 namespace Kong;
 
-public class Frame
+public class Frame(ClosureObj closure, int basePointer)
 {
-    public ClosureObj Cl { get; }
-    public int Ip { get; set; }
-    public int BasePointer { get; }
+    public ClosureObj Closure { get; } = closure;
+    public int InstructionPointer { get; set; } = -1;
+    public int BasePointer { get; } = basePointer;
 
-    public Frame(ClosureObj cl, int basePointer)
-    {
-        Cl = cl;
-        Ip = -1;
-        BasePointer = basePointer;
-    }
-
-    public Instructions Instructions() => Cl.Fn.Instructions;
+    public Instructions Instructions() => Closure.Function.Instructions;
 }

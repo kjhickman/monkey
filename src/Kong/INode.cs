@@ -2,7 +2,7 @@ namespace Kong;
 
 public interface INode
 {
-    global::Kong.Span Span { get; set; }
+    Span Span { get; set; }
     string TokenLiteral();
     string String();
 }

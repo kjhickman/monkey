@@ -102,7 +102,7 @@ public delegate IObject? BuiltinFunction(params IObject[] args);
 
 public class BuiltinObj : IObject
 {
-    public BuiltinFunction Fn { get; set; } = null!;
+    public BuiltinFunction Function { get; set; } = null!;
 
     public ObjectType Type() => ObjectType.Builtin;
     public string Inspect() => "builtin function";
@@ -150,7 +150,7 @@ public class CompiledFunctionObj : IObject
 
 public class ClosureObj : IObject
 {
-    public CompiledFunctionObj Fn { get; set; } = null!;
+    public CompiledFunctionObj Function { get; set; } = null!;
     public List<IObject> Free { get; set; } = [];
 
     public ObjectType Type() => ObjectType.Closure;
@@ -168,7 +168,7 @@ public static class Builtins
         // 0: len
         ("len", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 if (args.Length != 1)
                     return NewError($"wrong number of arguments. got={args.Length}, want=1");
@@ -185,7 +185,7 @@ public static class Builtins
         // 1: puts
         ("puts", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 foreach (var arg in args)
                 {
@@ -198,7 +198,7 @@ public static class Builtins
         // 2: first
         ("first", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 if (args.Length != 1)
                     return NewError($"wrong number of arguments. got={args.Length}, want=1");
@@ -216,7 +216,7 @@ public static class Builtins
         // 3: last
         ("last", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 if (args.Length != 1)
                     return NewError($"wrong number of arguments. got={args.Length}, want=1");
@@ -234,7 +234,7 @@ public static class Builtins
         // 4: rest
         ("rest", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 if (args.Length != 1)
                     return NewError($"wrong number of arguments. got={args.Length}, want=1");
@@ -255,7 +255,7 @@ public static class Builtins
         // 5: push
         ("push", new BuiltinObj
         {
-            Fn = args =>
+            Function = args =>
             {
                 if (args.Length != 2)
                     return NewError($"wrong number of arguments. got={args.Length}, want=2");

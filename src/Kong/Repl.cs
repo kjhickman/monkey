@@ -22,7 +22,7 @@ public static class Repl
             var l = new Lexer(line);
             var p = new Parser(l);
 
-            var program = p.ParseProgram();
+            var unit = p.ParseCompilationUnit();
             if (p.Diagnostics.HasErrors)
             {
                 PrintDiagnostics(output, p.Diagnostics);
@@ -30,7 +30,7 @@ public static class Repl
             }
 
             var comp = Compiler.NewWithState(symbolTable, constants);
-            comp.Compile(program);
+            comp.Compile(unit);
             if (comp.Diagnostics.HasErrors)
             {
                 PrintDiagnostics(output, comp.Diagnostics);

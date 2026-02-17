@@ -59,8 +59,8 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "return", TokenType.Return },
     };
 
-    public static TokenType LookupIdent(string ident)
+    public static TokenType LookupIdentifier(string keyword)
     {
-        return Keywords.GetValueOrDefault(ident, TokenType.Identifier);
+        return Keywords.GetValueOrDefault(keyword, TokenType.Identifier);
     }
 }

@@ -66,8 +66,8 @@ public class Compiler
     {
         switch (node)
         {
-            case Program program:
-                foreach (var s in program.Statements)
+            case CompilationUnit unit:
+                foreach (var s in unit.Statements)
                 {
                     Compile(s);
                     if (Diagnostics.HasErrors) return;
