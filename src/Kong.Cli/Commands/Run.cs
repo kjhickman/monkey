@@ -29,7 +29,7 @@ public class RunFile
 
         var symbolTable = SymbolTable.NewWithBuiltins();
 
-        var compiler = Compiler.NewWithState(symbolTable, new List<IObject>());
+        var compiler = Compiler.NewWithState(symbolTable, []);
         compiler.Compile(program);
         if (compiler.Diagnostics.HasErrors)
         {

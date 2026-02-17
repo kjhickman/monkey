@@ -7,8 +7,8 @@ public class AstTests
     {
         var program = new CompilationUnit
         {
-            Statements = new List<IStatement>
-            {
+            Statements =
+            [
                 new LetStatement
                 {
                     Token = new Token(TokenType.Let, "let"),
@@ -23,7 +23,7 @@ public class AstTests
                         Value = "anotherVar",
                     },
                 },
-            },
+            ],
         };
 
         Assert.Equal("let myVar = anotherVar;", program.String());
