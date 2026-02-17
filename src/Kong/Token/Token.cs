@@ -3,11 +3,11 @@ namespace Kong.Token;
 public enum TokenType
 {
     Illegal,
-    Eof,
+    EndOfFile,
 
     // Identifiers + literals
-    Ident,
-    Int,
+    Identifier,
+    Integer,
     String,
 
     // Operators
@@ -18,23 +18,23 @@ public enum TokenType
     Asterisk,
     Slash,
 
-    Lt,
-    Gt,
+    LessThan,
+    GreaterThan,
 
-    Eq,
-    NotEq,
+    Equal,
+    NotEqual,
 
     // Delimiters
     Comma,
     Semicolon,
     Colon,
 
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
+    LeftParenthesis,
+    RightParenthesis,
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
 
     // Keywords
     Function,
@@ -61,6 +61,6 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
 
     public static TokenType LookupIdent(string ident)
     {
-        return Keywords.GetValueOrDefault(ident, TokenType.Ident);
+        return Keywords.GetValueOrDefault(ident, TokenType.Identifier);
     }
 }

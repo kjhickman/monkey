@@ -33,7 +33,7 @@ public class Lexer
                 if (PeekChar() == '=')
                 {
                     ReadChar();
-                    tok = new Token.Token(TokenType.Eq, "==",
+                    tok = new Token.Token(TokenType.Equal, "==",
                         new Span(start, new Position(_line, _column + 1)));
                 }
                 else
@@ -51,7 +51,7 @@ public class Lexer
                 if (PeekChar() == '=')
                 {
                     ReadChar();
-                    tok = new Token.Token(TokenType.NotEq, "!=",
+                    tok = new Token.Token(TokenType.NotEqual, "!=",
                         new Span(start, new Position(_line, _column + 1)));
                 }
                 else
@@ -66,10 +66,10 @@ public class Lexer
                 tok = NewToken(TokenType.Asterisk, _ch, start);
                 break;
             case '<':
-                tok = NewToken(TokenType.Lt, _ch, start);
+                tok = NewToken(TokenType.LessThan, _ch, start);
                 break;
             case '>':
-                tok = NewToken(TokenType.Gt, _ch, start);
+                tok = NewToken(TokenType.GreaterThan, _ch, start);
                 break;
             case ';':
                 tok = NewToken(TokenType.Semicolon, _ch, start);
@@ -81,22 +81,22 @@ public class Lexer
                 tok = NewToken(TokenType.Colon, _ch, start);
                 break;
             case '(':
-                tok = NewToken(TokenType.LParen, _ch, start);
+                tok = NewToken(TokenType.LeftParenthesis, _ch, start);
                 break;
             case ')':
-                tok = NewToken(TokenType.RParen, _ch, start);
+                tok = NewToken(TokenType.RightParenthesis, _ch, start);
                 break;
             case '{':
-                tok = NewToken(TokenType.LBrace, _ch, start);
+                tok = NewToken(TokenType.LeftBrace, _ch, start);
                 break;
             case '}':
-                tok = NewToken(TokenType.RBrace, _ch, start);
+                tok = NewToken(TokenType.RightBrace, _ch, start);
                 break;
             case '[':
-                tok = NewToken(TokenType.LBracket, _ch, start);
+                tok = NewToken(TokenType.LeftBracket, _ch, start);
                 break;
             case ']':
-                tok = NewToken(TokenType.RBracket, _ch, start);
+                tok = NewToken(TokenType.RightBracket, _ch, start);
                 break;
             case '"':
             {
@@ -107,7 +107,7 @@ public class Lexer
                 break;
             }
             case '\0':
-                tok = new Token.Token(TokenType.Eof, "", new Span(start, start));
+                tok = new Token.Token(TokenType.EndOfFile, "", new Span(start, start));
                 break;
             default:
                 if (IsLetter(_ch))
@@ -125,7 +125,7 @@ public class Lexer
                 {
                     var literal = ReadNumber();
                     var end = new Position(_line, _column);
-                    return new Token.Token(TokenType.Int, literal, new Span(start, end));
+                    return new Token.Token(TokenType.Integer, literal, new Span(start, end));
                 }
 
                 tok = NewToken(TokenType.Illegal, _ch, start);

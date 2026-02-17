@@ -7,12 +7,12 @@ namespace Kong.Parser;
 public enum Precedence
 {
     Lowest = 0,
-    Equals,      // ==
-    LessGreater, // > or <
+    Equality,    // ==
+    Comparison,  // > or <
     Sum,         // +
     Product,     // *
     Prefix,      // -X or !X
-    Call,        // myFunction(X)
+    FunctionCall, // myFunction(X)
     Index,       // array[index]
 }
 
@@ -29,16 +29,16 @@ public class Parser
 
     private static readonly Dictionary<TokenType, Precedence> Precedences = new()
     {
-        { TokenType.Eq, Precedence.Equals },
-        { TokenType.NotEq, Precedence.Equals },
-        { TokenType.Lt, Precedence.LessGreater },
-        { TokenType.Gt, Precedence.LessGreater },
+        { TokenType.Equal, Precedence.Equality },
+        { TokenType.NotEqual, Precedence.Equality },
+        { TokenType.LessThan, Precedence.Comparison },
+        { TokenType.GreaterThan, Precedence.Comparison },
         { TokenType.Plus, Precedence.Sum },
         { TokenType.Minus, Precedence.Sum },
         { TokenType.Slash, Precedence.Product },
         { TokenType.Asterisk, Precedence.Product },
-        { TokenType.LParen, Precedence.Call },
-        { TokenType.LBracket, Precedence.Index },
+        { TokenType.LeftParenthesis, Precedence.FunctionCall },
+        { TokenType.LeftBracket, Precedence.Index },
     };
 
     public Parser(Lexer.Lexer lexer)
@@ -48,18 +48,18 @@ public class Parser
 
         _prefixParseFns = new Dictionary<TokenType, Func<IExpression>>
         {
-            { TokenType.Ident, ParseIdentifier },
-            { TokenType.Int, ParseIntegerLiteral },
+            { TokenType.Identifier, ParseIdentifier },
+            { TokenType.Integer, ParseIntegerLiteral },
             { TokenType.String, ParseStringLiteral },
             { TokenType.Function, ParseFunctionLiteral },
             { TokenType.True, ParseBoolean },
             { TokenType.False, ParseBoolean },
             { TokenType.Bang, ParsePrefixExpression },
             { TokenType.Minus, ParsePrefixExpression },
-            { TokenType.LParen, ParseGroupedExpression },
+            { TokenType.LeftParenthesis, ParseGroupedExpression },
             { TokenType.If, ParseIfExpression },
-            { TokenType.LBracket, ParseArrayLiteral },
-            { TokenType.LBrace, ParseHashLiteral },
+            { TokenType.LeftBracket, ParseArrayLiteral },
+            { TokenType.LeftBrace, ParseHashLiteral },
         };
 
         _infixParseFns = new Dictionary<TokenType, Func<IExpression, IExpression>>
@@ -68,12 +68,12 @@ public class Parser
             { TokenType.Minus, ParseInfixExpression },
             { TokenType.Asterisk, ParseInfixExpression },
             { TokenType.Slash, ParseInfixExpression },
-            { TokenType.Eq, ParseInfixExpression },
-            { TokenType.NotEq, ParseInfixExpression },
-            { TokenType.Lt, ParseInfixExpression },
-            { TokenType.Gt, ParseInfixExpression },
-            { TokenType.LParen, ParseCallExpression },
-            { TokenType.LBracket, ParseIndexExpression },
+            { TokenType.Equal, ParseInfixExpression },
+            { TokenType.NotEqual, ParseInfixExpression },
+            { TokenType.LessThan, ParseInfixExpression },
+            { TokenType.GreaterThan, ParseInfixExpression },
+            { TokenType.LeftParenthesis, ParseCallExpression },
+            { TokenType.LeftBracket, ParseIndexExpression },
         };
 
         // Read two tokens, so _curToken and _peekToken are both set
@@ -88,7 +88,7 @@ public class Parser
         var program = new Ast.Program();
         var start = _curToken.Span.Start;
 
-        while (!CurTokenIs(TokenType.Eof))
+        while (!CurTokenIs(TokenType.EndOfFile))
         {
             var stmt = ParseStatement();
             if (stmt != null)
@@ -171,7 +171,7 @@ public class Parser
         var startSpan = _curToken.Span;
         var statement = new LetStatement { Token = _curToken };
 
-        if (!ExpectPeek(TokenType.Ident))
+        if (!ExpectPeek(TokenType.Identifier))
         {
             return null;
         }
@@ -249,7 +249,7 @@ public class Parser
 
         NextToken();
 
-        while (!CurTokenIs(TokenType.RBrace) && !CurTokenIs(TokenType.Eof))
+        while (!CurTokenIs(TokenType.RightBrace) && !CurTokenIs(TokenType.EndOfFile))
         {
             var stmt = ParseStatement();
             if (stmt != null)
@@ -370,14 +370,14 @@ public class Parser
         var startSpan = _curToken.Span;
         var literal = new FunctionLiteral { Token = _curToken };
 
-        if (!ExpectPeek(TokenType.LParen))
+        if (!ExpectPeek(TokenType.LeftParenthesis))
         {
             return null!;
         }
 
         literal.Parameters = ParseFunctionParameters();
 
-        if (!ExpectPeek(TokenType.LBrace))
+        if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null!;
         }
@@ -406,7 +406,7 @@ public class Parser
 
         var expression = ParseExpression(Precedence.Lowest);
 
-        if (!ExpectPeek(TokenType.RParen))
+        if (!ExpectPeek(TokenType.RightParenthesis))
         {
             return null!;
         }
@@ -419,7 +419,7 @@ public class Parser
         var startSpan = _curToken.Span;
         var expression = new IfExpression { Token = _curToken };
 
-        if (!ExpectPeek(TokenType.LParen))
+        if (!ExpectPeek(TokenType.LeftParenthesis))
         {
             return null!;
         }
@@ -427,7 +427,7 @@ public class Parser
         NextToken();
         expression.Condition = ParseExpression(Precedence.Lowest)!;
 
-        if (!ExpectPeek(TokenType.RParen) || !ExpectPeek(TokenType.LBrace))
+        if (!ExpectPeek(TokenType.RightParenthesis) || !ExpectPeek(TokenType.LeftBrace))
         {
             return null!;
         }
@@ -441,7 +441,7 @@ public class Parser
         }
 
         NextToken();
-        if (!ExpectPeek(TokenType.LBrace))
+        if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null!;
         }
@@ -458,7 +458,7 @@ public class Parser
         {
             Token = _curToken,
             Function = function,
-            Arguments = ParseExpressionList(TokenType.RParen),
+            Arguments = ParseExpressionList(TokenType.RightParenthesis),
         };
         // Span from start of function expression to closing ')'
         exp.Span = new Span(function.Span.Start, _curToken.Span.End);
@@ -469,7 +469,7 @@ public class Parser
     {
         var identifiers = new List<Identifier>();
 
-        if (PeekTokenIs(TokenType.RParen))
+        if (PeekTokenIs(TokenType.RightParenthesis))
         {
             NextToken();
             return identifiers;
@@ -498,7 +498,7 @@ public class Parser
             identifiers.Add(identifier);
         }
 
-        if (!ExpectPeek(TokenType.RParen))
+        if (!ExpectPeek(TokenType.RightParenthesis))
         {
             return null!;
         }
@@ -512,7 +512,7 @@ public class Parser
         var array = new ArrayLiteral
         {
             Token = _curToken,
-            Elements = ParseExpressionList(TokenType.RBracket),
+            Elements = ParseExpressionList(TokenType.RightBracket),
         };
         // Span from '[' to ']'
         array.Span = new Span(startSpan.Start, _curToken.Span.End);
@@ -554,7 +554,7 @@ public class Parser
         NextToken();
         expression.Index = ParseExpression(Precedence.Lowest)!;
 
-        if (!ExpectPeek(TokenType.RBracket))
+        if (!ExpectPeek(TokenType.RightBracket))
         {
             return null!;
         }
@@ -570,7 +570,7 @@ public class Parser
         var startSpan = _curToken.Span;
         var hash = new HashLiteral { Token = _curToken };
 
-        while (!PeekTokenIs(TokenType.RBrace))
+        while (!PeekTokenIs(TokenType.RightBrace))
         {
             NextToken();
             var key = ParseExpression(Precedence.Lowest)!;
@@ -585,13 +585,13 @@ public class Parser
 
             hash.Pairs.Add(new KeyValuePair<IExpression, IExpression>(key, value));
 
-            if (!PeekTokenIs(TokenType.RBrace) && !ExpectPeek(TokenType.Comma))
+            if (!PeekTokenIs(TokenType.RightBrace) && !ExpectPeek(TokenType.Comma))
             {
                 return null!;
             }
         }
 
-        if (!ExpectPeek(TokenType.RBrace))
+        if (!ExpectPeek(TokenType.RightBrace))
         {
             return null!;
         }

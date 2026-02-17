@@ -17,12 +17,12 @@ public class AstTests
                     Token = new Token.Token(TokenType.Let, "let"),
                     Name = new Identifier
                     {
-                        Token = new Token.Token(TokenType.Ident, "myVar"),
+                        Token = new Token.Token(TokenType.Identifier, "myVar"),
                         Value = "myVar",
                     },
                     Value = new Identifier
                     {
-                        Token = new Token.Token(TokenType.Ident, "anotherVar"),
+                        Token = new Token.Token(TokenType.Identifier, "anotherVar"),
                         Value = "anotherVar",
                     },
                 },

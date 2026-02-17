@@ -51,7 +51,7 @@ public class LetStatement : IStatement
 public class Identifier : IExpression
 {
     public Span Span { get; set; }
-    public Token.Token Token { get; set; } // the TokenType.Ident token
+    public Token.Token Token { get; set; } // the TokenType.Identifier token
     public string Value { get; set; } = "";
 
     public string TokenLiteral() => Token.Literal;
