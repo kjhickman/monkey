@@ -6,14 +6,14 @@ public class LexerTests
     public void TestNextToken()
     {
         var input = """
-            let five = 5;
-            let ten = 10;
+            let five: int = 5;
+            let ten: int = 10;
 
-            let add = fn(x, y) {
+            let add = fn(x, y) -> int {
               x + y;
             };
 
-            let result = add(five, ten);
+            let result: int = add(five, ten);
             !-/*5;
             5 < 10 > 5;
 
@@ -35,11 +35,15 @@ public class LexerTests
         {
             (TokenType.Let, "let"),
             (TokenType.Identifier, "five"),
+            (TokenType.Colon, ":"),
+            (TokenType.Identifier, "int"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "5"),
             (TokenType.Semicolon, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "ten"),
+            (TokenType.Colon, ":"),
+            (TokenType.Identifier, "int"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "10"),
             (TokenType.Semicolon, ";"),
@@ -52,6 +56,8 @@ public class LexerTests
             (TokenType.Comma, ","),
             (TokenType.Identifier, "y"),
             (TokenType.RightParenthesis, ")"),
+            (TokenType.Arrow, "->"),
+            (TokenType.Identifier, "int"),
             (TokenType.LeftBrace, "{"),
             (TokenType.Identifier, "x"),
             (TokenType.Plus, "+"),
@@ -61,6 +67,8 @@ public class LexerTests
             (TokenType.Semicolon, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "result"),
+            (TokenType.Colon, ":"),
+            (TokenType.Identifier, "int"),
             (TokenType.Assign, "="),
             (TokenType.Identifier, "add"),
             (TokenType.LeftParenthesis, "("),

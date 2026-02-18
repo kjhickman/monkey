@@ -24,6 +24,8 @@ public enum TokenType
     Equal,
     NotEqual,
 
+    Arrow,
+
     // Delimiters
     Comma,
     Semicolon,

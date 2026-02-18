@@ -41,7 +41,16 @@ public class Lexer
                 token = NewToken(TokenType.Plus, _ch, start);
                 break;
             case '-':
-                token = NewToken(TokenType.Minus, _ch, start);
+                if (PeekChar() == '>')
+                {
+                    ReadChar();
+                    token = new Token(TokenType.Arrow, "->",
+                        new Span(start, new Position(_line, _column + 1)));
+                }
+                else
+                {
+                    token = NewToken(TokenType.Minus, _ch, start);
+                }
                 break;
             case '!':
                 if (PeekChar() == '=')
