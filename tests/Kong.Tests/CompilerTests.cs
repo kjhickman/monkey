@@ -243,45 +243,6 @@ public class CompilerTests
     }
 
     [Fact]
-    public void TestHashLiterals()
-    {
-        var tests = new CompilerTestCase[]
-        {
-            new("{}", Array.Empty<object>(),
-            [
-                Code.Make(Opcode.OpHash, 0),
-                Code.Make(Opcode.OpPop),
-            ]),
-            new("{1: 2, 3: 4, 5: 6}", [1, 2, 3, 4, 5, 6],
-            [
-                Code.Make(Opcode.OpConstant, 0),
-                Code.Make(Opcode.OpConstant, 1),
-                Code.Make(Opcode.OpConstant, 2),
-                Code.Make(Opcode.OpConstant, 3),
-                Code.Make(Opcode.OpConstant, 4),
-                Code.Make(Opcode.OpConstant, 5),
-                Code.Make(Opcode.OpHash, 6),
-                Code.Make(Opcode.OpPop),
-            ]),
-            new("{1: 2 + 3, 4: 5 * 6}", [1, 2, 3, 4, 5, 6],
-            [
-                Code.Make(Opcode.OpConstant, 0),
-                Code.Make(Opcode.OpConstant, 1),
-                Code.Make(Opcode.OpConstant, 2),
-                Code.Make(Opcode.OpAdd),
-                Code.Make(Opcode.OpConstant, 3),
-                Code.Make(Opcode.OpConstant, 4),
-                Code.Make(Opcode.OpConstant, 5),
-                Code.Make(Opcode.OpMul),
-                Code.Make(Opcode.OpHash, 4),
-                Code.Make(Opcode.OpPop),
-            ]),
-        };
-
-        RunCompilerTests(tests);
-    }
-
-    [Fact]
     public void TestIndexExpressions()
     {
         var tests = new CompilerTestCase[]
@@ -295,17 +256,6 @@ public class CompilerTests
                 Code.Make(Opcode.OpConstant, 3),
                 Code.Make(Opcode.OpConstant, 4),
                 Code.Make(Opcode.OpAdd),
-                Code.Make(Opcode.OpIndex),
-                Code.Make(Opcode.OpPop),
-            ]),
-            new("{1: 2}[2 - 1]", [1, 2, 2, 1],
-            [
-                Code.Make(Opcode.OpConstant, 0),
-                Code.Make(Opcode.OpConstant, 1),
-                Code.Make(Opcode.OpHash, 2),
-                Code.Make(Opcode.OpConstant, 2),
-                Code.Make(Opcode.OpConstant, 3),
-                Code.Make(Opcode.OpSub),
                 Code.Make(Opcode.OpIndex),
                 Code.Make(Opcode.OpPop),
             ]),

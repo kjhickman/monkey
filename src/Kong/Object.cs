@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Kong;
 
 public enum ObjectType
@@ -12,7 +10,6 @@ public enum ObjectType
     String,
     Builtin,
     Array,
-    Hash,
     CompiledFunction,
     Closure,
 }
@@ -23,13 +20,6 @@ public interface IObject
     string Inspect();
 }
 
-public interface IHashable
-{
-    HashKey HashKey();
-}
-
-public readonly record struct HashKey(ObjectType Type, ulong Value);
-
 // --- Object types ---
 
 public class NullObj : IObject
@@ -38,24 +28,20 @@ public class NullObj : IObject
     public string Inspect() => "null";
 }
 
-public class IntegerObj : IObject, IHashable
+public class IntegerObj : IObject
 {
     public long Value { get; set; }
 
     public ObjectType Type() => ObjectType.Integer;
     public string Inspect() => Value.ToString();
-
-    public HashKey HashKey() => new(ObjectType.Integer, (ulong)Value);
 }
 
-public class BooleanObj : IObject, IHashable
+public class BooleanObj : IObject
 {
     public bool Value { get; set; }
 
     public ObjectType Type() => ObjectType.Boolean;
     public string Inspect() => Value ? "true" : "false";
-
-    public HashKey HashKey() => new(ObjectType.Boolean, Value ? 1UL : 0UL);
 }
 
 public class ReturnValueObj : IObject
@@ -74,28 +60,12 @@ public class ErrorObj : IObject
     public string Inspect() => $"ERROR: {Message}";
 }
 
-public class StringObj : IObject, IHashable
+public class StringObj : IObject
 {
     public string Value { get; set; } = "";
 
     public ObjectType Type() => ObjectType.String;
     public string Inspect() => Value;
-
-    public HashKey HashKey()
-    {
-        // FNV-1a 64-bit hash to match Go's hash/fnv.New64a()
-        const ulong fnvOffsetBasis = 14695981039346656037UL;
-        const ulong fnvPrime = 1099511628211UL;
-
-        var hash = fnvOffsetBasis;
-        foreach (var b in Encoding.UTF8.GetBytes(Value))
-        {
-            hash ^= b;
-            hash *= fnvPrime;
-        }
-
-        return new HashKey(ObjectType.String, hash);
-    }
 }
 
 public delegate IObject? BuiltinFunction(params IObject[] args);
@@ -117,24 +87,6 @@ public class ArrayObj : IObject
     {
         var elements = Elements.Select(e => e.Inspect());
         return $"[{string.Join(", ", elements)}]";
-    }
-}
-
-public class HashPair
-{
-    public IObject Key { get; set; } = null!;
-    public IObject Value { get; set; } = null!;
-}
-
-public class HashObj : IObject
-{
-    public Dictionary<HashKey, HashPair> Pairs { get; set; } = [];
-
-    public ObjectType Type() => ObjectType.Hash;
-    public string Inspect()
-    {
-        var pairs = Pairs.Values.Select(p => $"{p.Key.Inspect()}: {p.Value.Inspect()}");
-        return $"{{{string.Join(", ", pairs)}}}";
     }
 }
 

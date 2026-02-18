@@ -122,27 +122,6 @@ public class VmTests
     }
 
     [Fact]
-    public void TestHashLiterals()
-    {
-        var tests = new VmTestCase[]
-        {
-            new("{}", new Dictionary<HashKey, long>()),
-            new("{1: 2, 2: 3}", new Dictionary<HashKey, long>
-            {
-                { new IntegerObj { Value = 1 }.HashKey(), 2 },
-                { new IntegerObj { Value = 2 }.HashKey(), 3 },
-            }),
-            new("{1 + 1: 2 * 2, 3 + 3: 4 * 4}", new Dictionary<HashKey, long>
-            {
-                { new IntegerObj { Value = 2 }.HashKey(), 4 },
-                { new IntegerObj { Value = 6 }.HashKey(), 16 },
-            }),
-        };
-
-        RunVmTests(tests);
-    }
-
-    [Fact]
     public void TestIndexExpressions()
     {
         var tests = new VmTestCase[]
@@ -153,10 +132,6 @@ public class VmTests
             new("[][0]", NullValue),
             new("[1, 2, 3][99]", NullValue),
             new("[1][-1]", NullValue),
-            new("{1: 1, 2: 2}[1]", 1),
-            new("{1: 1, 2: 2}[2]", 2),
-            new("{1: 1}[0]", NullValue),
-            new("{}[0]", NullValue),
         };
 
         RunVmTests(tests);
@@ -588,15 +563,6 @@ public class VmTests
                 for (var i = 0; i < intArr.Length; i++)
                 {
                     TestIntegerObject(intArr[i], array.Elements[i]);
-                }
-                break;
-            case Dictionary<HashKey, long> hashMap:
-                var hash = Assert.IsType<HashObj>(actual);
-                Assert.Equal(hashMap.Count, hash.Pairs.Count);
-                foreach (var (expectedKey, expectedValue) in hashMap)
-                {
-                    Assert.True(hash.Pairs.ContainsKey(expectedKey), "no pair for given key in Pairs");
-                    TestIntegerObject(expectedValue, hash.Pairs[expectedKey].Value);
                 }
                 break;
             case ExpectedError expectedError:

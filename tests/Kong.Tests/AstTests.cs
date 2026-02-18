@@ -44,20 +44,8 @@ public class AstTests
             ElementType = intType,
         };
 
-        var mapType = new MapType
-        {
-            Token = new Token(TokenType.Identifier, "map"),
-            KeyType = new NamedType
-            {
-                Token = new Token(TokenType.Identifier, "string"),
-                Name = "string",
-            },
-            ValueType = arrayType,
-        };
-
         Assert.Equal("int", intType.String());
         Assert.Equal("int[]", arrayType.String());
-        Assert.Equal("map[string]int[]", mapType.String());
     }
 
     [Fact]

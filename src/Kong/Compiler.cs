@@ -288,25 +288,6 @@ public class Compiler
                 break;
             }
 
-            case HashLiteral hl:
-            {
-                // Sort keys by string representation for deterministic output
-                var sortedPairs = hl.Pairs
-                    .OrderBy(p => p.Key.String())
-                    .ToList();
-
-                foreach (var pair in sortedPairs)
-                {
-                    Compile(pair.Key);
-                    if (Diagnostics.HasErrors) return;
-                    Compile(pair.Value);
-                    if (Diagnostics.HasErrors) return;
-                }
-
-                Emit(Opcode.OpHash, hl.Pairs.Count * 2);
-                break;
-            }
-
             case IndexExpression idx:
             {
                 Compile(idx.Left);

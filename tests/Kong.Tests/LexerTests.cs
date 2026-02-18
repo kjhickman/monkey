@@ -28,7 +28,6 @@ public class LexerTests
             "foobar"
             "foo bar"
             [1, 2];
-            {"foo": "bar"}
             """;
 
         var tests = new (TokenType expectedType, string expectedLiteral)[]
@@ -122,11 +121,6 @@ public class LexerTests
             (TokenType.Integer, "2"),
             (TokenType.RightBracket, "]"),
             (TokenType.Semicolon, ";"),
-            (TokenType.LeftBrace, "{"),
-            (TokenType.String, "foo"),
-            (TokenType.Colon, ":"),
-            (TokenType.String, "bar"),
-            (TokenType.RightBrace, "}"),
             (TokenType.EndOfFile, ""),
         };
 

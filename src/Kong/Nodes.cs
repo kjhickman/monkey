@@ -268,17 +268,6 @@ public class ArrayType : ITypeNode
     public string String() => $"{ElementType.String()}[]";
 }
 
-public class MapType : ITypeNode
-{
-    public Span Span { get; set; }
-    public Token Token { get; set; } // the map identifier token
-    public ITypeNode KeyType { get; set; } = null!;
-    public ITypeNode ValueType { get; set; } = null!;
-
-    public string TokenLiteral() => Token.Literal;
-    public string String() => $"map[{KeyType.String()}]{ValueType.String()}";
-}
-
 public class CallExpression : IExpression
 {
     public Span Span { get; set; }
@@ -332,20 +321,5 @@ public class IndexExpression : IExpression
     public string String()
     {
         return $"({Left.String()}[{Index.String()}])";
-    }
-}
-
-public class HashLiteral : IExpression
-{
-    public Span Span { get; set; }
-    public Token Token { get; set; } // the '{' token
-    public List<KeyValuePair<IExpression, IExpression>> Pairs { get; set; } = [];
-
-    public string TokenLiteral() => Token.Literal;
-
-    public string String()
-    {
-        var pairs = Pairs.Select(p => $"{p.Key.String()}:{p.Value.String()}");
-        return $"{{{string.Join(", ", pairs)}}}";
     }
 }

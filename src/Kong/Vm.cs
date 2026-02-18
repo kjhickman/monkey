@@ -257,20 +257,6 @@ public class Vm
                     break;
                 }
 
-                case Opcode.OpHash:
-                {
-                    var numElements = Code.ReadUint16(ins.Bytes, ip + 1);
-                    CurrentFrame().InstructionPointer += 2;
-
-                    var hash = BuildHash(_sp - numElements, _sp);
-                    if (Diagnostics.HasErrors) return;
-                    _sp -= numElements;
-
-                    Push(hash!);
-                    if (Diagnostics.HasErrors) return;
-                    break;
-                }
-
                 case Opcode.OpIndex:
                 {
                     var index = Pop();
@@ -552,38 +538,11 @@ public class Vm
         return new ArrayObj { Elements = elements };
     }
 
-    private IObject? BuildHash(int startIndex, int endIndex)
-    {
-        var hashedPairs = new Dictionary<HashKey, HashPair>();
-
-        for (var i = startIndex; i < endIndex; i += 2)
-        {
-            var key = _stack[i];
-            var value = _stack[i + 1];
-
-            if (key is not IHashable hashable)
-            {
-                Diagnostics.Report(Span.Empty, $"unusable as hash key: {key.Type()}", "R008");
-                return null;
-            }
-
-            hashedPairs[hashable.HashKey()] = new HashPair { Key = key, Value = value };
-        }
-
-        return new HashObj { Pairs = hashedPairs };
-    }
-
     private void ExecuteIndexExpression(IObject left, IObject index)
     {
         if (left.Type() == ObjectType.Array && index.Type() == ObjectType.Integer)
         {
             ExecuteArrayIndex(left, index);
-            return;
-        }
-
-        if (left.Type() == ObjectType.Hash)
-        {
-            ExecuteHashIndex(left, index);
             return;
         }
 
@@ -603,25 +562,6 @@ public class Vm
         }
 
         Push(arrayObject.Elements[(int)i]);
-    }
-
-    private void ExecuteHashIndex(IObject hash, IObject index)
-    {
-        var hashObject = (HashObj)hash;
-
-        if (index is not IHashable hashable)
-        {
-            Diagnostics.Report(Span.Empty, $"unusable as hash key: {index.Type()}", "R010");
-            return;
-        }
-
-        if (!hashObject.Pairs.TryGetValue(hashable.HashKey(), out var pair))
-        {
-            Push(Null);
-            return;
-        }
-
-        Push(pair.Value);
     }
 
     private static BooleanObj NativeBoolToBooleanObject(bool input) => input ? True : False;

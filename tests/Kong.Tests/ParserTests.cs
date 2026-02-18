@@ -25,8 +25,6 @@ public class ParserTests
     [Theory]
     [InlineData("let x: int = 5;", "int")]
     [InlineData("let xs: int[] = [1, 2];", "int[]")]
-    [InlineData("let table: map[string]int = {\"a\": 1};", "map[string]int")]
-    [InlineData("let nested: map[string]int[] = {\"a\": [1]};", "map[string]int[]")]
     public void TestLetStatementsWithTypeAnnotations(string input, string expectedType)
     {
         var l = new Lexer(input);
@@ -308,7 +306,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionParameterAndReturnTypeParsing()
     {
-        var input = "fn(x: int, y: map[string]int[]) -> int[] { x }";
+        var input = "fn(x: int, y: string[]) -> int[] { x }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -322,7 +320,7 @@ public class ParserTests
         Assert.Equal("x", function.Parameters[0].Name);
         Assert.Equal("int", function.Parameters[0].TypeAnnotation?.String());
         Assert.Equal("y", function.Parameters[1].Name);
-        Assert.Equal("map[string]int[]", function.Parameters[1].TypeAnnotation?.String());
+        Assert.Equal("string[]", function.Parameters[1].TypeAnnotation?.String());
 
         Assert.NotNull(function.ReturnTypeAnnotation);
         Assert.Equal("int[]", function.ReturnTypeAnnotation!.String());
@@ -427,82 +425,6 @@ public class ParserTests
 
         TestIdentifier(indexExp.Left, "myArray");
         TestInfixExpression(indexExp.Index, 1L, "+", 1L);
-    }
-
-    [Fact]
-    public void TestParsingHashLiteralsStringKeys()
-    {
-        var input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
-
-        var l = new Lexer(input);
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-        CheckParserErrors(p);
-
-        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var hash = Assert.IsType<HashLiteral>(stmt.Expression);
-
-        Assert.Equal(3, hash.Pairs.Count);
-
-        var expected = new Dictionary<string, long>
-        {
-            { "one", 1 },
-            { "two", 2 },
-            { "three", 3 },
-        };
-
-        foreach (var pair in hash.Pairs)
-        {
-            var literal = Assert.IsType<StringLiteral>(pair.Key);
-            var expectedValue = expected[literal.String()];
-            TestIntegerLiteral(pair.Value, expectedValue);
-        }
-    }
-
-    [Fact]
-    public void TestParsingEmptyHashLiteral()
-    {
-        var input = "{}";
-
-        var l = new Lexer(input);
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-        CheckParserErrors(p);
-
-        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var hash = Assert.IsType<HashLiteral>(stmt.Expression);
-
-        Assert.Empty(hash.Pairs);
-    }
-
-    [Fact]
-    public void TestParsingHashLiteralsWithExpressions()
-    {
-        var input = "{\"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5}";
-
-        var l = new Lexer(input);
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-        CheckParserErrors(p);
-
-        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var hash = Assert.IsType<HashLiteral>(stmt.Expression);
-
-        Assert.Equal(3, hash.Pairs.Count);
-
-        var tests = new Dictionary<string, Action<IExpression>>
-        {
-            { "one", e => TestInfixExpression(e, 0L, "+", 1L) },
-            { "two", e => TestInfixExpression(e, 10L, "-", 8L) },
-            { "three", e => TestInfixExpression(e, 15L, "/", 5L) },
-        };
-
-        foreach (var pair in hash.Pairs)
-        {
-            var literal = Assert.IsType<StringLiteral>(pair.Key);
-            Assert.True(tests.ContainsKey(literal.String()), $"No test function for key {literal.String()} found");
-            tests[literal.String()](pair.Value);
-        }
     }
 
     [Fact]
@@ -834,22 +756,6 @@ public class ParserTests
         var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var idx = Assert.IsType<IndexExpression>(exprStmt.Expression);
         AssertSpan(idx.Span, 1, 1, 1, 7);
-    }
-
-    [Fact]
-    public void TestHashLiteralSpan()
-    {
-        // Input:  {"a": 1}
-        // Cols:   12345678
-        var input = "{\"a\": 1}";
-        var l = new Lexer(input);
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-        CheckParserErrors(p);
-
-        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var hash = Assert.IsType<HashLiteral>(exprStmt.Expression);
-        AssertSpan(hash.Span, 1, 1, 1, 9);
     }
 
     [Fact]

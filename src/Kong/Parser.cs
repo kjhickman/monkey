@@ -55,7 +55,6 @@ public class Parser
             { TokenType.LeftParenthesis, ParseGroupedExpression },
             { TokenType.If, ParseIfExpression },
             { TokenType.LeftBracket, ParseArrayLiteral },
-            { TokenType.LeftBrace, ParseHashLiteral },
         };
 
         _infixParseFns = new Dictionary<TokenType, Func<IExpression, IExpression>>
@@ -251,53 +250,11 @@ public class Parser
             return null;
         }
 
-        if (_curToken.Literal == "map")
-        {
-            return ParseMapType();
-        }
-
         return new NamedType
         {
             Token = _curToken,
             Name = _curToken.Literal,
             Span = _curToken.Span,
-        };
-    }
-
-    private ITypeNode? ParseMapType()
-    {
-        var startSpan = _curToken.Span;
-
-        if (!ExpectPeek(TokenType.LeftBracket))
-        {
-            return null;
-        }
-
-        NextToken();
-        var keyType = ParseTypeNode();
-        if (keyType == null)
-        {
-            return null;
-        }
-
-        if (!ExpectPeek(TokenType.RightBracket))
-        {
-            return null;
-        }
-
-        NextToken();
-        var valueType = ParseTypeNode();
-        if (valueType == null)
-        {
-            return null;
-        }
-
-        return new MapType
-        {
-            Token = new Token(TokenType.Identifier, "map", startSpan),
-            KeyType = keyType,
-            ValueType = valueType,
-            Span = new Span(startSpan.Start, valueType.Span.End),
         };
     }
 
@@ -702,40 +659,4 @@ public class Parser
         return expression;
     }
 
-    private IExpression ParseHashLiteral()
-    {
-        var startSpan = _curToken.Span;
-        var hash = new HashLiteral { Token = _curToken };
-
-        while (!PeekTokenIs(TokenType.RightBrace))
-        {
-            NextToken();
-            var key = ParseExpression(Precedence.Lowest)!;
-
-            if (!ExpectPeek(TokenType.Colon))
-            {
-                return null!;
-            }
-
-            NextToken();
-            var value = ParseExpression(Precedence.Lowest)!;
-
-            hash.Pairs.Add(new KeyValuePair<IExpression, IExpression>(key, value));
-
-            if (!PeekTokenIs(TokenType.RightBrace) && !ExpectPeek(TokenType.Comma))
-            {
-                return null!;
-            }
-        }
-
-        if (!ExpectPeek(TokenType.RightBrace))
-        {
-            return null!;
-        }
-
-        // Span from '{' to '}'
-        hash.Span = new Span(startSpan.Start, _curToken.Span.End);
-
-        return hash;
-    }
 }

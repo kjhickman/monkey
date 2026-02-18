@@ -33,7 +33,6 @@ public enum Opcode : byte
     OpGetFree,
     OpCurrentClosure,
     OpArray,
-    OpHash,
     OpIndex,
 }
 
@@ -136,7 +135,6 @@ public static class Code
         { Opcode.OpGetFree,        new Definition("OpGetFree", 1) },
         { Opcode.OpCurrentClosure, new Definition("OpCurrentClosure") },
         { Opcode.OpArray,          new Definition("OpArray", 2) },
-        { Opcode.OpHash,           new Definition("OpHash", 2) },
         { Opcode.OpIndex,          new Definition("OpIndex") },
     };
 
