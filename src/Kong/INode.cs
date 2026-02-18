@@ -10,3 +10,5 @@ public interface INode
 public interface IStatement : INode;
 
 public interface IExpression : INode;
+
+public interface ITypeNode : INode;

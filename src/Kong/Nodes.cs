@@ -28,6 +28,7 @@ public class LetStatement : IStatement
     public Span Span { get; set; }
     public Token Token { get; set; } // the TokenType.Let token
     public Identifier Name { get; set; } = null!;
+    public ITypeNode? TypeAnnotation { get; set; }
     public IExpression? Value { get; set; }
 
     public string TokenLiteral() => Token.Literal;
@@ -37,6 +38,11 @@ public class LetStatement : IStatement
         var sb = new StringBuilder();
         sb.Append(TokenLiteral() + " ");
         sb.Append(Name.String());
+        if (TypeAnnotation != null)
+        {
+            sb.Append(": ");
+            sb.Append(TypeAnnotation.String());
+        }
         sb.Append(" = ");
         if (Value != null)
         {
@@ -52,9 +58,19 @@ public class Identifier : IExpression
     public Span Span { get; set; }
     public Token Token { get; set; } // the TokenType.Identifier token
     public string Value { get; set; } = "";
+    public ITypeNode? TypeAnnotation { get; set; }
 
     public string TokenLiteral() => Token.Literal;
-    public string String() => Value;
+
+    public string String()
+    {
+        if (TypeAnnotation == null)
+        {
+            return Value;
+        }
+
+        return $"{Value}: {TypeAnnotation.String()}";
+    }
 }
 
 public class ReturnStatement : IStatement
@@ -193,6 +209,7 @@ public class FunctionLiteral : IExpression
     public Span Span { get; set; }
     public Token Token { get; set; } // The 'fn' token
     public List<Identifier> Parameters { get; set; } = [];
+    public ITypeNode? ReturnTypeAnnotation { get; set; }
     public BlockStatement Body { get; set; } = null!;
     public string Name { get; set; } = "";
 
@@ -209,10 +226,47 @@ public class FunctionLiteral : IExpression
         }
         sb.Append('(');
         sb.Append(string.Join(", ", paramStrings));
-        sb.Append(") ");
+        sb.Append(')');
+        if (ReturnTypeAnnotation != null)
+        {
+            sb.Append(" -> ");
+            sb.Append(ReturnTypeAnnotation.String());
+        }
+        sb.Append(' ');
         sb.Append(Body.String());
         return sb.ToString();
     }
+}
+
+public class NamedType : ITypeNode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the TokenType.Identifier token
+    public string Name { get; set; } = "";
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Name;
+}
+
+public class ArrayType : ITypeNode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the '[' token
+    public ITypeNode ElementType { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"{ElementType.String()}[]";
+}
+
+public class MapType : ITypeNode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the map identifier token
+    public ITypeNode KeyType { get; set; } = null!;
+    public ITypeNode ValueType { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"map[{KeyType.String()}]{ValueType.String()}";
 }
 
 public class CallExpression : IExpression
