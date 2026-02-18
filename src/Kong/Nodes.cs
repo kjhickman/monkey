@@ -58,6 +58,16 @@ public class Identifier : IExpression
     public Span Span { get; set; }
     public Token Token { get; set; } // the TokenType.Identifier token
     public string Value { get; set; } = "";
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Value;
+}
+
+public class FunctionParameter : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the parameter identifier token
+    public string Name { get; set; } = "";
     public ITypeNode? TypeAnnotation { get; set; }
 
     public string TokenLiteral() => Token.Literal;
@@ -66,10 +76,10 @@ public class Identifier : IExpression
     {
         if (TypeAnnotation == null)
         {
-            return Value;
+            return Name;
         }
 
-        return $"{Value}: {TypeAnnotation.String()}";
+        return $"{Name}: {TypeAnnotation.String()}";
     }
 }
 
@@ -208,7 +218,7 @@ public class FunctionLiteral : IExpression
 {
     public Span Span { get; set; }
     public Token Token { get; set; } // The 'fn' token
-    public List<Identifier> Parameters { get; set; } = [];
+    public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
     public BlockStatement Body { get; set; } = null!;
     public string Name { get; set; } = "";

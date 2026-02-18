@@ -14,6 +14,7 @@ public enum TokenType
     Assign,
     Plus,
     Minus,
+    Arrow,
     Bang,
     Asterisk,
     Slash,
@@ -23,8 +24,6 @@ public enum TokenType
 
     Equal,
     NotEqual,
-
-    Arrow,
 
     // Delimiters
     Comma,

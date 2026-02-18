@@ -179,6 +179,18 @@ public class Parser
             Span = _curToken.Span,
         };
 
+        if (PeekTokenIs(TokenType.Colon))
+        {
+            NextToken();
+            NextToken();
+
+            statement.TypeAnnotation = ParseTypeNode();
+            if (statement.TypeAnnotation == null)
+            {
+                return null;
+            }
+        }
+
         if (!ExpectPeek(TokenType.Assign))
         {
             return null;
@@ -200,6 +212,93 @@ public class Parser
 
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
+    }
+
+    private ITypeNode? ParseTypeNode()
+    {
+        ITypeNode? type = ParseTypePrimary();
+        if (type == null)
+        {
+            return null;
+        }
+
+        while (PeekTokenIs(TokenType.LeftBracket))
+        {
+            var start = type.Span.Start;
+
+            NextToken();
+            if (!ExpectPeek(TokenType.RightBracket))
+            {
+                return null;
+            }
+
+            type = new ArrayType
+            {
+                Token = _curToken,
+                ElementType = type,
+                Span = new Span(start, _curToken.Span.End),
+            };
+        }
+
+        return type;
+    }
+
+    private ITypeNode? ParseTypePrimary()
+    {
+        if (!CurTokenIs(TokenType.Identifier))
+        {
+            _diagnostics.Report(_curToken.Span, $"expected type name, got {_curToken.Type}", "P004");
+            return null;
+        }
+
+        if (_curToken.Literal == "map")
+        {
+            return ParseMapType();
+        }
+
+        return new NamedType
+        {
+            Token = _curToken,
+            Name = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+    }
+
+    private ITypeNode? ParseMapType()
+    {
+        var startSpan = _curToken.Span;
+
+        if (!ExpectPeek(TokenType.LeftBracket))
+        {
+            return null;
+        }
+
+        NextToken();
+        var keyType = ParseTypeNode();
+        if (keyType == null)
+        {
+            return null;
+        }
+
+        if (!ExpectPeek(TokenType.RightBracket))
+        {
+            return null;
+        }
+
+        NextToken();
+        var valueType = ParseTypeNode();
+        if (valueType == null)
+        {
+            return null;
+        }
+
+        return new MapType
+        {
+            Token = new Token(TokenType.Identifier, "map", startSpan),
+            KeyType = keyType,
+            ValueType = valueType,
+            Span = new Span(startSpan.Start, valueType.Span.End),
+        };
     }
 
     private ReturnStatement ParseReturnStatement()
@@ -373,6 +472,18 @@ public class Parser
 
         literal.Parameters = ParseFunctionParameters();
 
+        if (PeekTokenIs(TokenType.Arrow))
+        {
+            NextToken();
+            NextToken();
+
+            literal.ReturnTypeAnnotation = ParseTypeNode();
+            if (literal.ReturnTypeAnnotation == null)
+            {
+                return null!;
+            }
+        }
+
         if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null!;
@@ -461,37 +572,35 @@ public class Parser
         return exp;
     }
 
-    private List<Identifier> ParseFunctionParameters()
+    private List<FunctionParameter> ParseFunctionParameters()
     {
-        var identifiers = new List<Identifier>();
+        var parameters = new List<FunctionParameter>();
 
         if (PeekTokenIs(TokenType.RightParenthesis))
         {
             NextToken();
-            return identifiers;
+            return parameters;
         }
 
         NextToken();
 
-        var identifier = new Identifier
+        var parameter = ParseFunctionParameter();
+        if (parameter == null)
         {
-            Token = _curToken,
-            Value = _curToken.Literal,
-            Span = _curToken.Span,
-        };
-        identifiers.Add(identifier);
+            return null!;
+        }
+        parameters.Add(parameter);
 
         while (PeekTokenIs(TokenType.Comma))
         {
             NextToken();
             NextToken();
-            identifier = new Identifier
+            parameter = ParseFunctionParameter();
+            if (parameter == null)
             {
-                Token = _curToken,
-                Value = _curToken.Literal,
-                Span = _curToken.Span,
-            };
-            identifiers.Add(identifier);
+                return null!;
+            }
+            parameters.Add(parameter);
         }
 
         if (!ExpectPeek(TokenType.RightParenthesis))
@@ -499,7 +608,39 @@ public class Parser
             return null!;
         }
 
-        return identifiers;
+        return parameters;
+    }
+
+    private FunctionParameter? ParseFunctionParameter()
+    {
+        if (!CurTokenIs(TokenType.Identifier))
+        {
+            _diagnostics.Report(_curToken.Span, $"expected parameter name, got {_curToken.Type}", "P005");
+            return null;
+        }
+
+        var parameter = new FunctionParameter
+        {
+            Token = _curToken,
+            Name = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (PeekTokenIs(TokenType.Colon))
+        {
+            NextToken();
+            NextToken();
+
+            parameter.TypeAnnotation = ParseTypeNode();
+            if (parameter.TypeAnnotation == null)
+            {
+                return null;
+            }
+
+            parameter.Span = new Span(parameter.Span.Start, parameter.TypeAnnotation.Span.End);
+        }
+
+        return parameter;
     }
 
     private IExpression ParseArrayLiteral()

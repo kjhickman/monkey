@@ -23,6 +23,25 @@ public class ParserTests
     }
 
     [Theory]
+    [InlineData("let x: int = 5;", "int")]
+    [InlineData("let xs: int[] = [1, 2];", "int[]")]
+    [InlineData("let table: map[string]int = {\"a\": 1};", "map[string]int")]
+    [InlineData("let nested: map[string]int[] = {\"a\": [1]};", "map[string]int[]")]
+    public void TestLetStatementsWithTypeAnnotations(string input, string expectedType)
+    {
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Single(unit.Statements);
+
+        var stmt = Assert.IsType<LetStatement>(unit.Statements[0]);
+        Assert.NotNull(stmt.TypeAnnotation);
+        Assert.Equal(expectedType, stmt.TypeAnnotation!.String());
+    }
+
+    [Theory]
     [InlineData("return 5;", 5L)]
     [InlineData("return true;", true)]
     [InlineData("return foobar;", "foobar")]
@@ -255,8 +274,8 @@ public class ParserTests
 
         Assert.Equal(2, function.Parameters.Count);
 
-        TestLiteralExpression(function.Parameters[0], "x");
-        TestLiteralExpression(function.Parameters[1], "y");
+        Assert.Equal("x", function.Parameters[0].Name);
+        Assert.Equal("y", function.Parameters[1].Name);
 
         Assert.Single(function.Body.Statements);
 
@@ -282,8 +301,31 @@ public class ParserTests
 
         for (var i = 0; i < expectedParams.Length; i++)
         {
-            TestLiteralExpression(function.Parameters[i], expectedParams[i]);
+            Assert.Equal(expectedParams[i], function.Parameters[i].Name);
         }
+    }
+
+    [Fact]
+    public void TestFunctionParameterAndReturnTypeParsing()
+    {
+        var input = "fn(x: int, y: map[string]int[]) -> int[] { x }";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var function = Assert.IsType<FunctionLiteral>(stmt.Expression);
+
+        Assert.Equal(2, function.Parameters.Count);
+        Assert.Equal("x", function.Parameters[0].Name);
+        Assert.Equal("int", function.Parameters[0].TypeAnnotation?.String());
+        Assert.Equal("y", function.Parameters[1].Name);
+        Assert.Equal("map[string]int[]", function.Parameters[1].TypeAnnotation?.String());
+
+        Assert.NotNull(function.ReturnTypeAnnotation);
+        Assert.Equal("int[]", function.ReturnTypeAnnotation!.String());
     }
 
     [Fact]

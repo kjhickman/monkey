@@ -165,7 +165,7 @@ public class Compiler
                     SymbolTable.DefineFunctionName(fl.Name);
 
                 foreach (var p in fl.Parameters)
-                    SymbolTable.Define(p.Value);
+                    SymbolTable.Define(p.Name);
 
                 Compile(fl.Body);
                 if (Diagnostics.HasErrors) return;
