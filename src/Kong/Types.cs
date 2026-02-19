@@ -1,16 +1,16 @@
 namespace Kong;
 
-public abstract class TypeSymbol
+public abstract record class TypeSymbol
 {
     public abstract string Name { get; }
 
-    public override string ToString()
+    public sealed override string ToString()
     {
         return Name;
     }
 }
 
-public sealed class IntTypeSymbol : TypeSymbol
+public sealed record class IntTypeSymbol : TypeSymbol
 {
     public static IntTypeSymbol Instance { get; } = new();
 
@@ -21,7 +21,7 @@ public sealed class IntTypeSymbol : TypeSymbol
     public override string Name => "int";
 }
 
-public sealed class StringTypeSymbol : TypeSymbol
+public sealed record class StringTypeSymbol : TypeSymbol
 {
     public static StringTypeSymbol Instance { get; } = new();
 
@@ -32,7 +32,7 @@ public sealed class StringTypeSymbol : TypeSymbol
     public override string Name => "string";
 }
 
-public sealed class BoolTypeSymbol : TypeSymbol
+public sealed record class BoolTypeSymbol : TypeSymbol
 {
     public static BoolTypeSymbol Instance { get; } = new();
 
@@ -43,7 +43,7 @@ public sealed class BoolTypeSymbol : TypeSymbol
     public override string Name => "bool";
 }
 
-public sealed class VoidTypeSymbol : TypeSymbol
+public sealed record class VoidTypeSymbol : TypeSymbol
 {
     public static VoidTypeSymbol Instance { get; } = new();
 
@@ -54,7 +54,7 @@ public sealed class VoidTypeSymbol : TypeSymbol
     public override string Name => "void";
 }
 
-public sealed class NullTypeSymbol : TypeSymbol
+public sealed record class NullTypeSymbol : TypeSymbol
 {
     public static NullTypeSymbol Instance { get; } = new();
 
@@ -65,18 +65,24 @@ public sealed class NullTypeSymbol : TypeSymbol
     public override string Name => "null";
 }
 
-public sealed class ArrayTypeSymbol(TypeSymbol elementType) : TypeSymbol
+public sealed record class ErrorTypeSymbol : TypeSymbol
 {
-    public TypeSymbol ElementType { get; } = elementType;
+    public static ErrorTypeSymbol Instance { get; } = new();
 
+    private ErrorTypeSymbol()
+    {
+    }
+
+    public override string Name => "<error>";
+}
+
+public sealed record class ArrayTypeSymbol(TypeSymbol ElementType) : TypeSymbol
+{
     public override string Name => $"{ElementType}[]";
 }
 
-public sealed class FunctionTypeSymbol(IReadOnlyList<TypeSymbol> parameterTypes, TypeSymbol returnType) : TypeSymbol
+public sealed record class FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes, TypeSymbol ReturnType) : TypeSymbol
 {
-    public IReadOnlyList<TypeSymbol> ParameterTypes { get; } = parameterTypes;
-    public TypeSymbol ReturnType { get; } = returnType;
-
     public override string Name => $"fn({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
 }
 
@@ -87,6 +93,7 @@ public static class TypeSymbols
     public static BoolTypeSymbol Bool { get; } = BoolTypeSymbol.Instance;
     public static VoidTypeSymbol Void { get; } = VoidTypeSymbol.Instance;
     public static NullTypeSymbol Null { get; } = NullTypeSymbol.Instance;
+    public static ErrorTypeSymbol Error { get; } = ErrorTypeSymbol.Instance;
 
     public static TypeSymbol? TryGetBuiltin(string name)
     {

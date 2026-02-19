@@ -13,6 +13,7 @@ public readonly record struct NameSymbol(string Name, NameSymbolKind Kind, Span 
 public class NameResolution
 {
     public Dictionary<Identifier, NameSymbol> IdentifierSymbols { get; } = [];
+    public Dictionary<FunctionParameter, NameSymbol> ParameterSymbols { get; } = [];
     public Dictionary<FunctionLiteral, List<NameSymbol>> FunctionCaptures { get; } = [];
     public DiagnosticBag Diagnostics { get; } = new();
 
@@ -194,6 +195,7 @@ public class NameResolver
 
             var symbol = new NameSymbol(parameter.Name, NameSymbolKind.Parameter, parameter.Span, _scope.FunctionDepth);
             _scope.Symbols[parameter.Name] = symbol;
+            _result.ParameterSymbols[parameter] = symbol;
         }
 
         ResolveBlockStatement(functionLiteral.Body);
