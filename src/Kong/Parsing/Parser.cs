@@ -13,6 +13,7 @@ public enum Precedence
     Prefix,      // -X or !X
     FunctionCall, // myFunction(X)
     Index,       // array[index]
+    MemberAccess, // object.member
 }
 
 public class Parser
@@ -39,6 +40,7 @@ public class Parser
         { TokenType.Asterisk, Precedence.Product },
         { TokenType.LeftParenthesis, Precedence.FunctionCall },
         { TokenType.LeftBracket, Precedence.Index },
+        { TokenType.Dot, Precedence.MemberAccess },
     };
 
     public Parser(Lexer lexer)
@@ -73,6 +75,7 @@ public class Parser
             { TokenType.GreaterThan, ParseInfixExpression },
             { TokenType.LeftParenthesis, ParseCallExpression },
             { TokenType.LeftBracket, ParseIndexExpression },
+            { TokenType.Dot, ParseMemberAccessExpression },
         };
 
         // Read two tokens, so _curToken and _peekToken are both set
@@ -662,6 +665,25 @@ public class Parser
             Span = new Span(function.Span.Start, _curToken.Span.End)
         };
         return exp;
+    }
+
+    private IExpression ParseMemberAccessExpression(IExpression obj)
+    {
+        var start = obj.Span.Start;
+        var dotToken = _curToken;
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null!;
+        }
+
+        return new MemberAccessExpression
+        {
+            Token = dotToken,
+            Object = obj,
+            Member = _curToken.Literal,
+            Span = new Span(start, _curToken.Span.End),
+        };
     }
 
     private List<FunctionParameter> ParseFunctionParameters()

@@ -622,6 +622,12 @@ public class IrLowerer
             case CallExpression callExpression:
                 return LowerCallExpression(callExpression);
 
+            case MemberAccessExpression memberAccessExpression:
+                _result.Diagnostics.Report(memberAccessExpression.Span,
+                    "phase-4 IR lowerer supports member access only as static call targets",
+                    "IR002");
+                return null;
+
             case ArrayLiteral arrayLiteral:
                 return LowerArrayLiteral(arrayLiteral);
 
@@ -871,6 +877,11 @@ public class IrLowerer
             return null;
         }
 
+        if (callExpression.Function is MemberAccessExpression memberAccessExpression)
+        {
+            return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
+        }
+
         if (callExpression.Function is Identifier builtinIdentifier &&
             ((_nameResolution != null &&
               _nameResolution.IdentifierSymbols.TryGetValue(builtinIdentifier, out var symbol) &&
@@ -930,6 +941,49 @@ public class IrLowerer
         return destination;
     }
 
+    private IrValueId? LowerStaticCallExpression(
+        MemberAccessExpression memberAccessExpression,
+        CallExpression callExpression,
+        TypeSymbol returnType)
+    {
+        if (!TryExtractMethodPath(memberAccessExpression, out var methodPath))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                "phase-4 IR lowerer could not determine static method path",
+                "IR002");
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
+        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        foreach (var argument in callExpression.Arguments)
+        {
+            var value = LowerExpression(argument);
+            if (value == null)
+            {
+                return null;
+            }
+
+            if (!TryGetExpressionType(argument, out var argumentType))
+            {
+                return null;
+            }
+
+            arguments.Add(value.Value);
+            argumentTypes.Add(argumentType);
+        }
+
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrStaticCallVoid(methodPath, arguments, argumentTypes));
+            return null;
+        }
+
+        var destination = AllocateValue(returnType);
+        _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes));
+        return destination;
+    }
+
     private bool TryLowerBuiltinCallName(Identifier identifier, CallExpression callExpression, out string builtinName)
     {
         builtinName = string.Empty;
@@ -952,6 +1006,34 @@ public class IrLowerer
         }
 
         return false;
+    }
+
+    private static bool TryExtractMethodPath(MemberAccessExpression expression, out string methodPath)
+    {
+        var segments = new Stack<string>();
+        IExpression current = expression;
+
+        while (current is MemberAccessExpression memberAccess)
+        {
+            if (string.IsNullOrWhiteSpace(memberAccess.Member))
+            {
+                methodPath = string.Empty;
+                return false;
+            }
+
+            segments.Push(memberAccess.Member);
+            current = memberAccess.Object;
+        }
+
+        if (current is not Identifier identifier)
+        {
+            methodPath = string.Empty;
+            return false;
+        }
+
+        segments.Push(identifier.Value);
+        methodPath = string.Join('.', segments);
+        return true;
     }
 
 

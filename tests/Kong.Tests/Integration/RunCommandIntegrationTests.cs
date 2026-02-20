@@ -166,6 +166,23 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsStaticClrWriteLineOutput()
+    {
+        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42); }");
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Contains("42", stdout);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");

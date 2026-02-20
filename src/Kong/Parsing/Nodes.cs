@@ -346,6 +346,21 @@ public class CallExpression : IExpression
     }
 }
 
+public class MemberAccessExpression : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // The '.' token
+    public IExpression Object { get; set; } = null!;
+    public string Member { get; set; } = "";
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"{Object.String()}.{Member}";
+    }
+}
+
 public class StringLiteral : IExpression
 {
     public Span Span { get; set; }

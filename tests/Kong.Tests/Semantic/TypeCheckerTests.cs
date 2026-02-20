@@ -152,6 +152,29 @@ public class TypeCheckerTests
         Assert.False(result.Diagnostics.HasErrors);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrMethodCall()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.Abs(-42);");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.Int, callType);
+    }
+
+    [Fact]
+    public void TestReportsUnsupportedStaticClrMethodReturnType()
+    {
+        var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);

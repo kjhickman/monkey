@@ -106,6 +106,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrMethodCall()
+    {
+        var result = Execute("System.Math.Abs(-42);");
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

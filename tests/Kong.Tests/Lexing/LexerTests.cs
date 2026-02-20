@@ -293,4 +293,28 @@ public class LexerTests
             Assert.Equal(tests[i].endCol, tok.Span.End.Column);
         }
     }
+
+    [Fact]
+    public void TestLexesDotToken()
+    {
+        var input = "System.Console.WriteLine";
+        var l = new Lexer(input);
+
+        var tests = new (TokenType type, string literal)[]
+        {
+            (TokenType.Identifier, "System"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "Console"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "WriteLine"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = l.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

@@ -233,6 +233,17 @@ public class NameResolverTests
         Assert.NotEqual(innerSymbol.DeclarationSpan, outerSymbol.DeclarationSpan);
     }
 
+    [Fact]
+    public void TestDoesNotReportUndefinedVariableForStaticMethodPath()
+    {
+        var unit = Parse("System.Console.WriteLine(1);");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

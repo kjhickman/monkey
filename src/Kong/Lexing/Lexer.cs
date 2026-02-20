@@ -84,6 +84,9 @@ public class Lexer
             case ',':
                 token = NewToken(TokenType.Comma, _ch, start);
                 break;
+            case '.':
+                token = NewToken(TokenType.Dot, _ch, start);
+                break;
             case ':':
                 token = NewToken(TokenType.Colon, _ch, start);
                 break;

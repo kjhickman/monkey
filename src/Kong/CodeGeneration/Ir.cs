@@ -73,6 +73,17 @@ public sealed record IrCall(IrValueId Destination, string FunctionName, IReadOnl
 
 public sealed record IrCallVoid(string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
+public sealed record IrStaticCall(
+    IrValueId Destination,
+    string MethodPath,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
+public sealed record IrStaticCallVoid(
+    string MethodPath,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
 public sealed record IrCreateClosure(
     IrValueId Destination,
     string FunctionName,

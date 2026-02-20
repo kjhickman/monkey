@@ -871,6 +871,43 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesMemberAccessExpression()
+    {
+        var input = "System.Console.WriteLine;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var topLevel = Assert.IsType<MemberAccessExpression>(statement.Expression);
+        Assert.Equal("WriteLine", topLevel.Member);
+
+        var parent = Assert.IsType<MemberAccessExpression>(topLevel.Object);
+        Assert.Equal("Console", parent.Member);
+
+        var root = Assert.IsType<Identifier>(parent.Object);
+        Assert.Equal("System", root.Value);
+    }
+
+    [Fact]
+    public void TestParsesStaticMethodCallExpression()
+    {
+        var input = "System.Console.WriteLine(42);";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var call = Assert.IsType<CallExpression>(statement.Expression);
+        var function = Assert.IsType<MemberAccessExpression>(call.Function);
+        Assert.Equal("WriteLine", function.Member);
+        Assert.Single(call.Arguments);
+        Assert.IsType<IntegerLiteral>(call.Arguments[0]);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

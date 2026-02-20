@@ -216,6 +216,9 @@ public class NameResolver
                     ResolveExpression(argument);
                 }
                 break;
+            case MemberAccessExpression memberAccessExpression:
+                ResolveMemberAccessObject(memberAccessExpression.Object);
+                break;
             case ArrayLiteral arrayLiteral:
                 foreach (var element in arrayLiteral.Elements)
                 {
@@ -225,6 +228,25 @@ public class NameResolver
             case IndexExpression indexExpression:
                 ResolveExpression(indexExpression.Left);
                 ResolveExpression(indexExpression.Index);
+                break;
+        }
+    }
+
+    private void ResolveMemberAccessObject(IExpression expression)
+    {
+        switch (expression)
+        {
+            case Identifier identifier:
+                if (_scope.TryLookup(identifier.Value, out _))
+                {
+                    ResolveIdentifier(identifier);
+                }
+                break;
+            case MemberAccessExpression nested:
+                ResolveMemberAccessObject(nested.Object);
+                break;
+            default:
+                ResolveExpression(expression);
                 break;
         }
     }
