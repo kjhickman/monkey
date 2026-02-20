@@ -9,6 +9,8 @@ public class RunFile
     [CliArgument(Description = "File to run", Required = true)]
     public string File { get; set; } = null!;
 
+    public bool UseVmBackend { get; set; }
+
     public void Run(CliContext context)
     {
         if (!System.IO.File.Exists(File))
@@ -39,6 +41,12 @@ public class RunFile
             return;
         }
 
+        if (ShouldUseVmBackend())
+        {
+            RunOnVm(program);
+            return;
+        }
+
         var clrExecutor = new ClrPhase1Executor();
         var clrResult = clrExecutor.Execute(program, typeCheckResult, nameResolution);
         if (clrResult.Executed)
@@ -53,6 +61,22 @@ public class RunFile
             return;
         }
 
+        PrintDiagnostics(clrResult.Diagnostics);
+    }
+
+    private static bool IsVmEnvEnabled()
+    {
+        var value = Environment.GetEnvironmentVariable("KONG_USE_VM");
+        return value is "1" or "true" or "TRUE" or "True";
+    }
+
+    private bool ShouldUseVmBackend()
+    {
+        return UseVmBackend || IsVmEnvEnabled();
+    }
+
+    private static void RunOnVm(CompilationUnit program)
+    {
         var symbolTable = SymbolTable.NewWithBuiltins();
 
         var compiler = Compiler.NewWithState(symbolTable, []);

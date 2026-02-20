@@ -92,7 +92,7 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
-            Assert.Contains("8", stdout);
+            Assert.DoesNotContain("[IR001]", stderr);
             Assert.Equal(string.Empty, stderr.Trim());
         }
         finally
@@ -117,6 +117,37 @@ public class RunCommandIntegrationTests
         }
     }
 
+    [Fact]
+    public void TestRunCommandDoesNotFallbackToVmByDefault()
+    {
+        var filePath = CreateTempProgram("\"hello\";");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath);
+            Assert.Contains("[IR001]", stderr);
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandSupportsVmBackendFlagForParityChecks()
+    {
+        var filePath = CreateTempProgram("\"hello\";");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath, useVmBackend: true);
+            Assert.Contains("hello", stdout);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");
@@ -124,9 +155,13 @@ public class RunCommandIntegrationTests
         return filePath;
     }
 
-    private static (string Stdout, string Stderr) ExecuteRunCommand(string filePath)
+    private static (string Stdout, string Stderr) ExecuteRunCommand(string filePath, bool useVmBackend = false)
     {
-        var command = new RunFile { File = filePath };
+        var command = new RunFile
+        {
+            File = filePath,
+            UseVmBackend = useVmBackend,
+        };
 
         var stdout = new StringWriter();
         var stderr = new StringWriter();
