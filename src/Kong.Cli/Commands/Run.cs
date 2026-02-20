@@ -27,6 +27,17 @@ public class RunFile
             return;
         }
 
+        var resolver = new NameResolver();
+        var nameResolution = resolver.Resolve(program);
+
+        var checker = new TypeChecker();
+        var typeCheckResult = checker.Check(program, nameResolution);
+        if (typeCheckResult.Diagnostics.HasErrors)
+        {
+            PrintDiagnostics(typeCheckResult.Diagnostics);
+            return;
+        }
+
         var symbolTable = SymbolTable.NewWithBuiltins();
 
         var compiler = Compiler.NewWithState(symbolTable, []);

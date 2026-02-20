@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Kong\Kong.csproj" />
+    <ProjectReference Include="..\..\src\Kong.Cli\Kong.Cli.csproj" />
   </ItemGroup>
 
 </Project>

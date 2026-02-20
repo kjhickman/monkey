@@ -29,6 +29,17 @@ public static class Repl
                 continue;
             }
 
+            var resolver = new NameResolver();
+            var nameResolution = resolver.Resolve(unit);
+
+            var checker = new TypeChecker();
+            var typeCheckResult = checker.Check(unit, nameResolution);
+            if (typeCheckResult.Diagnostics.HasErrors)
+            {
+                PrintDiagnostics(output, typeCheckResult.Diagnostics);
+                continue;
+            }
+
             var comp = Compiler.NewWithState(symbolTable, constants);
             comp.Compile(unit);
             if (comp.Diagnostics.HasErrors)

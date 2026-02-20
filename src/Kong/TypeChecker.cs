@@ -53,17 +53,16 @@ public class TypeChecker
 
     private void CheckLetStatement(LetStatement statement)
     {
+        var diagnosticsBeforeInitializer = _result.Diagnostics.Count;
         var initializerType = statement.Value != null
             ? CheckExpression(statement.Value)
             : TypeSymbols.Error;
+        var initializerHadErrors = _result.Diagnostics.Count > diagnosticsBeforeInitializer;
 
         TypeSymbol declaredType;
         if (statement.TypeAnnotation == null)
         {
-            _result.Diagnostics.Report(statement.Name.Span,
-                $"missing type annotation for '{statement.Name.Value}'",
-                "T101");
-            declaredType = initializerType;
+            declaredType = InferLetType(statement, initializerType, initializerHadErrors);
         }
         else
         {
@@ -82,6 +81,34 @@ public class TypeChecker
         {
             _symbolTypes[symbol] = declaredType;
         }
+    }
+
+    private TypeSymbol InferLetType(LetStatement statement, TypeSymbol initializerType, bool initializerHadErrors)
+    {
+        if (initializerHadErrors || initializerType == TypeSymbols.Error)
+        {
+            return TypeSymbols.Error;
+        }
+
+        if (initializerType == TypeSymbols.Null)
+        {
+            _result.Diagnostics.Report(
+                statement.Name.Span,
+                $"cannot infer type for '{statement.Name.Value}' from null initializer",
+                "T119");
+            return TypeSymbols.Error;
+        }
+
+        if (initializerType is ArrayTypeSymbol { ElementType: ErrorTypeSymbol })
+        {
+            _result.Diagnostics.Report(
+                statement.Name.Span,
+                $"cannot infer element type for '{statement.Name.Value}' from empty array initializer",
+                "T120");
+            return TypeSymbols.Error;
+        }
+
+        return initializerType;
     }
 
     private void CheckReturnStatement(ReturnStatement statement)

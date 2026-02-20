@@ -27,12 +27,38 @@ public class TypeCheckerTests
     }
 
     [Fact]
-    public void TestMissingLetTypeAnnotationReportsDiagnostic()
+    public void TestInfersLetTypeFromInitializer()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x = 6;");
+        var (unit, _, result) = ParseResolveAndCheck("let x = 6; x;");
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var xLet = Assert.IsType<LetStatement>(unit.Statements[0]);
+        Assert.True(result.VariableTypes.TryGetValue(xLet, out var xType));
+        Assert.Equal(TypeSymbols.Int, xType);
+
+        var xUse = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var xIdentifier = Assert.IsType<Identifier>(xUse.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(xIdentifier, out var xUseType));
+        Assert.Equal(TypeSymbols.Int, xUseType);
+    }
+
+    [Fact]
+    public void TestCannotInferLetTypeFromNullInitializer()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let x = if (true) { 1 }; ");
 
         Assert.True(result.Diagnostics.HasErrors);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "T101");
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T119");
+    }
+
+    [Fact]
+    public void TestCannotInferLetTypeFromEmptyArrayInitializer()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let xs = []; ");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T120");
     }
 
     [Fact]
