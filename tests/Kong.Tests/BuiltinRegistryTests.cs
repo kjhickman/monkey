@@ -1,5 +1,3 @@
-using Xunit;
-
 namespace Kong.Tests;
 
 public class BuiltinRegistryTests

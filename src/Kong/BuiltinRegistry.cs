@@ -2,7 +2,7 @@ namespace Kong;
 
 using System.Diagnostics.CodeAnalysis;
 
-public record class BuiltinSignature(
+public record BuiltinSignature(
     string PublicName,
     string IrFunctionName,
     IReadOnlyList<TypeSymbol> ParameterTypes,
@@ -14,7 +14,7 @@ public record class BuiltinSignature(
     }
 }
 
-public record class BuiltinBinding(
+public record BuiltinBinding(
     BuiltinSignature Signature,
     string RuntimeMethodName,
     [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type RuntimeType);

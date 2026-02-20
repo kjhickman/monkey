@@ -655,9 +655,9 @@ public class Parser
             Token = _curToken,
             Function = function,
             Arguments = ParseExpressionList(TokenType.RightParenthesis),
+            // Span from start of function expression to closing ')'
+            Span = new Span(function.Span.Start, _curToken.Span.End)
         };
-        // Span from start of function expression to closing ')'
-        exp.Span = new Span(function.Span.Start, _curToken.Span.End);
         return exp;
     }
 
@@ -739,9 +739,9 @@ public class Parser
         {
             Token = _curToken,
             Elements = ParseExpressionList(TokenType.RightBracket),
+            // Span from '[' to ']'
+            Span = new Span(startSpan.Start, _curToken.Span.End)
         };
-        // Span from '[' to ']'
-        array.Span = new Span(startSpan.Start, _curToken.Span.End);
         return array;
     }
 

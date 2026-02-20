@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Kong.TypeMapping;
@@ -21,7 +20,7 @@ public class ClrArtifactBuildResult
 
 public class ClrArtifactBuilder
 {
-    private sealed record class DisplayClassInfo(
+    private sealed record DisplayClassInfo(
         TypeDefinition Type,
         MethodDefinition InvokeMethod,
         IReadOnlyList<FieldDefinition> CaptureFields,

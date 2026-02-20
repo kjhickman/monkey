@@ -496,7 +496,7 @@ public class IrLowerer
                 return null;
             }
 
-            case PrefixExpression prefixExpression when prefixExpression.Operator == "-":
+            case PrefixExpression { Operator: "-" } prefixExpression:
             {
                 if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || rightType != TypeSymbols.Int)
                 {
@@ -520,7 +520,7 @@ public class IrLowerer
                 return destination;
             }
 
-            case PrefixExpression prefixExpression when prefixExpression.Operator == "!":
+            case PrefixExpression { Operator: "!" } prefixExpression:
             {
                 if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || rightType != TypeSymbols.Bool)
                 {

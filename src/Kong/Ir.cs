@@ -27,7 +27,7 @@ public sealed class IrFunction
     public Dictionary<IrLocalId, TypeSymbol> LocalTypes { get; } = [];
 }
 
-public sealed record class IrParameter(IrLocalId LocalId, string Name, TypeSymbol Type);
+public sealed record IrParameter(IrLocalId LocalId, string Name, TypeSymbol Type);
 
 public sealed class IrBlock
 {
@@ -36,13 +36,13 @@ public sealed class IrBlock
     public IrTerminator Terminator { get; set; } = null!;
 }
 
-public abstract record class IrInstruction;
+public abstract record IrInstruction;
 
-public sealed record class IrConstInt(IrValueId Destination, long Value) : IrInstruction;
+public sealed record IrConstInt(IrValueId Destination, long Value) : IrInstruction;
 
-public sealed record class IrConstBool(IrValueId Destination, bool Value) : IrInstruction;
+public sealed record IrConstBool(IrValueId Destination, bool Value) : IrInstruction;
 
-public sealed record class IrConstString(IrValueId Destination, string Value) : IrInstruction;
+public sealed record IrConstString(IrValueId Destination, string Value) : IrInstruction;
 
 public enum IrBinaryOperator
 {
@@ -56,47 +56,47 @@ public enum IrBinaryOperator
     NotEqual,
 }
 
-public sealed record class IrBinary(
+public sealed record IrBinary(
     IrValueId Destination,
     IrBinaryOperator Operator,
     IrValueId Left,
     IrValueId Right) : IrInstruction;
 
-public sealed record class IrStoreLocal(IrLocalId Local, IrValueId Source) : IrInstruction;
+public sealed record IrStoreLocal(IrLocalId Local, IrValueId Source) : IrInstruction;
 
-public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
+public sealed record IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
 
-public sealed record class IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+public sealed record IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
-public sealed record class IrCallVoid(string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+public sealed record IrCallVoid(string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
-public sealed record class IrCreateClosure(
+public sealed record IrCreateClosure(
     IrValueId Destination,
     string FunctionName,
     IReadOnlyList<IrLocalId> CapturedLocals) : IrInstruction;
 
-public sealed record class IrInvokeClosure(
+public sealed record IrInvokeClosure(
     IrValueId Destination,
     IrValueId Closure,
     IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
-public sealed record class IrInvokeClosureVoid(
+public sealed record IrInvokeClosureVoid(
     IrValueId Closure,
     IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
-public sealed record class IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
+public sealed record IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
 
-public sealed record class IrIntArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index) : IrInstruction;
+public sealed record IrIntArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index) : IrInstruction;
 
-public abstract record class IrTerminator;
+public abstract record IrTerminator;
 
-public sealed record class IrReturn(IrValueId Value) : IrTerminator;
+public sealed record IrReturn(IrValueId Value) : IrTerminator;
 
-public sealed record class IrReturnVoid() : IrTerminator;
+public sealed record IrReturnVoid() : IrTerminator;
 
-public sealed record class IrJump(int TargetBlockId) : IrTerminator;
+public sealed record IrJump(int TargetBlockId) : IrTerminator;
 
-public sealed record class IrBranch(IrValueId Condition, int ThenBlockId, int ElseBlockId) : IrTerminator;
+public sealed record IrBranch(IrValueId Condition, int ThenBlockId, int ElseBlockId) : IrTerminator;
 
 public sealed class IrLoweringResult
 {

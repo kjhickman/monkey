@@ -91,7 +91,7 @@ public class ControlFlowAnalyzer
 
     private FlowState AnalyzeExpression(IExpression? expression, DiagnosticBag diagnostics)
     {
-        if (expression is IfExpression ifExpression && ifExpression.Alternative != null)
+        if (expression is IfExpression { Alternative: not null } ifExpression)
         {
             var consequence = AnalyzeBlock(ifExpression.Consequence, diagnostics);
             var alternative = AnalyzeBlock(ifExpression.Alternative, diagnostics);

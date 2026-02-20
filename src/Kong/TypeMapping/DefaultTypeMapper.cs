@@ -38,7 +38,7 @@ public class DefaultTypeMapper : ITypeMapper
 
         if (kongType is ArrayTypeSymbol { ElementType: IntTypeSymbol })
         {
-            return new Mono.Cecil.ArrayType(module.TypeSystem.Int64);
+            return new ArrayType(module.TypeSystem.Int64);
         }
 
         if (kongType is FunctionTypeSymbol functionType)

@@ -1,7 +1,6 @@
 using Kong.TypeMapping;
 using Mono.Cecil;
 using CecilArrayType = Mono.Cecil.ArrayType;
-using Xunit;
 
 namespace Kong.Tests;
 

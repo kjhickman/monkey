@@ -558,7 +558,7 @@ public class ParserTests
     // --- Span tests ---
 
     private static void AssertSpan(
-        global::Kong.Span span,
+        Span span,
         int startLine, int startCol,
         int endLine, int endCol)
     {

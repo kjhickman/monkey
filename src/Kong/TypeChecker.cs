@@ -314,7 +314,7 @@ public class TypeChecker
         {
             CheckStatement(statement);
 
-            if (statement is ExpressionStatement expressionStatement && expressionStatement.Expression != null)
+            if (statement is ExpressionStatement { Expression: not null } expressionStatement)
             {
                 lastType = _result.ExpressionTypes.GetValueOrDefault(expressionStatement.Expression, TypeSymbols.Error);
             }
