@@ -1,5 +1,7 @@
 namespace Kong;
 
+using System.Diagnostics.CodeAnalysis;
+
 public record class BuiltinSignature(
     string PublicName,
     string IrFunctionName,
@@ -15,10 +17,12 @@ public record class BuiltinSignature(
 public record class BuiltinBinding(
     BuiltinSignature Signature,
     string RuntimeMethodName,
-    Type RuntimeType);
+    [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicMethods)] Type RuntimeType);
 
 public class BuiltinRegistry
 {
+    public static BuiltinRegistry Default { get; } = CreateDefault();
+
     private readonly Dictionary<string, List<BuiltinBinding>> _bindings = [];
 
     public void Register(BuiltinBinding binding)
@@ -64,6 +68,19 @@ public class BuiltinRegistry
             return bindings;
         }
         return [];
+    }
+
+    public FunctionTypeSymbol? GetFunctionTypeBySignature(
+        string publicName,
+        IReadOnlyList<TypeSymbol> parameterTypes)
+    {
+        var binding = ResolveByTypeSignature(publicName, parameterTypes);
+        if (binding == null)
+        {
+            return null;
+        }
+
+        return new FunctionTypeSymbol(binding.Signature.ParameterTypes, binding.Signature.ReturnType);
     }
 
     public bool IsDefined(string publicName)

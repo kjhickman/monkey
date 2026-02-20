@@ -14,6 +14,7 @@ public class TypeChecker
     private readonly TypeCheckResult _result = new();
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
+    private readonly BuiltinRegistry _builtinRegistry = BuiltinRegistry.Default;
     private NameResolution _names = null!;
     private readonly ControlFlowAnalyzer _controlFlowAnalyzer = new();
 
@@ -246,28 +247,6 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
-    private static bool TryGetBuiltinType(NameSymbol symbol, out TypeSymbol type)
-    {
-        if (symbol.Kind != NameSymbolKind.Builtin)
-        {
-            type = TypeSymbols.Error;
-            return false;
-        }
-
-        type = symbol.Name switch
-        {
-            "len" => new FunctionTypeSymbol([TypeSymbols.String], TypeSymbols.Int),
-            "puts" => new FunctionTypeSymbol([TypeSymbols.Int], TypeSymbols.Void),
-            "first" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], TypeSymbols.Int),
-            "last" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], TypeSymbols.Int),
-            "rest" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], new ArrayTypeSymbol(TypeSymbols.Int)),
-            "push" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int), TypeSymbols.Int], new ArrayTypeSymbol(TypeSymbols.Int)),
-            _ => TypeSymbols.Error,
-        };
-
-        return type != TypeSymbols.Error;
-    }
-
     private TypeSymbol CheckPrefixExpression(PrefixExpression expression)
     {
         var right = CheckExpression(expression.Right);
@@ -416,8 +395,14 @@ public class TypeChecker
 
     private TypeSymbol CheckCallExpression(CallExpression expression)
     {
-        var functionType = CheckExpression(expression.Function);
         var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
+
+        if (TryCheckBuiltinCall(expression, argumentTypes, out var builtinReturnType))
+        {
+            return builtinReturnType;
+        }
+
+        var functionType = CheckExpression(expression.Function);
 
         if (functionType is not FunctionTypeSymbol fn)
         {
@@ -446,6 +431,71 @@ public class TypeChecker
         }
 
         return fn.ReturnType;
+    }
+
+    private bool TryCheckBuiltinCall(CallExpression expression, IReadOnlyList<TypeSymbol> argumentTypes, out TypeSymbol returnType)
+    {
+        returnType = TypeSymbols.Error;
+
+        if (expression.Function is not Identifier identifier)
+        {
+            return false;
+        }
+
+        if (!_names.IdentifierSymbols.TryGetValue(identifier, out var symbol) || symbol.Kind != NameSymbolKind.Builtin)
+        {
+            return false;
+        }
+
+        var binding = _builtinRegistry.ResolveByTypeSignature(identifier.Value, argumentTypes);
+        if (binding == null)
+        {
+            var overloads = _builtinRegistry.GetBindingsForName(identifier.Value).Select(b => b.Signature.ToString());
+            var expected = string.Join("; ", overloads);
+            if (string.IsNullOrEmpty(expected))
+            {
+                expected = "<none>";
+            }
+
+            _result.Diagnostics.Report(
+                expression.Span,
+                $"no matching overload for builtin '{identifier.Value}' with argument types ({string.Join(", ", argumentTypes)}); expected one of: {expected}",
+                "T113");
+            returnType = TypeSymbols.Error;
+            _result.ExpressionTypes[identifier] = TypeSymbols.Error;
+            return true;
+        }
+
+        var functionType = new FunctionTypeSymbol(binding.Signature.ParameterTypes, binding.Signature.ReturnType);
+        _result.ExpressionTypes[identifier] = functionType;
+        returnType = binding.Signature.ReturnType;
+        return true;
+    }
+
+    private bool TryGetBuiltinType(NameSymbol symbol, out TypeSymbol type)
+    {
+        if (symbol.Kind != NameSymbolKind.Builtin)
+        {
+            type = TypeSymbols.Error;
+            return false;
+        }
+
+        var overloads = _builtinRegistry.GetBindingsForName(symbol.Name).ToList();
+        if (overloads.Count == 0)
+        {
+            type = TypeSymbols.Error;
+            return false;
+        }
+
+        if (overloads.Count == 1)
+        {
+            var signature = overloads[0].Signature;
+            type = new FunctionTypeSymbol(signature.ParameterTypes, signature.ReturnType);
+            return true;
+        }
+
+        type = TypeSymbols.Error;
+        return false;
     }
 
     private TypeSymbol CheckArrayLiteral(ArrayLiteral expression)

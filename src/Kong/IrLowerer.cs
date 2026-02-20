@@ -19,7 +19,7 @@ public class IrLowerer
     private int _nextLocalId;
     private int _nextBlockId;
     private int _nextLambdaId;
-    private readonly BuiltinRegistry _builtinRegistry = BuiltinRegistry.CreateDefault();
+    private readonly BuiltinRegistry _builtinRegistry = BuiltinRegistry.Default;
 
 
     public IrLoweringResult Lower(CompilationUnit unit, TypeCheckResult typeCheckResult)
@@ -871,7 +871,7 @@ public class IrLowerer
             ((_nameResolution != null &&
               _nameResolution.IdentifierSymbols.TryGetValue(builtinIdentifier, out var symbol) &&
               symbol.Kind == NameSymbolKind.Builtin) ||
-             BuiltinNames.All.Contains(builtinIdentifier.Value)) &&
+             _builtinRegistry.IsDefined(builtinIdentifier.Value)) &&
             TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
         {
             var builtinArguments = new List<IrValueId>(callExpression.Arguments.Count);

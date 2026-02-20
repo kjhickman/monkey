@@ -26,7 +26,7 @@ public class RunFile
         var assemblyName = Path.GetFileNameWithoutExtension(File);
         var outputDirectory = Path.Combine(Path.GetTempPath(), "kong-run", Guid.NewGuid().ToString("N"));
 
-        var builder = new ClrPhase1Executor();
+        var builder = new ClrArtifactBuilder();
         var build = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
         if (!build.Built || build.AssemblyPath == null)
         {
