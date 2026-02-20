@@ -85,6 +85,7 @@ public class ClrPhase1Executor
         allFunctions.AddRange(program.Functions);
 
         var methodMap = new Dictionary<string, MethodDefinition>();
+        var builtinMap = BuildBuiltinMap(module);
         foreach (var function in allFunctions)
         {
             var returnType = MapType(function.ReturnType, module, diagnostics);
@@ -116,7 +117,7 @@ public class ClrPhase1Executor
 
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, module, diagnostics))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, builtinMap, module, diagnostics))
             {
                 return null;
             }
@@ -131,6 +132,7 @@ public class ClrPhase1Executor
         IrFunction function,
         MethodDefinition method,
         IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        IReadOnlyDictionary<string, MethodReference> builtinMap,
         ModuleDefinition module,
         DiagnosticBag diagnostics)
     {
@@ -206,6 +208,11 @@ public class ClrPhase1Executor
                         il.Emit(OpCodes.Stloc, valueLocals[constBool.Destination]);
                         break;
 
+                    case IrConstString constString:
+                        il.Emit(OpCodes.Ldstr, constString.Value);
+                        il.Emit(OpCodes.Stloc, valueLocals[constString.Destination]);
+                        break;
+
                     case IrBinary binary:
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
@@ -250,14 +257,43 @@ public class ClrPhase1Executor
                             il.Emit(OpCodes.Ldloc, valueLocals[argument]);
                         }
 
-                        if (!methodMap.TryGetValue(call.FunctionName, out var targetMethod))
+                        if (methodMap.TryGetValue(call.FunctionName, out var targetMethod))
                         {
-                            diagnostics.Report(Span.Empty, $"phase-4 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
+                            il.Emit(OpCodes.Call, targetMethod);
+                            il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
+                            break;
+                        }
+
+                        if (!builtinMap.TryGetValue(call.FunctionName, out var builtinMethod))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
                             return false;
                         }
 
-                        il.Emit(OpCodes.Call, targetMethod);
+                        il.Emit(OpCodes.Call, builtinMethod);
                         il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
+                        break;
+
+                    case IrNewIntArray newArray:
+                        il.Emit(OpCodes.Ldc_I4, newArray.Elements.Count);
+                        il.Emit(OpCodes.Newarr, module.TypeSystem.Int64);
+                        for (var i = 0; i < newArray.Elements.Count; i++)
+                        {
+                            il.Emit(OpCodes.Dup);
+                            il.Emit(OpCodes.Ldc_I4, i);
+                            il.Emit(OpCodes.Ldloc, valueLocals[newArray.Elements[i]]);
+                            il.Emit(OpCodes.Stelem_I8);
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[newArray.Destination]);
+                        break;
+
+                    case IrIntArrayIndex intArrayIndex:
+                        il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Array]);
+                        il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Index]);
+                        il.Emit(OpCodes.Conv_I4);
+                        il.Emit(OpCodes.Ldelem_I8);
+                        il.Emit(OpCodes.Stloc, valueLocals[intArrayIndex.Destination]);
                         break;
 
                     default:
@@ -316,8 +352,32 @@ public class ClrPhase1Executor
             return module.TypeSystem.Boolean;
         }
 
+        if (type == TypeSymbols.String)
+        {
+            return module.TypeSystem.String;
+        }
+
+        if (type is ArrayTypeSymbol { ElementType: IntTypeSymbol })
+        {
+            return new Mono.Cecil.ArrayType(module.TypeSystem.Int64);
+        }
+
         diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");
         return null;
+    }
+
+    private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module)
+    {
+        var runtimeType = typeof(ClrRuntimeBuiltins);
+
+        return new Dictionary<string, MethodReference>
+        {
+            ["__builtin_len_string"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LenString))!),
+            ["__builtin_first_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.FirstIntArray))!),
+            ["__builtin_last_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LastIntArray))!),
+            ["__builtin_rest_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.RestIntArray))!),
+            ["__builtin_push_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PushIntArray))!),
+        };
     }
 
     private static long? ExecuteAssembly(byte[] assemblyBytes, DiagnosticBag diagnostics)

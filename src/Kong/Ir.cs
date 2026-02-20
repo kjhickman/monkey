@@ -41,6 +41,8 @@ public sealed record class IrConstInt(IrValueId Destination, long Value) : IrIns
 
 public sealed record class IrConstBool(IrValueId Destination, bool Value) : IrInstruction;
 
+public sealed record class IrConstString(IrValueId Destination, string Value) : IrInstruction;
+
 public enum IrBinaryOperator
 {
     Add,
@@ -60,6 +62,10 @@ public sealed record class IrStoreLocal(IrLocalId Local, IrValueId Source) : IrI
 public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
 
 public sealed record class IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+
+public sealed record class IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
+
+public sealed record class IrIntArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index) : IrInstruction;
 
 public abstract record class IrTerminator;
 

@@ -75,6 +75,35 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersArrayLiteralAndIndexExpression()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("let xs: int[] = [1, 2, 3]; xs[1];");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrNewIntArray);
+        Assert.Contains(instructions, i => i is IrIntArrayIndex);
+    }
+
+    [Fact]
+    public void TestLowersBuiltinCallForStringLength()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \"abc\"; len(s);");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var call = Assert.IsType<IrCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrCall));
+        Assert.Equal("__builtin_len_string", call.FunctionName);
+    }
+
+    [Fact]
     public void TestLowererRejectsNonIntTopLevelExpression()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("true;");

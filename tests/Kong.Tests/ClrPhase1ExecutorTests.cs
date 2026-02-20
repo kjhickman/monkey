@@ -93,6 +93,42 @@ public class ClrPhase1ExecutorTests
         Assert.Equal(42, result.Value);
     }
 
+    [Fact]
+    public void TestExecutesArrayIndexExpression()
+    {
+        var unit = Parse("let xs: int[] = [4, 5, 6]; xs[1];");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(5, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesBuiltinStringLength()
+    {
+        var unit = Parse("let s: string = \"hello\"; len(s);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(5, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesBuiltinArrayOperations()
+    {
+        var unit = Parse("let xs: int[] = [1, 2, 3]; let ys: int[] = push(xs, 4); first(ys) + last(ys);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(5, result.Value);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

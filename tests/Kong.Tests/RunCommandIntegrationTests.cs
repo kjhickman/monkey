@@ -85,6 +85,22 @@ public class RunCommandIntegrationTests
         }
     }
 
+    [Fact]
+    public void TestRunCommandExecutesArrayAndBuiltinProgramWithClrBackend()
+    {
+        var filePath = CreateTempProgram("let s: string = \"abc\"; let xs: int[] = [1, 2, 3]; len(s) + first(xs) + last(push(xs, 4));");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath);
+            Assert.Contains("8", stdout);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");

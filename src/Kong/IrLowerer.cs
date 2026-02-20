@@ -328,6 +328,13 @@ public class IrLowerer
                 return destination;
             }
 
+            case StringLiteral stringLiteral:
+            {
+                var destination = AllocateValue(TypeSymbols.String);
+                _currentBlock.Instructions.Add(new IrConstString(destination, stringLiteral.Value));
+                return destination;
+            }
+
             case Identifier identifier:
             {
                 if (_localsByName.TryGetValue(identifier.Value, out var local))
@@ -421,6 +428,12 @@ public class IrLowerer
 
             case CallExpression callExpression:
                 return LowerCallExpression(callExpression);
+
+            case ArrayLiteral arrayLiteral:
+                return LowerArrayLiteral(arrayLiteral);
+
+            case IndexExpression indexExpression:
+                return LowerIndexExpression(indexExpression);
 
             default:
                 _result.Diagnostics.Report(expression.Span,
@@ -571,6 +584,10 @@ public class IrLowerer
         {
             functionName = boundName;
         }
+        else if (callExpression.Function is Identifier builtinIdentifier && TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
+        {
+            functionName = builtinName;
+        }
         else
         {
             _result.Diagnostics.Report(callExpression.Function.Span,
@@ -598,6 +615,117 @@ public class IrLowerer
 
         var destination = AllocateValue(returnType);
         _currentBlock.Instructions.Add(new IrCall(destination, functionName, arguments));
+        return destination;
+    }
+
+    private bool TryLowerBuiltinCallName(Identifier identifier, CallExpression callExpression, out string builtinName)
+    {
+        builtinName = string.Empty;
+
+        if (identifier.Value == "first")
+        {
+            builtinName = "__builtin_first_int_array";
+            return true;
+        }
+
+        if (identifier.Value == "last")
+        {
+            builtinName = "__builtin_last_int_array";
+            return true;
+        }
+
+        if (identifier.Value == "rest")
+        {
+            builtinName = "__builtin_rest_int_array";
+            return true;
+        }
+
+        if (identifier.Value == "push")
+        {
+            builtinName = "__builtin_push_int_array";
+            return true;
+        }
+
+        if (identifier.Value == "len" && callExpression.Arguments.Count == 1 &&
+            TryGetExpressionType(callExpression.Arguments[0], out var argType) && argType == TypeSymbols.String)
+        {
+            builtinName = "__builtin_len_string";
+            return true;
+        }
+
+        return false;
+    }
+
+    private IrValueId? LowerArrayLiteral(ArrayLiteral arrayLiteral)
+    {
+        if (!TryGetExpressionType(arrayLiteral, out var arrayType) || arrayType is not ArrayTypeSymbol { ElementType: var elementType })
+        {
+            _result.Diagnostics.Report(arrayLiteral.Span,
+                "phase-5 IR lowerer requires array literal type information",
+                "IR002");
+            return null;
+        }
+
+        if (elementType != TypeSymbols.Int)
+        {
+            _result.Diagnostics.Report(arrayLiteral.Span,
+                $"phase-5 IR lowerer supports only int[] literals, got '{arrayType}'",
+                "IR001");
+            return null;
+        }
+
+        var elements = new List<IrValueId>(arrayLiteral.Elements.Count);
+        foreach (var elementExpression in arrayLiteral.Elements)
+        {
+            var lowered = LowerExpression(elementExpression);
+            if (lowered == null)
+            {
+                return null;
+            }
+
+            elements.Add(lowered.Value);
+        }
+
+        var destination = AllocateValue(arrayType);
+        _currentBlock.Instructions.Add(new IrNewIntArray(destination, elements));
+        return destination;
+    }
+
+    private IrValueId? LowerIndexExpression(IndexExpression indexExpression)
+    {
+        if (!TryGetExpressionType(indexExpression.Left, out var leftType) || leftType is not ArrayTypeSymbol { ElementType: var elementType })
+        {
+            _result.Diagnostics.Report(indexExpression.Left.Span,
+                "phase-5 IR lowerer supports indexing only on int[]",
+                "IR001");
+            return null;
+        }
+
+        if (elementType != TypeSymbols.Int)
+        {
+            _result.Diagnostics.Report(indexExpression.Left.Span,
+                $"phase-5 IR lowerer supports indexing only on int[]; got '{leftType}'",
+                "IR001");
+            return null;
+        }
+
+        if (!TryGetExpressionType(indexExpression.Index, out var indexType) || indexType != TypeSymbols.Int)
+        {
+            _result.Diagnostics.Report(indexExpression.Index.Span,
+                "phase-5 IR lowerer requires int index expressions",
+                "IR001");
+            return null;
+        }
+
+        var left = LowerExpression(indexExpression.Left);
+        var index = LowerExpression(indexExpression.Index);
+        if (left == null || index == null)
+        {
+            return null;
+        }
+
+        var destination = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrIntArrayIndex(destination, left.Value, index.Value));
         return destination;
     }
 
@@ -662,7 +790,10 @@ public class IrLowerer
 
     private static bool IsSupportedRuntimeType(TypeSymbol type)
     {
-        return type == TypeSymbols.Int || type == TypeSymbols.Bool;
+        return type == TypeSymbols.Int ||
+               type == TypeSymbols.Bool ||
+               type == TypeSymbols.String ||
+               type is ArrayTypeSymbol { ElementType: IntTypeSymbol };
     }
 
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)
