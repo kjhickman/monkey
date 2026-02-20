@@ -19,7 +19,6 @@ dotnet build              # Build the full solution
 dotnet test               # Run all tests
 dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- build <file>  # Build runnable CLR artifact into dist/<file-name>/
 dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- run <file>  # Execute a .kg file
-dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- repl        # Start the REPL
 ```
 
 ## Verifying Changes
