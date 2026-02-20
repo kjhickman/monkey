@@ -1,5 +1,3 @@
-using Kong.Cli;
-
 namespace Kong.Tests;
 
 public class ClrPhase1ExecutorTests

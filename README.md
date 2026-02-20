@@ -1,6 +1,6 @@
 # Kong
 
-Kong is a small, for-fun programming language with a bytecode compiler and stack-based virtual machine, implemented in C#.
+Kong is a small, for-fun programming language implemented in C# with static semantic checking and CLR code generation.
 
 ## Features
 

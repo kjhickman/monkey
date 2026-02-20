@@ -20,18 +20,9 @@ public class ReplCommandIntegrationTests
         Assert.Contains("[IR001]", output);
     }
 
-    [Fact]
-    public void TestReplCommandSupportsVmBackendFlagForParityChecks()
+    private static string ExecuteRepl(string input)
     {
-        var output = ExecuteRepl("\"hello\";\n", useVmBackend: true);
-
-        Assert.Contains("hello", output);
-        Assert.DoesNotContain("[IR001]", output);
-    }
-
-    private static string ExecuteRepl(string input, bool useVmBackend = false)
-    {
-        var command = new ReplCommand { UseVmBackend = useVmBackend };
+        var command = new ReplCommand();
         var originalIn = Console.In;
         var originalOut = Console.Out;
         var reader = new StringReader(input);

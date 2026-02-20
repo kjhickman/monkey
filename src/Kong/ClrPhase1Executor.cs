@@ -1,12 +1,13 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Diagnostics.CodeAnalysis;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
 
-namespace Kong.Cli;
+namespace Kong;
 
 public class ClrPhase1ExecutionResult
 {
@@ -18,6 +19,7 @@ public class ClrPhase1ExecutionResult
 
 public class ClrPhase1Executor
 {
+    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
     public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult, NameResolution? nameResolution = null)
     {
         var result = new ClrPhase1ExecutionResult();
@@ -51,6 +53,7 @@ public class ClrPhase1Executor
         return result;
     }
 
+    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
     public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
     {
         var resolver = new NameResolver();
@@ -380,6 +383,7 @@ public class ClrPhase1Executor
         };
     }
 
+    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
     private static long? ExecuteAssembly(byte[] assemblyBytes, DiagnosticBag diagnostics)
     {
         var context = new AssemblyLoadContext($"kong-clr-{Guid.NewGuid():N}", isCollectible: true);

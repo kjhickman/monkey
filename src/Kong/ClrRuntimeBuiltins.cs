@@ -1,4 +1,4 @@
-namespace Kong.Cli;
+namespace Kong;
 
 public static class ClrRuntimeBuiltins
 {

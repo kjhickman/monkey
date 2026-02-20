@@ -4,11 +4,10 @@ public static class Repl
 {
     private const string Prompt = ">> ";
 
+    [System.Diagnostics.CodeAnalysis.RequiresUnreferencedCode("REPL CLR execution loads and invokes generated assemblies via reflection.")]
     public static void Start(TextReader input, TextWriter output)
     {
-        var constants = new List<IObject>();
-        var globals = new IObject[Vm.GlobalsSize];
-        var symbolTable = SymbolTable.NewWithBuiltins();
+        var lines = new List<string>();
 
         while (true)
         {
@@ -19,12 +18,22 @@ public static class Repl
             if (line == null)
                 return;
 
-            var l = new Lexer(line);
+            lines.Add(line);
+
+            var suppressOutput = line.TrimStart().StartsWith("let ", StringComparison.Ordinal);
+            var source = string.Join("\n", lines);
+            if (suppressOutput)
+            {
+                source += "\n0;";
+            }
+
+            var l = new Lexer(source);
             var p = new Parser(l);
 
             var unit = p.ParseCompilationUnit();
             if (p.Diagnostics.HasErrors)
             {
+                lines.RemoveAt(lines.Count - 1);
                 PrintDiagnostics(output, p.Diagnostics);
                 continue;
             }
@@ -36,31 +45,24 @@ public static class Repl
             var typeCheckResult = checker.Check(unit, nameResolution);
             if (typeCheckResult.Diagnostics.HasErrors)
             {
+                lines.RemoveAt(lines.Count - 1);
                 PrintDiagnostics(output, typeCheckResult.Diagnostics);
                 continue;
             }
 
-            var comp = Compiler.NewWithState(symbolTable, constants);
-            comp.Compile(unit);
-            if (comp.Diagnostics.HasErrors)
+            var executor = new ClrPhase1Executor();
+            var result = executor.Execute(unit, typeCheckResult, nameResolution);
+            if (!result.Executed)
             {
-                PrintDiagnostics(output, comp.Diagnostics);
+                lines.RemoveAt(lines.Count - 1);
+                PrintDiagnostics(output, result.Diagnostics);
                 continue;
             }
 
-            var code = comp.GetBytecode();
-            constants = code.Constants;
-
-            var machine = Vm.NewWithGlobalsStore(code, globals);
-            machine.Run();
-            if (machine.Diagnostics.HasErrors)
+            if (!suppressOutput)
             {
-                PrintDiagnostics(output, machine.Diagnostics);
-                continue;
+                output.WriteLine(result.Value);
             }
-
-            var stackTop = machine.LastPoppedStackElem();
-            output.WriteLine(stackTop.Inspect());
         }
     }
 

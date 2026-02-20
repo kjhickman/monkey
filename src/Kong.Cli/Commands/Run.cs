@@ -1,5 +1,4 @@
 using DotMake.CommandLine;
-using Kong.Cli;
 
 namespace Kong.Cli.Commands;
 
@@ -8,8 +7,6 @@ public class RunFile
 {
     [CliArgument(Description = "File to run", Required = true)]
     public string File { get; set; } = null!;
-
-    public bool UseVmBackend { get; set; }
 
     public void Run(CliContext context)
     {
@@ -41,12 +38,6 @@ public class RunFile
             return;
         }
 
-        if (ShouldUseVmBackend())
-        {
-            RunOnVm(program);
-            return;
-        }
-
         var clrExecutor = new ClrPhase1Executor();
         var clrResult = clrExecutor.Execute(program, typeCheckResult, nameResolution);
         if (clrResult.Executed)
@@ -62,41 +53,6 @@ public class RunFile
         }
 
         PrintDiagnostics(clrResult.Diagnostics);
-    }
-
-    private static bool IsVmEnvEnabled()
-    {
-        var value = Environment.GetEnvironmentVariable("KONG_USE_VM");
-        return value is "1" or "true" or "TRUE" or "True";
-    }
-
-    private bool ShouldUseVmBackend()
-    {
-        return UseVmBackend || IsVmEnvEnabled();
-    }
-
-    private static void RunOnVm(CompilationUnit program)
-    {
-        var symbolTable = SymbolTable.NewWithBuiltins();
-
-        var compiler = Compiler.NewWithState(symbolTable, []);
-        compiler.Compile(program);
-        if (compiler.Diagnostics.HasErrors)
-        {
-            PrintDiagnostics(compiler.Diagnostics);
-            return;
-        }
-
-        var bytecode = compiler.GetBytecode();
-        var vm = new Vm(bytecode);
-        vm.Run();
-        if (vm.Diagnostics.HasErrors)
-        {
-            PrintDiagnostics(vm.Diagnostics);
-            return;
-        }
-
-        Console.WriteLine(vm.LastPoppedStackElem().Inspect());
     }
 
     private static void PrintDiagnostics(DiagnosticBag diagnostics)

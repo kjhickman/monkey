@@ -73,7 +73,7 @@ public class NameResolver
 
     private void PredeclareBuiltins()
     {
-        foreach (var (name, _) in Builtins.All)
+        foreach (var name in BuiltinNames.All)
         {
             var symbol = new NameSymbol(name, NameSymbolKind.Builtin, Span.Empty, FunctionDepth: 0);
             _scope.Symbols[name] = symbol;

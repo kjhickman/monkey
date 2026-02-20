@@ -99,40 +99,4 @@ public class DiagnosticTests
         Assert.True(hasP002, "expected P002 diagnostic for no prefix parse function");
     }
 
-    [Fact]
-    public void TestCompilerProducesDiagnosticsOnUndefinedVariable()
-    {
-        var l = new Lexer("x;");
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-
-        var compiler = new Compiler();
-        compiler.Compile(unit);
-
-        Assert.True(compiler.Diagnostics.HasErrors);
-        var diag = compiler.Diagnostics.All[0];
-        Assert.Equal("C001", diag.Code);
-        Assert.Contains("x", diag.Message);
-    }
-
-    [Fact]
-    public void TestVmProducesDiagnosticsOnWrongArgCount()
-    {
-        var l = new Lexer("fn() { 1; }(1);");
-        var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-
-        var compiler = new Compiler();
-        compiler.Compile(unit);
-        Assert.False(compiler.Diagnostics.HasErrors);
-
-        var vm = new Vm(compiler.GetBytecode());
-        vm.Run();
-
-        Assert.True(vm.Diagnostics.HasErrors);
-        var diag = vm.Diagnostics.All[0];
-        Assert.Equal("R002", diag.Code);
-        Assert.Contains("wrong number of arguments", diag.Message);
-        Assert.Equal(Span.Empty, diag.Span);
-    }
 }
