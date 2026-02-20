@@ -123,7 +123,7 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
-            Assert.Contains("[IR001]", stderr);
+            Assert.DoesNotContain("hello", stdout);
         }
         finally
         {

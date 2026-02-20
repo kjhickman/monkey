@@ -1,4 +1,5 @@
 using DotMake.CommandLine;
+using System.Diagnostics;
 
 namespace Kong.Cli.Commands;
 
@@ -10,57 +11,56 @@ public class RunFile
 
     public void Run(CliContext context)
     {
-        if (!System.IO.File.Exists(File))
+        if (!CommandCompilation.TryCompileFile(File, out var unit, out var names, out var typeCheck, out var diagnostics))
         {
-            Console.Error.WriteLine($"File not found: {File}");
+            CommandCompilation.PrintDiagnostics(diagnostics);
             return;
         }
 
-        var source = System.IO.File.ReadAllText(File);
-        var lexer = new Lexer(source);
-        var parser = new Parser(lexer);
+        var assemblyName = Path.GetFileNameWithoutExtension(File);
+        var outputDirectory = Path.Combine(Path.GetTempPath(), "kong-run", Guid.NewGuid().ToString("N"));
 
-        var program = parser.ParseCompilationUnit();
-        if (parser.Diagnostics.HasErrors)
+        var builder = new ClrPhase1Executor();
+        var build = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
+        if (!build.Built || build.AssemblyPath == null)
         {
-            PrintDiagnostics(parser.Diagnostics);
+            CommandCompilation.PrintDiagnostics(build.Diagnostics);
             return;
         }
 
-        var resolver = new NameResolver();
-        var nameResolution = resolver.Resolve(program);
-
-        var checker = new TypeChecker();
-        var typeCheckResult = checker.Check(program, nameResolution);
-        if (typeCheckResult.Diagnostics.HasErrors)
+        var run = RunArtifact(build.AssemblyPath);
+        if (!string.IsNullOrEmpty(run.StdOut))
         {
-            PrintDiagnostics(typeCheckResult.Diagnostics);
-            return;
+            Console.Out.Write(run.StdOut);
         }
 
-        var clrExecutor = new ClrPhase1Executor();
-        var clrResult = clrExecutor.Execute(program, typeCheckResult, nameResolution);
-        if (clrResult.Executed)
+        if (!string.IsNullOrEmpty(run.StdErr))
         {
-            Console.WriteLine(clrResult.Value);
-            return;
+            Console.Error.Write(run.StdErr);
         }
 
-        if (!clrResult.IsUnsupported)
+        if (run.ExitCode != 0)
         {
-            PrintDiagnostics(clrResult.Diagnostics);
+            Console.Error.WriteLine($"dotnet exited with code {run.ExitCode}");
             return;
         }
-
-        PrintDiagnostics(clrResult.Diagnostics);
     }
 
-    private static void PrintDiagnostics(DiagnosticBag diagnostics)
+    private static (int ExitCode, string StdOut, string StdErr) RunArtifact(string assemblyPath)
     {
-        Console.Error.WriteLine("Whoops! We ran into some monkey business here!");
-        foreach (var d in diagnostics.All)
+        var startInfo = new ProcessStartInfo
         {
-            Console.Error.WriteLine($"\t{d}");
-        }
+            FileName = "dotnet",
+            Arguments = $"\"{assemblyPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        using var process = Process.Start(startInfo)!;
+        var stdOut = process.StandardOutput.ReadToEnd();
+        var stdErr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, stdOut, stdErr);
     }
 }

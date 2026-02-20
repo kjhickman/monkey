@@ -20,6 +20,15 @@ public class ClrPhase1ExecutionResult
     public DiagnosticBag Diagnostics { get; } = new();
 }
 
+public class ClrArtifactBuildResult
+{
+    public bool Built { get; set; }
+    public bool IsUnsupported { get; set; }
+    public string? AssemblyPath { get; set; }
+    public string? RuntimeConfigPath { get; set; }
+    public DiagnosticBag Diagnostics { get; } = new();
+}
+
 public class ClrPhase1Executor
 {
     private sealed record class DisplayClassInfo(
@@ -63,6 +72,63 @@ public class ClrPhase1Executor
         return result;
     }
 
+    public ClrArtifactBuildResult BuildArtifact(
+        CompilationUnit unit,
+        TypeCheckResult typeCheckResult,
+        string outputDirectory,
+        string assemblyName,
+        NameResolution? nameResolution = null)
+    {
+        var result = new ClrArtifactBuildResult();
+
+        var lowerer = new IrLowerer();
+        var loweringResult = lowerer.Lower(unit, typeCheckResult, nameResolution);
+        result.Diagnostics.AddRange(loweringResult.Diagnostics);
+        if (loweringResult.Program == null)
+        {
+            result.IsUnsupported = result.Diagnostics.All.Count > 0 && result.Diagnostics.All.All(d => d.Code == "IR001");
+            return result;
+        }
+
+        var assemblyBytes = EmitAssembly(loweringResult.Program, result.Diagnostics);
+        if (assemblyBytes == null)
+        {
+            result.IsUnsupported = result.Diagnostics.All.All(d => d.Code == "IL001");
+            return result;
+        }
+
+        Directory.CreateDirectory(outputDirectory);
+        var assemblyPath = Path.Combine(outputDirectory, $"{assemblyName}.dll");
+        System.IO.File.WriteAllBytes(assemblyPath, assemblyBytes);
+
+        var runtimeConfigPath = Path.Combine(outputDirectory, $"{assemblyName}.runtimeconfig.json");
+        var runtimeConfigJson = """
+        {
+          "runtimeOptions": {
+            "tfm": "net10.0",
+            "framework": {
+              "name": "Microsoft.NETCore.App",
+              "version": "10.0.0"
+            }
+          }
+        }
+        """;
+        System.IO.File.WriteAllText(runtimeConfigPath, runtimeConfigJson + Environment.NewLine);
+
+        var kongAssemblyFileName = $"{typeof(ClrPhase1Executor).Assembly.GetName().Name}.dll";
+        var kongAssemblyPath = Path.Combine(AppContext.BaseDirectory, kongAssemblyFileName);
+        if (System.IO.File.Exists(kongAssemblyPath))
+        {
+            var kongDestination = Path.Combine(outputDirectory, Path.GetFileName(kongAssemblyPath));
+            System.IO.File.Copy(kongAssemblyPath, kongDestination, overwrite: true);
+        }
+
+        result.Built = true;
+        result.AssemblyPath = assemblyPath;
+        result.RuntimeConfigPath = runtimeConfigPath;
+        return result;
+    }
+
     [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
     public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
     {
@@ -84,7 +150,7 @@ public class ClrPhase1Executor
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
     {
         var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
-        var assembly = AssemblyDefinition.CreateAssembly(assemblyName, "Kong.Generated", ModuleKind.Dll);
+        var assembly = AssemblyDefinition.CreateAssembly(assemblyName, "Kong.Generated", ModuleKind.Console);
         var module = assembly.MainModule;
 
         var programType = new TypeDefinition(
@@ -133,6 +199,18 @@ public class ClrPhase1Executor
             programType.Methods.Add(method);
             methodMap[function.Name] = method;
         }
+
+        var mainMethod = new MethodDefinition(
+            "Main",
+            CecilMethodAttributes.Public | CecilMethodAttributes.Static,
+            module.TypeSystem.Void);
+        programType.Methods.Add(mainMethod);
+        var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
+        var mainIl = mainMethod.Body.GetILProcessor();
+        mainIl.Emit(OpCodes.Call, methodMap[program.EntryPoint.Name]);
+        mainIl.Emit(OpCodes.Call, writeLineLong);
+        mainIl.Emit(OpCodes.Ret);
+        module.EntryPoint = mainMethod;
 
         var displayClassMap = new Dictionary<string, DisplayClassInfo>();
         foreach (var function in allFunctions.Where(f => f.CaptureParameterCount > 0))
