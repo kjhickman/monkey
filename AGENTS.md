@@ -5,9 +5,14 @@ Kong is a programming language implemented in C# targeting .NET 10, with a typed
 ## Project Structure
 
 ```text
-src/Kong/          Core library: Lexer, Parser, AST, Resolver, TypeChecker, IR, CLR emitter/runtime
-src/Kong.Cli/      CLI entry point using DotMake.CommandLine
-tests/Kong.Tests/  xUnit v3 tests covering all core components
+src/Kong/
+  Lexing/          Tokenization
+  Parsing/         Parser and AST nodes
+  Semantic/        Name resolution and type checking
+  CodeGeneration/  IR lowering and CLR emitter/runtime builtins
+  Common/          Shared diagnostics and source span types
+src/Kong.Cli/      CLI entry point
+tests/Kong.Tests/  xUnit v3 tests organized by phase
 ```
 
 The primary execution pipeline flows: **Lexer -> Parser -> AST -> NameResolver -> TypeChecker -> IR Lowering -> CLR Emission/Execution**.
@@ -29,3 +34,9 @@ Always run `dotnet build` and `dotnet test` after making changes. All tests must
 
 - Nullable reference types are enabled project-wide. Do not suppress nullable warnings without justification.
 - The library is marked `IsAotCompatible`. Avoid reflection or patterns that break Native AOT.
+- Preserve phase boundaries when adding code:
+  - `Lexing` must not depend on `Parsing`, `Semantic`, or `CodeGeneration`.
+  - `Parsing` may depend on `Lexing` and `Common`, but not `Semantic` or `CodeGeneration`.
+  - `Semantic` may depend on `Parsing` and `Common`, but not `CodeGeneration`.
+  - `CodeGeneration` may depend on `Semantic`, `Parsing`, and `Common`.
+  - `Common` should stay dependency-light and avoid phase-specific behavior.

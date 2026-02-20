@@ -1,5 +1,6 @@
 using DotMake.CommandLine;
 using System.Diagnostics;
+using Kong.CodeGeneration;
 
 namespace Kong.Cli.Commands;
 
@@ -11,15 +12,15 @@ public class RunFile
 
     public void Run(CliContext context)
     {
-        if (!CommandCompilation.TryCompileFile(File, out var unit, out var names, out var typeCheck, out var diagnostics))
+        if (!Compilation.TryCompile(File, out var unit, out var names, out var typeCheck, out var diagnostics))
         {
-            CommandCompilation.PrintDiagnostics(diagnostics);
+            Compilation.PrintDiagnostics(diagnostics);
             return;
         }
 
-        if (!CommandCompilation.ValidateProgramEntrypoint(unit, typeCheck, out var entryDiagnostics))
+        if (!Compilation.ValidateProgramEntrypoint(unit, typeCheck, out var entryDiagnostics))
         {
-            CommandCompilation.PrintDiagnostics(entryDiagnostics);
+            Compilation.PrintDiagnostics(entryDiagnostics);
             return;
         }
 
@@ -30,7 +31,7 @@ public class RunFile
         var build = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
         if (!build.Built || build.AssemblyPath == null)
         {
-            CommandCompilation.PrintDiagnostics(build.Diagnostics);
+            Compilation.PrintDiagnostics(build.Diagnostics);
             return;
         }
 
