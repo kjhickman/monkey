@@ -14,13 +14,13 @@ internal static class CommandCompilation
         typeCheck = null!;
         diagnostics = new DiagnosticBag();
 
-        if (!System.IO.File.Exists(filePath))
+        if (!File.Exists(filePath))
         {
             diagnostics.Report(Span.Empty, $"file not found: {filePath}", "CLI001");
             return false;
         }
 
-        var source = System.IO.File.ReadAllText(filePath);
+        var source = File.ReadAllText(filePath);
         var lexer = new Lexer(source);
         var parser = new Parser(lexer);
 

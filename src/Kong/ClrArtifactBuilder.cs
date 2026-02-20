@@ -1,9 +1,7 @@
-using System.Reflection;
-using System.Runtime.Loader;
-using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Kong.TypeMapping;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
@@ -11,14 +9,6 @@ using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
 using CecilMethodImplAttributes = Mono.Cecil.MethodImplAttributes;
 
 namespace Kong;
-
-public class ClrPhase1ExecutionResult
-{
-    public bool Executed { get; set; }
-    public bool IsUnsupported { get; set; }
-    public long Value { get; set; }
-    public DiagnosticBag Diagnostics { get; } = new();
-}
 
 public class ClrArtifactBuildResult
 {
@@ -29,7 +19,7 @@ public class ClrArtifactBuildResult
     public DiagnosticBag Diagnostics { get; } = new();
 }
 
-public class ClrPhase1Executor
+public class ClrArtifactBuilder
 {
     private sealed record class DisplayClassInfo(
         TypeDefinition Type,
@@ -37,40 +27,6 @@ public class ClrPhase1Executor
         IReadOnlyList<FieldDefinition> CaptureFields,
         TypeReference DelegateType,
         MethodReference DelegateCtor);
-
-    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
-    public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult, NameResolution? nameResolution = null)
-    {
-        var result = new ClrPhase1ExecutionResult();
-
-        var lowerer = new IrLowerer();
-        var loweringResult = lowerer.Lower(unit, typeCheckResult, nameResolution);
-        result.Diagnostics.AddRange(loweringResult.Diagnostics);
-
-        if (loweringResult.Program == null)
-        {
-            result.IsUnsupported = result.Diagnostics.All.Count > 0 && result.Diagnostics.All.All(d => d.Code == "IR001");
-            return result;
-        }
-
-        var assemblyBytes = EmitAssembly(loweringResult.Program, result.Diagnostics);
-        if (assemblyBytes == null)
-        {
-            result.IsUnsupported = result.Diagnostics.All.All(d => d.Code == "IL001");
-            return result;
-        }
-
-        var value = ExecuteAssembly(assemblyBytes, result.Diagnostics);
-        if (value == null)
-        {
-            result.IsUnsupported = false;
-            return result;
-        }
-
-        result.Executed = true;
-        result.Value = value.Value;
-        return result;
-    }
 
     public ClrArtifactBuildResult BuildArtifact(
         CompilationUnit unit,
@@ -99,7 +55,7 @@ public class ClrPhase1Executor
 
         Directory.CreateDirectory(outputDirectory);
         var assemblyPath = Path.Combine(outputDirectory, $"{assemblyName}.dll");
-        System.IO.File.WriteAllBytes(assemblyPath, assemblyBytes);
+        File.WriteAllBytes(assemblyPath, assemblyBytes);
 
         var runtimeConfigPath = Path.Combine(outputDirectory, $"{assemblyName}.runtimeconfig.json");
         var runtimeConfigJson = """
@@ -113,38 +69,20 @@ public class ClrPhase1Executor
           }
         }
         """;
-        System.IO.File.WriteAllText(runtimeConfigPath, runtimeConfigJson + Environment.NewLine);
+        File.WriteAllText(runtimeConfigPath, runtimeConfigJson + Environment.NewLine);
 
-        var kongAssemblyFileName = $"{typeof(ClrPhase1Executor).Assembly.GetName().Name}.dll";
+        var kongAssemblyFileName = $"{typeof(ClrArtifactBuilder).Assembly.GetName().Name}.dll";
         var kongAssemblyPath = Path.Combine(AppContext.BaseDirectory, kongAssemblyFileName);
-        if (System.IO.File.Exists(kongAssemblyPath))
+        if (File.Exists(kongAssemblyPath))
         {
             var kongDestination = Path.Combine(outputDirectory, Path.GetFileName(kongAssemblyPath));
-            System.IO.File.Copy(kongAssemblyPath, kongDestination, overwrite: true);
+            File.Copy(kongAssemblyPath, kongDestination, overwrite: true);
         }
 
         result.Built = true;
         result.AssemblyPath = assemblyPath;
         result.RuntimeConfigPath = runtimeConfigPath;
         return result;
-    }
-
-    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
-    public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
-    {
-        var resolver = new NameResolver();
-        var names = resolver.Resolve(unit);
-
-        var checker = new TypeChecker();
-        var typeCheck = checker.Check(unit, names);
-        var result = new ClrPhase1ExecutionResult();
-        result.Diagnostics.AddRange(typeCheck.Diagnostics);
-        if (typeCheck.Diagnostics.HasErrors)
-        {
-            return result;
-        }
-
-        return Execute(unit, typeCheck, names);
     }
 
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
@@ -169,11 +107,13 @@ public class ClrPhase1Executor
             return null;
         }
 
+        var typeMapper = new DefaultTypeMapper(delegateTypeMap);
+
         var methodMap = new Dictionary<string, MethodDefinition>();
-        var builtinMap = BuildBuiltinMap(module);
+        var builtinMap = BuildBuiltinMap(module, BuiltinRegistry.Default);
         foreach (var function in allFunctions)
         {
-            var returnType = MapType(function.ReturnType, module, diagnostics, delegateTypeMap);
+            var returnType = MapType(function.ReturnType, module, diagnostics, typeMapper);
             if (returnType == null)
             {
                 return null;
@@ -187,7 +127,7 @@ public class ClrPhase1Executor
             var method = new MethodDefinition(methodName, attributes, returnType);
             foreach (var parameter in function.Parameters)
             {
-                var parameterType = MapType(parameter.Type, module, diagnostics, delegateTypeMap);
+                var parameterType = MapType(parameter.Type, module, diagnostics, typeMapper);
                 if (parameterType == null)
                 {
                     return null;
@@ -233,7 +173,7 @@ public class ClrPhase1Executor
         var displayClassMap = new Dictionary<string, DisplayClassInfo>();
         foreach (var function in allFunctions.Where(f => f.CaptureParameterCount > 0))
         {
-            var displayClass = BuildDisplayClass(function, methodMap, module, programType, diagnostics, delegateTypeMap);
+            var displayClass = BuildDisplayClass(function, methodMap, module, programType, diagnostics, typeMapper);
             if (displayClass == null)
             {
                 return null;
@@ -244,7 +184,7 @@ public class ClrPhase1Executor
 
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, builtinMap, module, diagnostics, delegateTypeMap))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, builtinMap, module, diagnostics, delegateTypeMap, typeMapper))
             {
                 return null;
             }
@@ -264,14 +204,15 @@ public class ClrPhase1Executor
         IReadOnlyDictionary<string, MethodReference> builtinMap,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
-        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
+        ITypeMapper typeMapper)
     {
         method.Body.InitLocals = true;
 
         var valueLocals = new Dictionary<IrValueId, VariableDefinition>();
         foreach (var (valueId, type) in function.ValueTypes)
         {
-            var variableType = MapType(type, module, diagnostics, delegateTypeMap);
+            var variableType = MapType(type, module, diagnostics, typeMapper);
             if (variableType == null)
             {
                 return false;
@@ -295,7 +236,7 @@ public class ClrPhase1Executor
                 continue;
             }
 
-            var variableType = MapType(type, module, diagnostics, delegateTypeMap);
+            var variableType = MapType(type, module, diagnostics, typeMapper);
             if (variableType == null)
             {
                 return false;
@@ -462,7 +403,7 @@ public class ClrPhase1Executor
                             return false;
                         }
 
-                        var delegateType = MapType(closureFunctionType, module, diagnostics, delegateTypeMap);
+                        var delegateType = MapType(closureFunctionType, module, diagnostics, typeMapper);
                         if (delegateType == null)
                         {
                             return false;
@@ -684,6 +625,15 @@ public class ClrPhase1Executor
         return null;
     }
 
+    private static TypeReference? MapType(
+        TypeSymbol type,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        return typeMapper.TryMapKongType(type, module, diagnostics);
+    }
+
     private static Dictionary<string, TypeDefinition>? BuildDelegateTypeMap(
         IReadOnlyList<IrFunction> functions,
         ModuleDefinition module,
@@ -834,7 +784,7 @@ public class ClrPhase1Executor
         ModuleDefinition module,
         TypeDefinition programType,
         DiagnosticBag diagnostics,
-        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+        ITypeMapper typeMapper)
     {
         if (!methodMap.TryGetValue(function.Name, out var targetMethod))
         {
@@ -845,7 +795,7 @@ public class ClrPhase1Executor
         var closureType = new FunctionTypeSymbol(
             function.Parameters.Skip(function.CaptureParameterCount).Select(p => p.Type).ToList(),
             function.ReturnType);
-        var delegateType = MapType(closureType, module, diagnostics, delegateTypeMap);
+        var delegateType = MapType(closureType, module, diagnostics, typeMapper);
         if (delegateType == null)
         {
             return null;
@@ -870,7 +820,7 @@ public class ClrPhase1Executor
         for (var i = 0; i < function.CaptureParameterCount; i++)
         {
             var captureParameter = function.Parameters[i];
-            var fieldType = MapType(captureParameter.Type, module, diagnostics, delegateTypeMap);
+            var fieldType = MapType(captureParameter.Type, module, diagnostics, typeMapper);
             if (fieldType == null)
             {
                 return null;
@@ -881,7 +831,7 @@ public class ClrPhase1Executor
             captureFields.Add(field);
         }
 
-        var invokeReturnType = MapType(function.ReturnType, module, diagnostics, delegateTypeMap);
+        var invokeReturnType = MapType(function.ReturnType, module, diagnostics, typeMapper);
         if (invokeReturnType == null)
         {
             return null;
@@ -892,7 +842,7 @@ public class ClrPhase1Executor
         for (var i = function.CaptureParameterCount; i < function.Parameters.Count; i++)
         {
             var parameter = function.Parameters[i];
-            var parameterType = MapType(parameter.Type, module, diagnostics, delegateTypeMap);
+            var parameterType = MapType(parameter.Type, module, diagnostics, typeMapper);
             if (parameterType == null)
             {
                 return null;
@@ -924,57 +874,22 @@ public class ClrPhase1Executor
             BuildDelegateConstructor(delegateType, module));
     }
 
-    private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module)
+    private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module, BuiltinRegistry registry)
     {
-        var runtimeType = typeof(ClrRuntimeBuiltins);
-
-        return new Dictionary<string, MethodReference>
+        var map = new Dictionary<string, MethodReference>();
+        
+        foreach (var publicName in registry.GetAllPublicNames())
         {
-            ["__builtin_len_string"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LenString))!),
-            ["__builtin_puts_int"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsInt))!),
-            ["__builtin_puts_string"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsString))!),
-            ["__builtin_puts_bool"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsBool))!),
-            ["__builtin_first_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.FirstIntArray))!),
-            ["__builtin_last_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LastIntArray))!),
-            ["__builtin_rest_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.RestIntArray))!),
-            ["__builtin_push_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PushIntArray))!),
-        };
+            var bindings = registry.GetBindingsForName(publicName);
+            foreach (var binding in bindings)
+            {
+                var methodRef = module.ImportReference(
+                    binding.RuntimeType.GetMethod(binding.RuntimeMethodName)!);
+                map[binding.Signature.IrFunctionName] = methodRef;
+            }
+        }
+        
+        return map;
     }
 
-    [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
-    private static long? ExecuteAssembly(byte[] assemblyBytes, DiagnosticBag diagnostics)
-    {
-        var context = new AssemblyLoadContext($"kong-clr-{Guid.NewGuid():N}", isCollectible: true);
-        try
-        {
-            using var stream = new MemoryStream(assemblyBytes);
-            var assembly = context.LoadFromStream(stream);
-            var programType = assembly.GetType("Kong.Generated.Program");
-            var method = programType?.GetMethod("Eval", BindingFlags.Public | BindingFlags.Static);
-            if (method == null)
-            {
-                diagnostics.Report(Span.Empty, "generated CLR assembly is missing entry method", "IL002");
-                return null;
-            }
-
-            var value = method.Invoke(null, null);
-            if (value is long int64)
-            {
-                return int64;
-            }
-
-            diagnostics.Report(Span.Empty, "generated CLR entry method returned unexpected value type", "IL003");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            var message = ex.InnerException?.Message ?? ex.Message;
-            diagnostics.Report(Span.Empty, $"failed to execute generated CLR assembly: {message}", "IL004");
-            return null;
-        }
-        finally
-        {
-            context.Unload();
-        }
-    }
 }

@@ -25,7 +25,7 @@ public class BuildFile
         var outputDirectory = ResolveOutputDirectory();
         var assemblyName = ResolveAssemblyName();
 
-        var builder = new ClrPhase1Executor();
+        var builder = new ClrArtifactBuilder();
         var result = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
         if (!result.Built)
         {

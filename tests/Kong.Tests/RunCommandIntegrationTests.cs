@@ -16,7 +16,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -33,7 +33,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -48,7 +48,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -63,7 +63,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -79,7 +79,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -96,7 +96,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -112,7 +112,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -128,7 +128,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -144,7 +144,7 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
@@ -161,7 +161,23 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
+    {
+        var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");
+        try
+        {
+            var (_, stderr, _) = ExecuteRunCommand(filePath);
+            Assert.Contains("[CLI007]", stderr);
+            Assert.DoesNotContain("[IR001]", stderr);
+        }
+        finally
+        {
+            File.Delete(filePath);
         }
     }
 
@@ -177,14 +193,14 @@ public class RunCommandIntegrationTests
         }
         finally
         {
-            System.IO.File.Delete(filePath);
+            File.Delete(filePath);
         }
     }
 
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");
-        System.IO.File.WriteAllText(filePath, source);
+        File.WriteAllText(filePath, source);
         return filePath;
     }
 

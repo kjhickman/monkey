@@ -2,12 +2,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch REPL",
+            "name": "Run Current Kong File",
             "type": "coreclr",
             "request": "launch",
             "preLaunchTask": "build",
             "program": "${workspaceFolder}/src/Kong.Cli/bin/Debug/net10.0/Kong.Cli.dll",
-            "args": ["repl"],
+            "args": ["run", "${file}"],
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "stopAtEntry": false

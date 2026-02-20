@@ -877,7 +877,7 @@ public class ParserTests
         Assert.True(p.Diagnostics.HasErrors);
         // Diagnostic should carry position information in its Span
         var diag = p.Diagnostics.All[0];
-        Assert.NotEqual(global::Kong.Span.Empty, diag.Span);
+        Assert.NotEqual(Span.Empty, diag.Span);
         Assert.True(diag.Span.Start.Line > 0);
     }
 }

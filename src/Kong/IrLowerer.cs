@@ -19,6 +19,8 @@ public class IrLowerer
     private int _nextLocalId;
     private int _nextBlockId;
     private int _nextLambdaId;
+    private readonly BuiltinRegistry _builtinRegistry = BuiltinRegistry.Default;
+
 
     public IrLoweringResult Lower(CompilationUnit unit, TypeCheckResult typeCheckResult)
     {
@@ -869,7 +871,7 @@ public class IrLowerer
             ((_nameResolution != null &&
               _nameResolution.IdentifierSymbols.TryGetValue(builtinIdentifier, out var symbol) &&
               symbol.Kind == NameSymbolKind.Builtin) ||
-             BuiltinNames.All.Contains(builtinIdentifier.Value)) &&
+             _builtinRegistry.IsDefined(builtinIdentifier.Value)) &&
             TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
         {
             var builtinArguments = new List<IrValueId>(callExpression.Arguments.Count);
@@ -928,60 +930,26 @@ public class IrLowerer
     {
         builtinName = string.Empty;
 
-        if (identifier.Value == "first")
+        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        foreach (var argument in callExpression.Arguments)
         {
-            builtinName = "__builtin_first_int_array";
-            return true;
+            if (!TryGetExpressionType(argument, out var argType))
+            {
+                return false;
+            }
+            argumentTypes.Add(argType);
         }
 
-        if (identifier.Value == "last")
+        var binding = _builtinRegistry.ResolveByTypeSignature(identifier.Value, argumentTypes);
+        if (binding != null)
         {
-            builtinName = "__builtin_last_int_array";
-            return true;
-        }
-
-        if (identifier.Value == "rest")
-        {
-            builtinName = "__builtin_rest_int_array";
-            return true;
-        }
-
-        if (identifier.Value == "push")
-        {
-            builtinName = "__builtin_push_int_array";
-            return true;
-        }
-
-        if (identifier.Value == "len" && callExpression.Arguments.Count == 1 &&
-            TryGetExpressionType(callExpression.Arguments[0], out var argType) && argType == TypeSymbols.String)
-        {
-            builtinName = "__builtin_len_string";
-            return true;
-        }
-
-        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
-            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeInt) && putsArgTypeInt == TypeSymbols.Int)
-        {
-            builtinName = "__builtin_puts_int";
-            return true;
-        }
-
-        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
-            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeString) && putsArgTypeString == TypeSymbols.String)
-        {
-            builtinName = "__builtin_puts_string";
-            return true;
-        }
-
-        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
-            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeBool) && putsArgTypeBool == TypeSymbols.Bool)
-        {
-            builtinName = "__builtin_puts_bool";
+            builtinName = binding.Signature.IrFunctionName;
             return true;
         }
 
         return false;
     }
+
 
     private IrValueId? LowerArrayLiteral(ArrayLiteral arrayLiteral)
     {

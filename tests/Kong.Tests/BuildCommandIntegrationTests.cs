@@ -42,8 +42,8 @@ public class BuildCommandIntegrationTests
             var outputDir = Path.Combine(workingDir, "dist", assemblyName);
             var assemblyPath = Path.Combine(outputDir, $"{assemblyName}.dll");
             var runtimeConfigPath = Path.Combine(outputDir, $"{assemblyName}.runtimeconfig.json");
-            Assert.True(System.IO.File.Exists(assemblyPath));
-            Assert.True(System.IO.File.Exists(runtimeConfigPath));
+            Assert.True(File.Exists(assemblyPath));
+            Assert.True(File.Exists(runtimeConfigPath));
 
             var run = RunDotnet(assemblyPath);
             Assert.Equal(0, run.ExitCode);
@@ -57,7 +57,7 @@ public class BuildCommandIntegrationTests
                 Directory.Delete(workingDir, recursive: true);
             }
 
-            System.IO.File.Delete(sourcePath);
+            File.Delete(sourcePath);
         }
     }
 
@@ -99,7 +99,7 @@ public class BuildCommandIntegrationTests
                 Directory.Delete(workingDir, recursive: true);
             }
 
-            System.IO.File.Delete(sourcePath);
+            File.Delete(sourcePath);
         }
     }
 
@@ -124,7 +124,7 @@ public class BuildCommandIntegrationTests
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}.kg");
-        System.IO.File.WriteAllText(filePath, source);
+        File.WriteAllText(filePath, source);
         return filePath;
     }
 }
