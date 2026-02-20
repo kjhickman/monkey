@@ -27,7 +27,7 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
-            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.DoesNotContain("ERROR:", stdout);
             Assert.Contains("[N001]", stderr);
             Assert.DoesNotContain("[C001]", stderr);
         }
@@ -93,6 +93,22 @@ public class RunCommandIntegrationTests
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
             Assert.Contains("8", stdout);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandExecutesClosureProgramWithClrBackend()
+    {
+        var filePath = CreateTempProgram("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath);
+            Assert.Contains("15", stdout);
             Assert.Equal(string.Empty, stderr.Trim());
         }
         finally

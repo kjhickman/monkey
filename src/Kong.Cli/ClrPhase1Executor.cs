@@ -18,12 +18,12 @@ public class ClrPhase1ExecutionResult
 
 public class ClrPhase1Executor
 {
-    public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult)
+    public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult, NameResolution? nameResolution = null)
     {
         var result = new ClrPhase1ExecutionResult();
 
         var lowerer = new IrLowerer();
-        var loweringResult = lowerer.Lower(unit, typeCheckResult);
+        var loweringResult = lowerer.Lower(unit, typeCheckResult, nameResolution);
         result.Diagnostics.AddRange(loweringResult.Diagnostics);
 
         if (loweringResult.Program == null)
@@ -65,7 +65,7 @@ public class ClrPhase1Executor
             return result;
         }
 
-        return Execute(unit, typeCheck);
+        return Execute(unit, typeCheck, names);
     }
 
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)

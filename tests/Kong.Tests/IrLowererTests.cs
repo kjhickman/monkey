@@ -104,6 +104,39 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersClosureCallWithCapturedVariable()
+    {
+        var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";
+        var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck, names);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+
+        Assert.Equal(2, lowering.Program!.Functions.Count);
+        var loweredFunction = Assert.Single(lowering.Program.Functions, f => f.Parameters.Count == 2);
+        Assert.Equal(2, loweredFunction.Parameters.Count);
+        Assert.Equal("outer", loweredFunction.Parameters[0].Name);
+        Assert.Equal("x", loweredFunction.Parameters[1].Name);
+    }
+
+    [Fact]
+    public void TestLowersNestedClosureCalls()
+    {
+        var input = "let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y }; g(7); }; f(5);";
+        var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck, names);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        Assert.Equal(2, lowering.Program!.Functions.Count);
+    }
+
+    [Fact]
     public void TestLowererRejectsNonIntTopLevelExpression()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("true;");
@@ -116,6 +149,12 @@ public class IrLowererTests
     }
 
     private static (CompilationUnit Unit, TypeCheckResult TypeCheck) ParseAndTypeCheck(string input)
+    {
+        var (unit, typeCheck, _) = ParseAndTypeCheckWithNames(input);
+        return (unit, typeCheck);
+    }
+
+    private static (CompilationUnit Unit, TypeCheckResult TypeCheck, NameResolution Names) ParseAndTypeCheckWithNames(string input)
     {
         var lexer = new Lexer(input);
         var parser = new Parser(lexer);
@@ -149,6 +188,6 @@ public class IrLowererTests
             Assert.Fail(message);
         }
 
-        return (unit, typeCheck);
+        return (unit, typeCheck, names);
     }
 }

@@ -40,7 +40,7 @@ public class RunFile
         }
 
         var clrExecutor = new ClrPhase1Executor();
-        var clrResult = clrExecutor.Execute(program, typeCheckResult);
+        var clrResult = clrExecutor.Execute(program, typeCheckResult, nameResolution);
         if (clrResult.Executed)
         {
             Console.WriteLine(clrResult.Value);

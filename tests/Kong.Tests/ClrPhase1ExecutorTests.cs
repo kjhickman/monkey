@@ -129,6 +129,30 @@ public class ClrPhase1ExecutorTests
         Assert.Equal(5, result.Value);
     }
 
+    [Fact]
+    public void TestExecutesClosureWithSingleCapture()
+    {
+        var unit = Parse("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(15, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesNestedClosureCall()
+    {
+        var unit = Parse("let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y }; g(7); }; f(5);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(12, result.Value);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);
