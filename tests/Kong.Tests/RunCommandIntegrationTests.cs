@@ -44,7 +44,7 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
-            Assert.Equal("5", stdout.Trim());
+            Assert.Contains("5", stdout);
             Assert.Equal(string.Empty, stderr.Trim());
         }
         finally

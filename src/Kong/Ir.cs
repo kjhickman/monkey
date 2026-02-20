@@ -5,6 +5,11 @@ public readonly record struct IrValueId(int Id)
     public override string ToString() => $"v{Id}";
 }
 
+public readonly record struct IrLocalId(int Id)
+{
+    public override string ToString() => $"l{Id}";
+}
+
 public sealed class IrProgram
 {
     public IrFunction EntryPoint { get; init; } = null!;
@@ -16,6 +21,7 @@ public sealed class IrFunction
     public required TypeSymbol ReturnType { get; init; }
     public List<IrBlock> Blocks { get; } = [];
     public Dictionary<IrValueId, TypeSymbol> ValueTypes { get; } = [];
+    public Dictionary<IrLocalId, TypeSymbol> LocalTypes { get; } = [];
 }
 
 public sealed class IrBlock
@@ -25,9 +31,9 @@ public sealed class IrBlock
     public IrTerminator Terminator { get; set; } = null!;
 }
 
-public abstract record class IrInstruction(IrValueId Destination);
+public abstract record class IrInstruction;
 
-public sealed record class IrConstInt(IrValueId Destination, long Value) : IrInstruction(Destination);
+public sealed record class IrConstInt(IrValueId Destination, long Value) : IrInstruction;
 
 public enum IrBinaryOperator
 {
@@ -41,7 +47,11 @@ public sealed record class IrBinary(
     IrValueId Destination,
     IrBinaryOperator Operator,
     IrValueId Left,
-    IrValueId Right) : IrInstruction(Destination);
+    IrValueId Right) : IrInstruction;
+
+public sealed record class IrStoreLocal(IrLocalId Local, IrValueId Source) : IrInstruction;
+
+public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
 
 public abstract record class IrTerminator;
 

@@ -98,7 +98,7 @@ public class ClrPhase1Executor
         var block = function.Blocks[0];
         method.Body.InitLocals = true;
 
-        var locals = new Dictionary<IrValueId, VariableDefinition>();
+        var valueLocals = new Dictionary<IrValueId, VariableDefinition>();
         foreach (var (valueId, type) in function.ValueTypes)
         {
             if (type != TypeSymbols.Int)
@@ -107,8 +107,21 @@ public class ClrPhase1Executor
                 return false;
             }
 
-            locals[valueId] = new VariableDefinition(module.TypeSystem.Int64);
-            method.Body.Variables.Add(locals[valueId]);
+            valueLocals[valueId] = new VariableDefinition(module.TypeSystem.Int64);
+            method.Body.Variables.Add(valueLocals[valueId]);
+        }
+
+        var namedLocals = new Dictionary<IrLocalId, VariableDefinition>();
+        foreach (var (localId, type) in function.LocalTypes)
+        {
+            if (type != TypeSymbols.Int)
+            {
+                diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int IR locals, got '{type}'", "IL001");
+                return false;
+            }
+
+            namedLocals[localId] = new VariableDefinition(module.TypeSystem.Int64);
+            method.Body.Variables.Add(namedLocals[localId]);
         }
 
         var il = method.Body.GetILProcessor();
@@ -118,12 +131,12 @@ public class ClrPhase1Executor
             {
                 case IrConstInt constInt:
                     il.Emit(OpCodes.Ldc_I8, constInt.Value);
-                    il.Emit(OpCodes.Stloc, locals[constInt.Destination]);
+                    il.Emit(OpCodes.Stloc, valueLocals[constInt.Destination]);
                     break;
 
                 case IrBinary binary:
-                    il.Emit(OpCodes.Ldloc, locals[binary.Left]);
-                    il.Emit(OpCodes.Ldloc, locals[binary.Right]);
+                    il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
+                    il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
                     il.Emit(binary.Operator switch
                     {
                         IrBinaryOperator.Add => OpCodes.Add,
@@ -132,7 +145,17 @@ public class ClrPhase1Executor
                         IrBinaryOperator.Divide => OpCodes.Div,
                         _ => throw new InvalidOperationException(),
                     });
-                    il.Emit(OpCodes.Stloc, locals[binary.Destination]);
+                    il.Emit(OpCodes.Stloc, valueLocals[binary.Destination]);
+                    break;
+
+                case IrStoreLocal storeLocal:
+                    il.Emit(OpCodes.Ldloc, valueLocals[storeLocal.Source]);
+                    il.Emit(OpCodes.Stloc, namedLocals[storeLocal.Local]);
+                    break;
+
+                case IrLoadLocal loadLocal:
+                    il.Emit(OpCodes.Ldloc, namedLocals[loadLocal.Local]);
+                    il.Emit(OpCodes.Stloc, valueLocals[loadLocal.Destination]);
                     break;
 
                 default:
@@ -147,7 +170,7 @@ public class ClrPhase1Executor
             return false;
         }
 
-        if (!locals.TryGetValue(ret.Value, out var returnLocal))
+        if (!valueLocals.TryGetValue(ret.Value, out var returnLocal))
         {
             diagnostics.Report(Span.Empty, "phase-1 CLR backend could not resolve IR return value", "IL001");
             return false;

@@ -27,15 +27,21 @@ public class IrLowererTests
     }
 
     [Fact]
-    public void TestLowererRejectsTopLevelLetStatement()
+    public void TestLowersLetBindingAndIdentifierUsage()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let x = 1;");
+        var (unit, typeCheck) = ParseAndTypeCheck("let x = 2; x + 3;");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
 
-        Assert.Null(lowering.Program);
-        Assert.Contains(lowering.Diagnostics.All, d => d.Code == "IR001");
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+
+        var entry = lowering.Program!.EntryPoint;
+        Assert.Single(entry.LocalTypes);
+        Assert.Single(entry.Blocks);
+        Assert.Contains(entry.Blocks[0].Instructions, i => i is IrStoreLocal);
+        Assert.Contains(entry.Blocks[0].Instructions, i => i is IrLoadLocal);
     }
 
     [Fact]

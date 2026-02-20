@@ -31,16 +31,16 @@ public class ClrPhase1ExecutorTests
     }
 
     [Fact]
-    public void TestReportsUnsupportedSyntaxForLetStatement()
+    public void TestExecutesProgramWithLetBinding()
     {
-        var unit = Parse("let x = 1;");
+        var unit = Parse("let x = 2; x + 3;");
         var executor = new ClrPhase1Executor();
 
         var result = executor.Execute(unit);
 
-        Assert.False(result.Executed);
-        Assert.True(result.IsUnsupported);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "IR001");
+        Assert.True(result.Executed);
+        Assert.Equal(5, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
     }
 
     [Fact]
@@ -54,6 +54,19 @@ public class ClrPhase1ExecutorTests
         Assert.False(result.Executed);
         Assert.False(result.IsUnsupported);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "N001");
+    }
+
+    [Fact]
+    public void TestReturnsUnsupportedForNonIntTopLevelResult()
+    {
+        var unit = Parse("true;");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.False(result.Executed);
+        Assert.True(result.IsUnsupported);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "IR001");
     }
 
     private static CompilationUnit Parse(string input)
