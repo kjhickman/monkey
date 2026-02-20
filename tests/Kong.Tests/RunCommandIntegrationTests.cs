@@ -69,6 +69,22 @@ public class RunCommandIntegrationTests
         }
     }
 
+    [Fact]
+    public void TestRunCommandExecutesFunctionCallWithClrBackend()
+    {
+        var filePath = CreateTempProgram("fn(x: int) -> int { return x + 1; }(5);");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath);
+            Assert.Contains("6", stdout);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");

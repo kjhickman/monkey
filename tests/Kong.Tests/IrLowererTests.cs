@@ -45,6 +45,36 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersIfExpressionIntoBranchBlocks()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("if (true) { 10 } else { 20 };");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+
+        var entry = lowering.Program!.EntryPoint;
+        Assert.True(entry.Blocks.Count >= 4);
+        Assert.Contains(entry.Blocks, b => b.Terminator is IrBranch);
+    }
+
+    [Fact]
+    public void TestLowersFunctionLiteralCall()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("fn(x: int) -> int { return x + 1; }(2);");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        Assert.Single(lowering.Program!.Functions);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks[0].Instructions, i => i is IrCall);
+    }
+
+    [Fact]
     public void TestLowererRejectsNonIntTopLevelExpression()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("true;");

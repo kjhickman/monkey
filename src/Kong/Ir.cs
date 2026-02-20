@@ -13,16 +13,20 @@ public readonly record struct IrLocalId(int Id)
 public sealed class IrProgram
 {
     public IrFunction EntryPoint { get; init; } = null!;
+    public List<IrFunction> Functions { get; } = [];
 }
 
 public sealed class IrFunction
 {
     public required string Name { get; init; }
     public required TypeSymbol ReturnType { get; init; }
+    public List<IrParameter> Parameters { get; } = [];
     public List<IrBlock> Blocks { get; } = [];
     public Dictionary<IrValueId, TypeSymbol> ValueTypes { get; } = [];
     public Dictionary<IrLocalId, TypeSymbol> LocalTypes { get; } = [];
 }
+
+public sealed record class IrParameter(IrLocalId LocalId, string Name, TypeSymbol Type);
 
 public sealed class IrBlock
 {
@@ -34,6 +38,8 @@ public sealed class IrBlock
 public abstract record class IrInstruction;
 
 public sealed record class IrConstInt(IrValueId Destination, long Value) : IrInstruction;
+
+public sealed record class IrConstBool(IrValueId Destination, bool Value) : IrInstruction;
 
 public enum IrBinaryOperator
 {
@@ -53,9 +59,15 @@ public sealed record class IrStoreLocal(IrLocalId Local, IrValueId Source) : IrI
 
 public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
 
+public sealed record class IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+
 public abstract record class IrTerminator;
 
 public sealed record class IrReturn(IrValueId Value) : IrTerminator;
+
+public sealed record class IrJump(int TargetBlockId) : IrTerminator;
+
+public sealed record class IrBranch(IrValueId Condition, int ThenBlockId, int ElseBlockId) : IrTerminator;
 
 public sealed class IrLoweringResult
 {

@@ -69,6 +69,30 @@ public class ClrPhase1ExecutorTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "IR001");
     }
 
+    [Fact]
+    public void TestExecutesIfElseExpression()
+    {
+        var unit = Parse("if (true) { 10 } else { 20 };");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(10, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesFunctionLiteralCallWithReturn()
+    {
+        var unit = Parse("fn(x: int) -> int { return x + 1; }(41);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

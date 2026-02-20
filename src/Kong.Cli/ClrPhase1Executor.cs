@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
+using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
 
 namespace Kong.Cli;
@@ -50,137 +51,6 @@ public class ClrPhase1Executor
         return result;
     }
 
-    private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
-    {
-        var function = program.EntryPoint;
-
-        var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
-        var assembly = AssemblyDefinition.CreateAssembly(assemblyName, "Kong.Generated", ModuleKind.Dll);
-        var module = assembly.MainModule;
-
-        var programType = new TypeDefinition(
-            "Kong.Generated",
-            "Program",
-            CecilTypeAttributes.Public | CecilTypeAttributes.Abstract | CecilTypeAttributes.Sealed,
-            module.TypeSystem.Object);
-        module.Types.Add(programType);
-
-        var evalMethod = new MethodDefinition(
-            "Eval",
-            CecilMethodAttributes.Public | CecilMethodAttributes.Static,
-            module.TypeSystem.Int64);
-        programType.Methods.Add(evalMethod);
-
-        if (!EmitFunction(function, evalMethod, module, diagnostics))
-        {
-            return null;
-        }
-
-        using var stream = new MemoryStream();
-        assembly.Write(stream);
-        return stream.ToArray();
-    }
-
-    private static bool EmitFunction(IrFunction function, MethodDefinition method, ModuleDefinition module, DiagnosticBag diagnostics)
-    {
-        if (function.ReturnType != TypeSymbols.Int)
-        {
-            diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int return type, got '{function.ReturnType}'", "IL001");
-            return false;
-        }
-
-        if (function.Blocks.Count != 1)
-        {
-            diagnostics.Report(Span.Empty, "phase-1 CLR backend currently supports exactly one IR block", "IL001");
-            return false;
-        }
-
-        var block = function.Blocks[0];
-        method.Body.InitLocals = true;
-
-        var valueLocals = new Dictionary<IrValueId, VariableDefinition>();
-        foreach (var (valueId, type) in function.ValueTypes)
-        {
-            if (type != TypeSymbols.Int)
-            {
-                diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int IR values, got '{type}'", "IL001");
-                return false;
-            }
-
-            valueLocals[valueId] = new VariableDefinition(module.TypeSystem.Int64);
-            method.Body.Variables.Add(valueLocals[valueId]);
-        }
-
-        var namedLocals = new Dictionary<IrLocalId, VariableDefinition>();
-        foreach (var (localId, type) in function.LocalTypes)
-        {
-            if (type != TypeSymbols.Int)
-            {
-                diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int IR locals, got '{type}'", "IL001");
-                return false;
-            }
-
-            namedLocals[localId] = new VariableDefinition(module.TypeSystem.Int64);
-            method.Body.Variables.Add(namedLocals[localId]);
-        }
-
-        var il = method.Body.GetILProcessor();
-        foreach (var instruction in block.Instructions)
-        {
-            switch (instruction)
-            {
-                case IrConstInt constInt:
-                    il.Emit(OpCodes.Ldc_I8, constInt.Value);
-                    il.Emit(OpCodes.Stloc, valueLocals[constInt.Destination]);
-                    break;
-
-                case IrBinary binary:
-                    il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
-                    il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
-                    il.Emit(binary.Operator switch
-                    {
-                        IrBinaryOperator.Add => OpCodes.Add,
-                        IrBinaryOperator.Subtract => OpCodes.Sub,
-                        IrBinaryOperator.Multiply => OpCodes.Mul,
-                        IrBinaryOperator.Divide => OpCodes.Div,
-                        _ => throw new InvalidOperationException(),
-                    });
-                    il.Emit(OpCodes.Stloc, valueLocals[binary.Destination]);
-                    break;
-
-                case IrStoreLocal storeLocal:
-                    il.Emit(OpCodes.Ldloc, valueLocals[storeLocal.Source]);
-                    il.Emit(OpCodes.Stloc, namedLocals[storeLocal.Local]);
-                    break;
-
-                case IrLoadLocal loadLocal:
-                    il.Emit(OpCodes.Ldloc, namedLocals[loadLocal.Local]);
-                    il.Emit(OpCodes.Stloc, valueLocals[loadLocal.Destination]);
-                    break;
-
-                default:
-                    diagnostics.Report(Span.Empty, "phase-1 CLR backend encountered unsupported IR instruction", "IL001");
-                    return false;
-            }
-        }
-
-        if (block.Terminator is not IrReturn ret)
-        {
-            diagnostics.Report(Span.Empty, "phase-1 CLR backend requires an IR return terminator", "IL001");
-            return false;
-        }
-
-        if (!valueLocals.TryGetValue(ret.Value, out var returnLocal))
-        {
-            diagnostics.Report(Span.Empty, "phase-1 CLR backend could not resolve IR return value", "IL001");
-            return false;
-        }
-
-        il.Emit(OpCodes.Ldloc, returnLocal);
-        il.Emit(OpCodes.Ret);
-        return true;
-    }
-
     public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
     {
         var resolver = new NameResolver();
@@ -196,6 +66,258 @@ public class ClrPhase1Executor
         }
 
         return Execute(unit, typeCheck);
+    }
+
+    private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
+    {
+        var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
+        var assembly = AssemblyDefinition.CreateAssembly(assemblyName, "Kong.Generated", ModuleKind.Dll);
+        var module = assembly.MainModule;
+
+        var programType = new TypeDefinition(
+            "Kong.Generated",
+            "Program",
+            CecilTypeAttributes.Public | CecilTypeAttributes.Abstract | CecilTypeAttributes.Sealed,
+            module.TypeSystem.Object);
+        module.Types.Add(programType);
+
+        var allFunctions = new List<IrFunction> { program.EntryPoint };
+        allFunctions.AddRange(program.Functions);
+
+        var methodMap = new Dictionary<string, MethodDefinition>();
+        foreach (var function in allFunctions)
+        {
+            var returnType = MapType(function.ReturnType, module, diagnostics);
+            if (returnType == null)
+            {
+                return null;
+            }
+
+            var methodName = function == program.EntryPoint ? "Eval" : function.Name;
+            var attributes = function == program.EntryPoint
+                ? CecilMethodAttributes.Public | CecilMethodAttributes.Static
+                : CecilMethodAttributes.Private | CecilMethodAttributes.Static;
+
+            var method = new MethodDefinition(methodName, attributes, returnType);
+            foreach (var parameter in function.Parameters)
+            {
+                var parameterType = MapType(parameter.Type, module, diagnostics);
+                if (parameterType == null)
+                {
+                    return null;
+                }
+
+                method.Parameters.Add(new ParameterDefinition(parameter.Name, CecilParameterAttributes.None, parameterType));
+            }
+
+            programType.Methods.Add(method);
+            methodMap[function.Name] = method;
+        }
+
+        foreach (var function in allFunctions)
+        {
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, module, diagnostics))
+            {
+                return null;
+            }
+        }
+
+        using var stream = new MemoryStream();
+        assembly.Write(stream);
+        return stream.ToArray();
+    }
+
+    private static bool EmitFunction(
+        IrFunction function,
+        MethodDefinition method,
+        IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics)
+    {
+        method.Body.InitLocals = true;
+
+        var valueLocals = new Dictionary<IrValueId, VariableDefinition>();
+        foreach (var (valueId, type) in function.ValueTypes)
+        {
+            var variableType = MapType(type, module, diagnostics);
+            if (variableType == null)
+            {
+                return false;
+            }
+
+            valueLocals[valueId] = new VariableDefinition(variableType);
+            method.Body.Variables.Add(valueLocals[valueId]);
+        }
+
+        var parameterLocalIndexes = new Dictionary<IrLocalId, int>();
+        for (var i = 0; i < function.Parameters.Count; i++)
+        {
+            parameterLocalIndexes[function.Parameters[i].LocalId] = i;
+        }
+
+        var localVariables = new Dictionary<IrLocalId, VariableDefinition>();
+        foreach (var (localId, type) in function.LocalTypes)
+        {
+            if (parameterLocalIndexes.ContainsKey(localId))
+            {
+                continue;
+            }
+
+            var variableType = MapType(type, module, diagnostics);
+            if (variableType == null)
+            {
+                return false;
+            }
+
+            localVariables[localId] = new VariableDefinition(variableType);
+            method.Body.Variables.Add(localVariables[localId]);
+        }
+
+        var il = method.Body.GetILProcessor();
+        var labels = new Dictionary<int, Instruction>();
+        foreach (var block in function.Blocks)
+        {
+            labels[block.Id] = Instruction.Create(OpCodes.Nop);
+        }
+
+        if (function.Blocks.Count == 0)
+        {
+            diagnostics.Report(Span.Empty, "phase-4 CLR backend requires at least one IR block", "IL001");
+            return false;
+        }
+
+        il.Emit(OpCodes.Br, labels[function.Blocks[0].Id]);
+
+        foreach (var block in function.Blocks)
+        {
+            il.Append(labels[block.Id]);
+
+            foreach (var instruction in block.Instructions)
+            {
+                switch (instruction)
+                {
+                    case IrConstInt constInt:
+                        il.Emit(OpCodes.Ldc_I8, constInt.Value);
+                        il.Emit(OpCodes.Stloc, valueLocals[constInt.Destination]);
+                        break;
+
+                    case IrConstBool constBool:
+                        il.Emit(constBool.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+                        il.Emit(OpCodes.Stloc, valueLocals[constBool.Destination]);
+                        break;
+
+                    case IrBinary binary:
+                        il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
+                        il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
+                        il.Emit(binary.Operator switch
+                        {
+                            IrBinaryOperator.Add => OpCodes.Add,
+                            IrBinaryOperator.Subtract => OpCodes.Sub,
+                            IrBinaryOperator.Multiply => OpCodes.Mul,
+                            IrBinaryOperator.Divide => OpCodes.Div,
+                            _ => throw new InvalidOperationException(),
+                        });
+                        il.Emit(OpCodes.Stloc, valueLocals[binary.Destination]);
+                        break;
+
+                    case IrStoreLocal storeLocal:
+                        il.Emit(OpCodes.Ldloc, valueLocals[storeLocal.Source]);
+                        if (parameterLocalIndexes.TryGetValue(storeLocal.Local, out var parameterIndex))
+                        {
+                            il.Emit(OpCodes.Starg, method.Parameters[parameterIndex]);
+                        }
+                        else
+                        {
+                            il.Emit(OpCodes.Stloc, localVariables[storeLocal.Local]);
+                        }
+                        break;
+
+                    case IrLoadLocal loadLocal:
+                        if (parameterLocalIndexes.TryGetValue(loadLocal.Local, out var loadParameterIndex))
+                        {
+                            il.Emit(OpCodes.Ldarg, method.Parameters[loadParameterIndex]);
+                        }
+                        else
+                        {
+                            il.Emit(OpCodes.Ldloc, localVariables[loadLocal.Local]);
+                        }
+                        il.Emit(OpCodes.Stloc, valueLocals[loadLocal.Destination]);
+                        break;
+
+                    case IrCall call:
+                        foreach (var argument in call.Arguments)
+                        {
+                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+                        }
+
+                        if (!methodMap.TryGetValue(call.FunctionName, out var targetMethod))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-4 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Call, targetMethod);
+                        il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
+                        break;
+
+                    default:
+                        diagnostics.Report(Span.Empty, "phase-4 CLR backend encountered unsupported IR instruction", "IL001");
+                        return false;
+                }
+            }
+
+            switch (block.Terminator)
+            {
+                case IrReturn ret:
+                    il.Emit(OpCodes.Ldloc, valueLocals[ret.Value]);
+                    il.Emit(OpCodes.Ret);
+                    break;
+
+                case IrJump jump:
+                    if (!labels.TryGetValue(jump.TargetBlockId, out var jumpLabel))
+                    {
+                        diagnostics.Report(Span.Empty, "phase-4 CLR backend encountered invalid jump target", "IL001");
+                        return false;
+                    }
+                    il.Emit(OpCodes.Br, jumpLabel);
+                    break;
+
+                case IrBranch branch:
+                    if (!labels.TryGetValue(branch.ThenBlockId, out var thenLabel) ||
+                        !labels.TryGetValue(branch.ElseBlockId, out var elseLabel))
+                    {
+                        diagnostics.Report(Span.Empty, "phase-4 CLR backend encountered invalid branch target", "IL001");
+                        return false;
+                    }
+
+                    il.Emit(OpCodes.Ldloc, valueLocals[branch.Condition]);
+                    il.Emit(OpCodes.Brtrue, thenLabel);
+                    il.Emit(OpCodes.Br, elseLabel);
+                    break;
+
+                default:
+                    diagnostics.Report(Span.Empty, "phase-4 CLR backend requires explicit block terminators", "IL001");
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static TypeReference? MapType(TypeSymbol type, ModuleDefinition module, DiagnosticBag diagnostics)
+    {
+        if (type == TypeSymbols.Int)
+        {
+            return module.TypeSystem.Int64;
+        }
+
+        if (type == TypeSymbols.Bool)
+        {
+            return module.TypeSystem.Boolean;
+        }
+
+        diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");
+        return null;
     }
 
     private static long? ExecuteAssembly(byte[] assemblyBytes, DiagnosticBag diagnostics)
