@@ -1,0 +1,284 @@
+KONG BACKEND ARCHITECTURE ANALYSIS - QUICK REFERENCE
+======================================================
+
+ANALYSIS DATE: February 2026
+PROJECT: Kong Language Compiler
+SCOPE: IR Lowering → CLR Emission → Runtime Builtins
+
+================================================================================
+TOP 8 FINDINGS (RANKED BY IMPACT)
+================================================================================
+
+1. ⭐⭐⭐⭐⭐ CRITICAL: Hardcoded Builtin Mappings
+   Location: IrLowerer.cs:927-984 (TryLowerBuiltinCallName)
+             ClrPhase1Executor.cs:927-942 (BuildBuiltinMap)
+             ClrRuntimeBuiltins.cs:3-64 (implementations)
+   Problem: 3 places, no single source of truth
+   Impact: Blocks NuGet interop, test brittleness
+   Files Affected: 3 (IrLowerer, ClrPhase1Executor, ClrRuntimeBuiltins)
+
+2. ⭐⭐⭐⭐ CRITICAL: Builtin Type Specialization
+   Location: IrLowerer.cs:927-984
+   Problem: Monomorphic dispatch (one overload per type)
+   Impact: Each new type requires 3+ code changes
+   Fix: BuiltinRegistry with type-signature resolution
+
+3. ⭐⭐⭐⭐⭐ HIGH: Type Mapping Hardcoding
+   Location: ClrPhase1Executor.cs:641-685 (MapType)
+   Problem: No extensibility for custom/BCL types
+   Impact: Blocks BCL interop, generic types unsupported
+   Fix: Extract ITypeMapper interface
+
+4. ⭐⭐⭐⭐ HIGH: Monolithic IR → CLR Emission
+   Location: ClrPhase1Executor.cs:150-256 (EmitAssembly)
+             ClrPhase1Executor.cs:258-639 (EmitFunction)
+   Problem: Single method orchestrates everything
+   Impact: Can't test phases independently, blocks modular compilation
+   Fix: Visitor pattern + phase extraction
+
+5. ⭐⭐⭐ MEDIUM: Runtime Builtin Coupling
+   Location: ClrRuntimeBuiltins.cs:3-64
+   Problem: Hardcoded assumptions (int64 arrays, no context)
+   Impact: AOT incompatibility, no extensibility
+   Fix: IBuiltinProvider wrapper
+
+6. ⭐⭐⭐ MEDIUM: IR Type Assumptions
+   Location: IrLowerer.cs:1118-1132 (IsSupportedRuntimeType)
+   Problem: Whitelist hardcoded in lowerer
+   Impact: Blocks custom types, modular compilation
+   Fix: Move to ITypeMapper
+
+7. ⭐⭐⭐ MEDIUM: Large IR → IL Switch
+   Location: ClrPhase1Executor.cs:327-596 (EmitFunction switch)
+   Problem: 20+ cases tightly bound to IL emission
+   Impact: Blocks optimization passes, debugging, interpretation
+   Fix: Visitor pattern
+
+8. ⭐⭐ LOW: Mono.Cecil Tight Coupling
+   Location: Throughout ClrPhase1Executor.cs
+   Problem: No abstraction over IL generation
+   Impact: Backend lock-in (long-term)
+   Fix: IL generation abstraction layer
+
+================================================================================
+RECOMMENDED FIXES (4-PHASE PLAN)
+================================================================================
+
+PHASE 1: FOUNDATION (Weeks 1-2, ~15 hours)
+-------------------------------------------
+Goal: Centralize builtins and type mapping
+
+Task 1.1: Create BuiltinRegistry.cs (3h)
+  - Registry class with type-signature dispatch
+  - CreateDefault() to populate with all builtins
+  - Test: BuiltinRegistryTests.cs
+
+Task 1.2: Refactor IrLowerer to use BuiltinRegistry (4h)
+  - Replace TryLowerBuiltinCallName logic
+  - Use registry.ResolveByTypeSignature()
+  - Update tests
+
+Task 1.3: Extract ITypeMapper interface (3h)
+  - New: TypeMapping/ITypeMapper.cs
+  - New: TypeMapping/DefaultTypeMapper.cs
+  - Move MapType logic + IsSupportedRuntimeType
+
+Task 1.4: Update ClrPhase1Executor (5h)
+  - Remove BuildBuiltinMap()
+  - Inject BuiltinRegistry + ITypeMapper
+  - Full test suite
+
+Result: Builtin registry centralized, type mapping pluggable
+
+---
+
+PHASE 2: MODULARITY (Weeks 3-4, ~10 hours)
+------------------------------------------
+Goal: IR decoupling, context threading
+
+Task 2.1: CompilationContext.cs (4h)
+  - Thread through IrLowerer, ClrPhase1Executor
+  - Enable dependency injection
+  - Update CLI
+
+Task 2.2: IR Emission Visitor Pattern (6h)
+  - IrEmissionVisitor abstract base
+  - ClrIlEmissionVisitor implementation
+  - Refactor EmitFunction
+
+Result: Ready for alternative backends, multi-module symbol resolution
+
+---
+
+PHASE 3: BCL INTEROP (Weeks 5-6, ~11 hours)
+-------------------------------------------
+Goal: Bind Kong types/methods to BCL
+
+Task 3.1: External Type Binding Registry (5h)
+  - ExternalTypeMapper for BCL types
+  - CLI flags for type bindings
+  - Tests
+
+Task 3.2: External Method Binding (6h)
+  - ExternalMethodResolver
+  - Direct BCL method calls
+  - Signature validation
+
+Result: Kong can call BCL methods, NuGet interop foundation
+
+---
+
+PHASE 4: MODULAR COMPILATION (Weeks 7-8, ~11 hours)
+---------------------------------------------------
+Goal: Multi-module compilation + linking
+
+Task 4.1: Multi-Module IR Program (5h)
+  - IrModule record in Ir.cs
+  - Module-aware IR lowering
+  - ModuleLinker.cs
+
+Task 4.2: Module Metadata & Symbol Export (6h)
+  - ModuleMetadata.cs
+  - Module interface/ABI files
+  - Symbol import during linking
+
+Result: Separate module compilation, stable ABI
+
+================================================================================
+EXACT FILE REFERENCES
+================================================================================
+
+CRITICAL FUNCTIONS TO REFACTOR:
+
+| Function                          | File                  | Lines     |
+|-----------------------------------|-----------------------|-----------|
+| TryLowerBuiltinCallName()         | IrLowerer.cs          | 927-984   |
+| BuildBuiltinMap()                 | ClrPhase1Executor.cs  | 927-942   |
+| MapType()                         | ClrPhase1Executor.cs  | 641-685   |
+| EmitAssembly()                    | ClrPhase1Executor.cs  | 150-256   |
+| EmitFunction()                    | ClrPhase1Executor.cs  | 258-639   |
+| IsSupportedRuntimeType()          | IrLowerer.cs          | 1118-1132 |
+| ClrRuntimeBuiltins (class)        | ClrRuntimeBuiltins.cs | 3-64      |
+| BuiltinNames (class)              | BuiltinNames.cs       | 3-14      |
+
+NEW FILES TO CREATE:
+
+Phase 1:
+  - src/Kong/BuiltinRegistry.cs
+  - src/Kong/TypeMapping/ITypeMapper.cs
+  - src/Kong/TypeMapping/DefaultTypeMapper.cs
+  - tests/Kong.Tests/BuiltinRegistryTests.cs
+  - tests/Kong.Tests/TypeMapperTests.cs
+
+Phase 2:
+  - src/Kong/Compilation/CompilationContext.cs
+  - src/Kong/Emission/IrEmissionVisitor.cs
+  - src/Kong/Emission/ClrIlEmissionVisitor.cs
+
+Phase 3:
+  - src/Kong/TypeMapping/ExternalTypeMapper.cs
+  - src/Kong/Emission/ExternalMethodResolver.cs
+
+Phase 4:
+  - src/Kong/Emission/ModuleLinker.cs
+  - src/Kong/Compilation/ModuleMetadata.cs
+
+================================================================================
+KEY METRICS
+================================================================================
+
+Current State:
+  - Hardcoded type cases: 5
+  - Builtin dispatch sites: 2
+  - EmitFunction cyclomatic complexity: ~30
+  - Mono.Cecil references: 1 file (concentrated)
+
+Target State (Phase 4):
+  - Hardcoded type cases: 0 (all in ITypeMapper)
+  - Builtin dispatch sites: 1 (registry)
+  - EmitFunction cyclomatic complexity: ~15 (visitor-based)
+  - Multiple emission backends possible
+
+================================================================================
+RISK ASSESSMENT
+================================================================================
+
+PHASE 1 RISKS:
+  - Regressions in builtin dispatch: MEDIUM probability, HIGH impact
+    Mitigation: Comprehensive test suite per builtin
+  - Type mapping inconsistencies: MEDIUM probability, HIGH impact
+    Mitigation: Freeze type symbol API first
+
+PHASE 2 RISKS:
+  - IR visitor refactor bugs: HIGH probability, HIGH impact
+    Mitigation: Gradual migration, dual paths initially
+  - Context threading breaks CLI: MEDIUM probability, MEDIUM impact
+    Mitigation: Incremental threading, test early
+
+PHASE 3 RISKS:
+  - External type binding conflicts: LOW probability, MEDIUM impact
+    Mitigation: Namespace resolution, clear errors
+  - BCL signature mismatches: MEDIUM probability, MEDIUM impact
+    Mitigation: Validation during lowering
+
+PHASE 4 RISKS:
+  - Module linking breaks existing: MEDIUM probability, HIGH impact
+    Mitigation: Non-breaking (single-module mode still works)
+
+================================================================================
+GO/NO-GO GATES
+================================================================================
+
+PHASE 1 GO-GATE:
+  ✓ All existing tests pass
+  ✓ No behavioral changes in compiler output
+  ✓ New BuiltinRegistry tests >90% coverage
+  ✓ dotnet build clean
+  ✓ dotnet test --filter "Builtin or TypeMapper" PASS
+
+PHASE 2 GO-GATE:
+  ✓ IR visitor emits identical IL to old code
+  ✓ CompilationContext threading complete
+  ✓ CLI still works (smoke tests)
+  ✓ dotnet test PASS (all)
+
+PHASE 3 GO-GATE:
+  ✓ External type bindings can bind System.* types
+  ✓ No runtime failures with BCL method calls
+  ✓ Documentation of binding syntax complete
+  ✓ Integration test for BCL interop
+
+PHASE 4 GO-GATE:
+  ✓ Single-module programs work identically
+  ✓ Multi-module programs compile and link
+  ✓ Symbol export/import tested
+  ✓ dotnet test PASS (all)
+
+================================================================================
+SUCCESS CRITERIA
+================================================================================
+
+✓ Preserve all existing behavior (test-driven refactoring)
+✓ No public API breaks (private refactoring preferred)
+✓ Comprehensive test coverage (>90% for new abstractions)
+✓ Documentation updated (BuiltinRegistry, ITypeMapper, CompilationContext)
+✓ CLI unchanged (external interface stable)
+
+================================================================================
+TIMELINE
+================================================================================
+
+Total: 16-20 weeks (~40-50 engineering hours)
+
+Week 1-2:   Phase 1 Foundation           (15h)
+Week 3-4:   Phase 2 Modularity          (10h)
+Week 5-6:   Phase 3 BCL Interop         (11h)
+Week 7-8:   Phase 4 Modular Compilation (11h)
+Week 9:     Testing & stabilization     (2h)
+
+High-ROI investments (do first):
+1. BuiltinRegistry + ITypeMapper (Phase 1) - unblocks all future work
+2. CompilationContext (Phase 2) - enables dependency injection
+3. IR Visitor pattern (Phase 2) - decouples backends
+
+================================================================================

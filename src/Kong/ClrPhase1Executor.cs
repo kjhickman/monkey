@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Kong.TypeMapping;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
@@ -684,6 +685,15 @@ public class ClrPhase1Executor
         return null;
     }
 
+    private static TypeReference? MapType(
+        TypeSymbol type,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        return typeMapper.TryMapKongType(type, module, diagnostics);
+    }
+
     private static Dictionary<string, TypeDefinition>? BuildDelegateTypeMap(
         IReadOnlyList<IrFunction> functions,
         ModuleDefinition module,
@@ -939,6 +949,25 @@ public class ClrPhase1Executor
             ["__builtin_rest_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.RestIntArray))!),
             ["__builtin_push_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PushIntArray))!),
         };
+    }
+
+    [RequiresUnreferencedCode("Accesses runtime builtin methods via reflection.")]
+    private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module, BuiltinRegistry registry)
+    {
+        var map = new Dictionary<string, MethodReference>();
+        
+        foreach (var publicName in registry.GetAllPublicNames())
+        {
+            var bindings = registry.GetBindingsForName(publicName);
+            foreach (var binding in bindings)
+            {
+                var methodRef = module.ImportReference(
+                    binding.RuntimeType.GetMethod(binding.RuntimeMethodName)!);
+                map[binding.Signature.IrFunctionName] = methodRef;
+            }
+        }
+        
+        return map;
     }
 
     [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
