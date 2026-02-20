@@ -40,11 +40,11 @@ public class ClrPhase1ExecutorTests
 
         Assert.False(result.Executed);
         Assert.True(result.IsUnsupported);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "IL001");
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "IR001");
     }
 
     [Fact]
-    public void TestReportsUnsupportedExpressionForIdentifier()
+    public void TestReturnsSemanticDiagnosticsWhenTypeCheckFails()
     {
         var unit = Parse("x;");
         var executor = new ClrPhase1Executor();
@@ -52,8 +52,8 @@ public class ClrPhase1ExecutorTests
         var result = executor.Execute(unit);
 
         Assert.False(result.Executed);
-        Assert.True(result.IsUnsupported);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "IL001");
+        Assert.False(result.IsUnsupported);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "N001");
     }
 
     private static CompilationUnit Parse(string input)

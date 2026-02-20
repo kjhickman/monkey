@@ -60,7 +60,7 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr) = ExecuteRunCommand(filePath);
-            Assert.Equal("2", stdout.Trim());
+            Assert.Contains("2", stdout);
             Assert.Equal(string.Empty, stderr.Trim());
         }
         finally

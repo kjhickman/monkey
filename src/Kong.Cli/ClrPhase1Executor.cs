@@ -17,11 +17,21 @@ public class ClrPhase1ExecutionResult
 
 public class ClrPhase1Executor
 {
-    public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
+    public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult)
     {
         var result = new ClrPhase1ExecutionResult();
 
-        var assemblyBytes = EmitAssembly(unit, result.Diagnostics);
+        var lowerer = new IrLowerer();
+        var loweringResult = lowerer.Lower(unit, typeCheckResult);
+        result.Diagnostics.AddRange(loweringResult.Diagnostics);
+
+        if (loweringResult.Program == null)
+        {
+            result.IsUnsupported = result.Diagnostics.All.Count > 0 && result.Diagnostics.All.All(d => d.Code == "IR001");
+            return result;
+        }
+
+        var assemblyBytes = EmitAssembly(loweringResult.Program, result.Diagnostics);
         if (assemblyBytes == null)
         {
             result.IsUnsupported = result.Diagnostics.All.All(d => d.Code == "IL001");
@@ -40,19 +50,9 @@ public class ClrPhase1Executor
         return result;
     }
 
-    private static byte[]? EmitAssembly(CompilationUnit unit, DiagnosticBag diagnostics)
+    private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
     {
-        if (unit.Statements.Count != 1)
-        {
-            diagnostics.Report(unit.Span, "phase-1 CLR backend currently supports exactly one top-level expression statement", "IL001");
-            return null;
-        }
-
-        if (unit.Statements[0] is not ExpressionStatement { Expression: { } expression })
-        {
-            diagnostics.Report(unit.Statements[0].Span, "phase-1 CLR backend currently supports expression statements only", "IL001");
-            return null;
-        }
+        var function = program.EntryPoint;
 
         var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
         var assembly = AssemblyDefinition.CreateAssembly(assemblyName, "Kong.Generated", ModuleKind.Dll);
@@ -71,52 +71,108 @@ public class ClrPhase1Executor
             module.TypeSystem.Int64);
         programType.Methods.Add(evalMethod);
 
-        var il = evalMethod.Body.GetILProcessor();
-        if (!EmitExpression(expression, il, diagnostics))
+        if (!EmitFunction(function, evalMethod, module, diagnostics))
         {
             return null;
         }
-
-        il.Emit(OpCodes.Ret);
 
         using var stream = new MemoryStream();
         assembly.Write(stream);
         return stream.ToArray();
     }
 
-    private static bool EmitExpression(IExpression expression, ILProcessor il, DiagnosticBag diagnostics)
+    private static bool EmitFunction(IrFunction function, MethodDefinition method, ModuleDefinition module, DiagnosticBag diagnostics)
     {
-        switch (expression)
+        if (function.ReturnType != TypeSymbols.Int)
         {
-            case IntegerLiteral integerLiteral:
-                il.Emit(OpCodes.Ldc_I8, integerLiteral.Value);
-                return true;
-
-            case InfixExpression infixExpression when infixExpression.Operator is "+" or "-" or "*" or "/":
-                if (!EmitExpression(infixExpression.Left, il, diagnostics))
-                {
-                    return false;
-                }
-
-                if (!EmitExpression(infixExpression.Right, il, diagnostics))
-                {
-                    return false;
-                }
-
-                il.Emit(infixExpression.Operator switch
-                {
-                    "+" => OpCodes.Add,
-                    "-" => OpCodes.Sub,
-                    "*" => OpCodes.Mul,
-                    "/" => OpCodes.Div,
-                    _ => throw new InvalidOperationException(),
-                });
-                return true;
-
-            default:
-                diagnostics.Report(expression.Span, $"phase-1 CLR backend does not support expression '{expression.TokenLiteral()}'", "IL001");
-                return false;
+            diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int return type, got '{function.ReturnType}'", "IL001");
+            return false;
         }
+
+        if (function.Blocks.Count != 1)
+        {
+            diagnostics.Report(Span.Empty, "phase-1 CLR backend currently supports exactly one IR block", "IL001");
+            return false;
+        }
+
+        var block = function.Blocks[0];
+        method.Body.InitLocals = true;
+
+        var locals = new Dictionary<IrValueId, VariableDefinition>();
+        foreach (var (valueId, type) in function.ValueTypes)
+        {
+            if (type != TypeSymbols.Int)
+            {
+                diagnostics.Report(Span.Empty, $"phase-1 CLR backend only supports int IR values, got '{type}'", "IL001");
+                return false;
+            }
+
+            locals[valueId] = new VariableDefinition(module.TypeSystem.Int64);
+            method.Body.Variables.Add(locals[valueId]);
+        }
+
+        var il = method.Body.GetILProcessor();
+        foreach (var instruction in block.Instructions)
+        {
+            switch (instruction)
+            {
+                case IrConstInt constInt:
+                    il.Emit(OpCodes.Ldc_I8, constInt.Value);
+                    il.Emit(OpCodes.Stloc, locals[constInt.Destination]);
+                    break;
+
+                case IrBinary binary:
+                    il.Emit(OpCodes.Ldloc, locals[binary.Left]);
+                    il.Emit(OpCodes.Ldloc, locals[binary.Right]);
+                    il.Emit(binary.Operator switch
+                    {
+                        IrBinaryOperator.Add => OpCodes.Add,
+                        IrBinaryOperator.Subtract => OpCodes.Sub,
+                        IrBinaryOperator.Multiply => OpCodes.Mul,
+                        IrBinaryOperator.Divide => OpCodes.Div,
+                        _ => throw new InvalidOperationException(),
+                    });
+                    il.Emit(OpCodes.Stloc, locals[binary.Destination]);
+                    break;
+
+                default:
+                    diagnostics.Report(Span.Empty, "phase-1 CLR backend encountered unsupported IR instruction", "IL001");
+                    return false;
+            }
+        }
+
+        if (block.Terminator is not IrReturn ret)
+        {
+            diagnostics.Report(Span.Empty, "phase-1 CLR backend requires an IR return terminator", "IL001");
+            return false;
+        }
+
+        if (!locals.TryGetValue(ret.Value, out var returnLocal))
+        {
+            diagnostics.Report(Span.Empty, "phase-1 CLR backend could not resolve IR return value", "IL001");
+            return false;
+        }
+
+        il.Emit(OpCodes.Ldloc, returnLocal);
+        il.Emit(OpCodes.Ret);
+        return true;
+    }
+
+    public ClrPhase1ExecutionResult Execute(CompilationUnit unit)
+    {
+        var resolver = new NameResolver();
+        var names = resolver.Resolve(unit);
+
+        var checker = new TypeChecker();
+        var typeCheck = checker.Check(unit, names);
+        var result = new ClrPhase1ExecutionResult();
+        result.Diagnostics.AddRange(typeCheck.Diagnostics);
+        if (typeCheck.Diagnostics.HasErrors)
+        {
+            return result;
+        }
+
+        return Execute(unit, typeCheck);
     }
 
     private static long? ExecuteAssembly(byte[] assemblyBytes, DiagnosticBag diagnostics)
