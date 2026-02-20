@@ -4,7 +4,6 @@ using Kong.Common;
 using Kong.Parsing;
 using Kong.Semantic;
 using Kong.Semantic.TypeMapping;
-using System.Reflection;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
@@ -943,47 +942,14 @@ public class ClrArtifactBuilder
         TypeSymbol returnType,
         DiagnosticBag diagnostics)
     {
-        var lastDot = methodPath.LastIndexOf('.');
-        if (lastDot <= 0 || lastDot == methodPath.Length - 1)
+        if (!StaticClrMethodResolver.IsKnownMethodPath(methodPath))
         {
-            diagnostics.Report(Span.Empty, $"phase-5 CLR backend invalid static method path '{methodPath}'", "IL001");
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend unknown static method '{methodPath}'", "IL001");
             return null;
         }
 
-        var typeName = methodPath[..lastDot];
-        var methodName = methodPath[(lastDot + 1)..];
-        var clrType = ResolveClrType(typeName);
-        if (clrType == null)
-        {
-            diagnostics.Report(Span.Empty, $"phase-5 CLR backend could not resolve CLR type '{typeName}'", "IL001");
-            return null;
-        }
-
-        var clrArgumentTypes = new List<Type>(argumentTypes.Count);
-        for (var i = 0; i < argumentTypes.Count; i++)
-        {
-            if (!TryMapToClrType(argumentTypes[i], out var clrArgumentType))
-            {
-                diagnostics.Report(Span.Empty, $"phase-5 CLR backend does not support static-call argument type '{argumentTypes[i]}'", "IL001");
-                return null;
-            }
-
-            clrArgumentTypes.Add(clrArgumentType);
-        }
-
-        if (!TryMapToClrType(returnType, out var clrReturnType))
-        {
-            diagnostics.Report(Span.Empty, $"phase-5 CLR backend does not support static-call return type '{returnType}'", "IL001");
-            return null;
-        }
-
-        var matchingMethods = clrType
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Where(m => m.Name == methodName)
-            .Where(m => ParametersMatch(m.GetParameters(), clrArgumentTypes))
-            .Where(m => m.ReturnType == clrReturnType)
-            .ToList();
-        if (matchingMethods.Count == 0)
+        var binding = StaticClrMethodResolver.Resolve(methodPath, argumentTypes);
+        if (binding == null)
         {
             diagnostics.Report(Span.Empty,
                 $"phase-5 CLR backend could not find overload for '{methodPath}' with argument types ({string.Join(", ", argumentTypes)}) and return type '{returnType}'",
@@ -991,84 +957,15 @@ public class ClrArtifactBuilder
             return null;
         }
 
-        if (matchingMethods.Count > 1)
+        if (binding.ReturnType != returnType)
         {
             diagnostics.Report(Span.Empty,
-                $"phase-5 CLR backend found ambiguous overloads for '{methodPath}' with argument types ({string.Join(", ", argumentTypes)})",
+                $"phase-5 CLR backend expected static call '{methodPath}' to return '{returnType}', but resolver returned '{binding.ReturnType}'",
                 "IL001");
             return null;
         }
 
-        return module.ImportReference(matchingMethods[0]);
-    }
-
-    private static bool TryMapToClrType(TypeSymbol type, out Type clrType)
-    {
-        clrType = typeof(void);
-
-        if (type == TypeSymbols.Void)
-        {
-            clrType = typeof(void);
-            return true;
-        }
-
-        if (type == TypeSymbols.Int)
-        {
-            clrType = typeof(long);
-            return true;
-        }
-
-        if (type == TypeSymbols.Bool)
-        {
-            clrType = typeof(bool);
-            return true;
-        }
-
-        if (type == TypeSymbols.String)
-        {
-            clrType = typeof(string);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool ParametersMatch(IReadOnlyList<ParameterInfo> parameters, IReadOnlyList<Type> argumentTypes)
-    {
-        if (parameters.Count != argumentTypes.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < parameters.Count; i++)
-        {
-            if (parameters[i].ParameterType != argumentTypes[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static Type? ResolveClrType(string typeName)
-    {
-        var resolved = Type.GetType(typeName);
-        if (resolved != null)
-        {
-            return resolved;
-        }
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var candidate = assembly.GetType(typeName, throwOnError: false, ignoreCase: false);
-            if (candidate != null)
-            {
-                return candidate;
-            }
-        }
-
-        return null;
+        return module.ImportReference(binding.MethodInfo);
     }
 
 }

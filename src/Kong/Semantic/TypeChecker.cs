@@ -1,6 +1,5 @@
 using Kong.Common;
 using Kong.Parsing;
-using System.Reflection;
 
 namespace Kong.Semantic;
 
@@ -469,32 +468,7 @@ public class TypeChecker
             return true;
         }
 
-        var lastDot = methodPath.LastIndexOf('.');
-        if (lastDot <= 0 || lastDot == methodPath.Length - 1)
-        {
-            _result.Diagnostics.Report(memberAccessExpression.Span,
-                $"invalid static method path '{methodPath}'",
-                "T122");
-            return true;
-        }
-
-        var typeName = methodPath[..lastDot];
-        var methodName = methodPath[(lastDot + 1)..];
-
-        var clrType = ResolveClrType(typeName);
-        if (clrType == null)
-        {
-            _result.Diagnostics.Report(memberAccessExpression.Span,
-                $"unknown CLR type '{typeName}'",
-                "T122");
-            return true;
-        }
-
-        var candidateMethods = clrType
-            .GetMethods(BindingFlags.Public | BindingFlags.Static)
-            .Where(m => m.Name == methodName)
-            .ToList();
-        if (candidateMethods.Count == 0)
+        if (!StaticClrMethodResolver.IsKnownMethodPath(methodPath))
         {
             _result.Diagnostics.Report(memberAccessExpression.Span,
                 $"unknown static method '{methodPath}'",
@@ -502,25 +476,8 @@ public class TypeChecker
             return true;
         }
 
-        var argumentClrTypes = new List<Type>(argumentTypes.Count);
-        for (var i = 0; i < argumentTypes.Count; i++)
-        {
-            if (!TryMapToClrType(argumentTypes[i], out var clrArgType))
-            {
-                _result.Diagnostics.Report(
-                    memberAccessExpression.Span,
-                    $"static calls do not support Kong type '{argumentTypes[i]}' in argument {i + 1}",
-                    "T122");
-                return true;
-            }
-
-            argumentClrTypes.Add(clrArgType);
-        }
-
-        var matchingMethods = candidateMethods
-            .Where(method => ParametersMatch(method.GetParameters(), argumentClrTypes))
-            .ToList();
-        if (matchingMethods.Count == 0)
+        var binding = StaticClrMethodResolver.Resolve(methodPath, argumentTypes);
+        if (binding == null)
         {
             _result.Diagnostics.Report(
                 memberAccessExpression.Span,
@@ -529,24 +486,7 @@ public class TypeChecker
             return true;
         }
 
-        if (matchingMethods.Count > 1)
-        {
-            _result.Diagnostics.Report(
-                memberAccessExpression.Span,
-                $"ambiguous static method call '{methodPath}' with argument types ({string.Join(", ", argumentTypes)})",
-                "T122");
-            return true;
-        }
-
-        if (!TryMapFromClrType(matchingMethods[0].ReturnType, out returnType))
-        {
-            _result.Diagnostics.Report(
-                memberAccessExpression.Span,
-                $"static method '{methodPath}' returns unsupported CLR type '{matchingMethods[0].ReturnType.FullName}'",
-                "T122");
-            returnType = TypeSymbols.Error;
-            return true;
-        }
+        returnType = binding.ReturnType;
 
         return true;
     }
@@ -642,100 +582,6 @@ public class TypeChecker
         segments.Push(identifier.Value);
         methodPath = string.Join('.', segments);
         return true;
-    }
-
-    private static Type? ResolveClrType(string typeName)
-    {
-        var resolved = Type.GetType(typeName);
-        if (resolved != null)
-        {
-            return resolved;
-        }
-
-        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            var candidate = assembly.GetType(typeName, throwOnError: false, ignoreCase: false);
-            if (candidate != null)
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
-
-    private static bool ParametersMatch(IReadOnlyList<ParameterInfo> parameters, IReadOnlyList<Type> argumentTypes)
-    {
-        if (parameters.Count != argumentTypes.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < parameters.Count; i++)
-        {
-            if (parameters[i].ParameterType != argumentTypes[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool TryMapToClrType(TypeSymbol type, out Type clrType)
-    {
-        clrType = typeof(void);
-
-        if (type == TypeSymbols.Int)
-        {
-            clrType = typeof(long);
-            return true;
-        }
-
-        if (type == TypeSymbols.Bool)
-        {
-            clrType = typeof(bool);
-            return true;
-        }
-
-        if (type == TypeSymbols.String)
-        {
-            clrType = typeof(string);
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryMapFromClrType(Type clrType, out TypeSymbol type)
-    {
-        type = TypeSymbols.Error;
-
-        if (clrType == typeof(void))
-        {
-            type = TypeSymbols.Void;
-            return true;
-        }
-
-        if (clrType == typeof(long))
-        {
-            type = TypeSymbols.Int;
-            return true;
-        }
-
-        if (clrType == typeof(bool))
-        {
-            type = TypeSymbols.Bool;
-            return true;
-        }
-
-        if (clrType == typeof(string))
-        {
-            type = TypeSymbols.String;
-            return true;
-        }
-
-        return false;
     }
 
     private TypeSymbol CheckArrayLiteral(ArrayLiteral expression)
