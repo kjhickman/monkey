@@ -9,7 +9,7 @@ src/Kong/
   Lexing/          Tokenization
   Parsing/         Parser and AST nodes
   Semantic/        Name resolution and type checking
-  CodeGeneration/  IR lowering and CLR emitter/runtime builtins
+  CodeGeneration/  IR lowering and CLR emitter/runtime interop
   Common/          Shared diagnostics and source span types
 src/Kong.Cli/      CLI entry point
 tests/Kong.Tests/  xUnit v3 tests organized by phase

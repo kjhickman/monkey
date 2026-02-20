@@ -112,7 +112,6 @@ public class ClrArtifactBuilder
         var typeMapper = new DefaultTypeMapper(delegateTypeMap);
 
         var methodMap = new Dictionary<string, MethodDefinition>();
-        var builtinMap = BuildBuiltinMap(module, BuiltinRegistry.Default);
         foreach (var function in allFunctions)
         {
             var returnType = MapType(function.ReturnType, module, diagnostics, typeMapper);
@@ -186,7 +185,7 @@ public class ClrArtifactBuilder
 
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, builtinMap, module, diagnostics, delegateTypeMap, typeMapper))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, module, diagnostics, delegateTypeMap, typeMapper))
             {
                 return null;
             }
@@ -203,7 +202,6 @@ public class ClrArtifactBuilder
         IReadOnlyDictionary<string, MethodDefinition> methodMap,
         IReadOnlyDictionary<string, IrFunction> functionMap,
         IReadOnlyDictionary<string, DisplayClassInfo> displayClassMap,
-        IReadOnlyDictionary<string, MethodReference> builtinMap,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
         IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
@@ -360,15 +358,8 @@ public class ClrArtifactBuilder
                             break;
                         }
 
-                        if (!builtinMap.TryGetValue(call.FunctionName, out var builtinMethod))
-                        {
-                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
-                            return false;
-                        }
-
-                        il.Emit(OpCodes.Call, builtinMethod);
-                        il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
-                        break;
+                        diagnostics.Report(Span.Empty, $"phase-5 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
+                        return false;
 
                     case IrStaticCall staticCall:
                     {
@@ -406,14 +397,8 @@ public class ClrArtifactBuilder
                             break;
                         }
 
-                        if (!builtinMap.TryGetValue(callVoid.FunctionName, out var builtinVoidMethod))
-                        {
-                            diagnostics.Report(Span.Empty, $"phase-6 CLR backend could not resolve function '{callVoid.FunctionName}'", "IL001");
-                            return false;
-                        }
-
-                        il.Emit(OpCodes.Call, builtinVoidMethod);
-                        break;
+                        diagnostics.Report(Span.Empty, $"phase-6 CLR backend could not resolve function '{callVoid.FunctionName}'", "IL001");
+                        return false;
 
                     case IrStaticCallVoid staticCallVoid:
                     {
@@ -915,24 +900,6 @@ public class ClrArtifactBuilder
             captureFields,
             delegateType,
             BuildDelegateConstructor(delegateType, module));
-    }
-
-    private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module, BuiltinRegistry registry)
-    {
-        var map = new Dictionary<string, MethodReference>();
-        
-        foreach (var publicName in registry.GetAllPublicNames())
-        {
-            var bindings = registry.GetBindingsForName(publicName);
-            foreach (var binding in bindings)
-            {
-                var methodRef = module.ImportReference(
-                    binding.RuntimeType.GetMethod(binding.RuntimeMethodName)!);
-                map[binding.Signature.IrFunctionName] = methodRef;
-            }
-        }
-        
-        return map;
     }
 
     private static MethodReference? ImportStaticMethod(

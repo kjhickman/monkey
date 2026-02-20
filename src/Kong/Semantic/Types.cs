@@ -95,7 +95,7 @@ public static class TypeSymbols
     public static NullTypeSymbol Null { get; } = NullTypeSymbol.Instance;
     public static ErrorTypeSymbol Error { get; } = ErrorTypeSymbol.Instance;
 
-    public static TypeSymbol? TryGetBuiltin(string name)
+    public static TypeSymbol? TryGetPrimitive(string name)
     {
         return name switch
         {

@@ -18,7 +18,7 @@ public static class TypeAnnotationBinder
 
     private static TypeSymbol? BindNamedType(NamedType namedType, DiagnosticBag diagnostics)
     {
-        var type = TypeSymbols.TryGetBuiltin(namedType.Name);
+        var type = TypeSymbols.TryGetPrimitive(namedType.Name);
         if (type != null)
         {
             return type;

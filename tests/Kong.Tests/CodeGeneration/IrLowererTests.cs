@@ -95,17 +95,17 @@ public class IrLowererTests
     }
 
     [Fact]
-    public void TestLowersBuiltinCallForStringLength()
+    public void TestLowersStaticClrCallVoid()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \"abc\"; len(s);");
+        var (unit, typeCheck) = ParseAndTypeCheck("System.Console.WriteLine(1);");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
 
         Assert.NotNull(lowering.Program);
         Assert.False(lowering.Diagnostics.HasErrors);
-        var call = Assert.IsType<IrCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrCall));
-        Assert.Equal("__builtin_len_string", call.FunctionName);
+        var call = Assert.IsType<IrStaticCallVoid>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrStaticCallVoid));
+        Assert.Equal("System.Console.WriteLine", call.MethodPath);
     }
 
     [Fact]

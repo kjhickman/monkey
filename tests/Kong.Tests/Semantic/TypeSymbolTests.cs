@@ -17,11 +17,11 @@ public class TypeSymbolTests
     [Fact]
     public void TestPrimitiveTypeSymbolsAreSingletons()
     {
-        Assert.Same(TypeSymbols.Int, TypeSymbols.TryGetBuiltin("int"));
-        Assert.Same(TypeSymbols.String, TypeSymbols.TryGetBuiltin("string"));
-        Assert.Same(TypeSymbols.Bool, TypeSymbols.TryGetBuiltin("bool"));
-        Assert.Same(TypeSymbols.Void, TypeSymbols.TryGetBuiltin("void"));
-        Assert.Same(TypeSymbols.Null, TypeSymbols.TryGetBuiltin("null"));
+        Assert.Same(TypeSymbols.Int, TypeSymbols.TryGetPrimitive("int"));
+        Assert.Same(TypeSymbols.String, TypeSymbols.TryGetPrimitive("string"));
+        Assert.Same(TypeSymbols.Bool, TypeSymbols.TryGetPrimitive("bool"));
+        Assert.Same(TypeSymbols.Void, TypeSymbols.TryGetPrimitive("void"));
+        Assert.Same(TypeSymbols.Null, TypeSymbols.TryGetPrimitive("null"));
     }
 
     [Fact]

@@ -23,7 +23,6 @@ public class IrLowerer
     private int _nextLocalId;
     private int _nextBlockId;
     private int _nextLambdaId;
-    private readonly BuiltinRegistry _builtinRegistry = BuiltinRegistry.Default;
 
 
     public IrLoweringResult Lower(CompilationUnit unit, TypeCheckResult typeCheckResult)
@@ -882,36 +881,6 @@ public class IrLowerer
             return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
         }
 
-        if (callExpression.Function is Identifier builtinIdentifier &&
-            ((_nameResolution != null &&
-              _nameResolution.IdentifierSymbols.TryGetValue(builtinIdentifier, out var symbol) &&
-              symbol.Kind == NameSymbolKind.Builtin) ||
-             _builtinRegistry.IsDefined(builtinIdentifier.Value)) &&
-            TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
-        {
-            var builtinArguments = new List<IrValueId>(callExpression.Arguments.Count);
-            foreach (var argument in callExpression.Arguments)
-            {
-                var value = LowerExpression(argument);
-                if (value == null)
-                {
-                    return null;
-                }
-
-                builtinArguments.Add(value.Value);
-            }
-
-            if (returnType == TypeSymbols.Void)
-            {
-                _currentBlock.Instructions.Add(new IrCallVoid(builtinName, builtinArguments));
-                return null;
-            }
-
-            var builtinDestination = AllocateValue(returnType);
-            _currentBlock.Instructions.Add(new IrCall(builtinDestination, builtinName, builtinArguments));
-            return builtinDestination;
-        }
-
         var closureValue = LowerExpression(callExpression.Function);
         if (closureValue == null)
         {
@@ -982,30 +951,6 @@ public class IrLowerer
         var destination = AllocateValue(returnType);
         _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes));
         return destination;
-    }
-
-    private bool TryLowerBuiltinCallName(Identifier identifier, CallExpression callExpression, out string builtinName)
-    {
-        builtinName = string.Empty;
-
-        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
-        foreach (var argument in callExpression.Arguments)
-        {
-            if (!TryGetExpressionType(argument, out var argType))
-            {
-                return false;
-            }
-            argumentTypes.Add(argType);
-        }
-
-        var binding = _builtinRegistry.ResolveByTypeSignature(identifier.Value, argumentTypes);
-        if (binding != null)
-        {
-            builtinName = binding.Signature.IrFunctionName;
-            return true;
-        }
-
-        return false;
     }
 
     private static bool TryExtractMethodPath(MemberAccessExpression expression, out string methodPath)

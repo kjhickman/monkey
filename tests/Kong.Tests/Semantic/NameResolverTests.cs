@@ -7,9 +7,9 @@ namespace Kong.Tests.Semantic;
 public class NameResolverTests
 {
     [Fact]
-    public void TestResolvesIdentifiersAndBuiltins()
+    public void TestResolvesIdentifiersAndStaticClrCall()
     {
-        var unit = Parse("let x = 1; let y = x; y; len([x, y]);");
+        var unit = Parse("let x = 1; let y = x; y; System.Math.Abs(x);");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -30,10 +30,10 @@ public class NameResolverTests
 
         var callExpressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[3]);
         var callExpression = Assert.IsType<CallExpression>(callExpressionStatement.Expression);
-        var lenIdentifier = Assert.IsType<Identifier>(callExpression.Function);
-        Assert.True(result.IdentifierSymbols.TryGetValue(lenIdentifier, out var lenSymbol));
-        Assert.Equal(NameSymbolKind.Builtin, lenSymbol.Kind);
-        Assert.Equal("len", lenSymbol.Name);
+        var methodAccess = Assert.IsType<MemberAccessExpression>(callExpression.Function);
+        var typeAccess = Assert.IsType<MemberAccessExpression>(methodAccess.Object);
+        var systemIdentifier = Assert.IsType<Identifier>(typeAccess.Object);
+        Assert.False(result.IdentifierSymbols.ContainsKey(systemIdentifier));
     }
 
     [Fact]

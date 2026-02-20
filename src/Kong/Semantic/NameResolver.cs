@@ -8,7 +8,6 @@ public enum NameSymbolKind
     Global,
     Local,
     Parameter,
-    Builtin,
 }
 
 public readonly record struct NameSymbol(string Name, NameSymbolKind Kind, Span DeclarationSpan, int FunctionDepth);
@@ -64,7 +63,6 @@ public class NameResolver
     public NameResolution Resolve(CompilationUnit unit)
     {
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
-        PredeclareBuiltins();
         PredeclareTopLevelFunctions(unit);
 
         foreach (var statement in unit.Statements)
@@ -93,15 +91,6 @@ public class NameResolver
             var symbol = new NameSymbol(functionDeclaration.Name.Value, NameSymbolKind.Global, functionDeclaration.Name.Span, _scope.FunctionDepth);
             _scope.Symbols[functionDeclaration.Name.Value] = symbol;
             _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
-        }
-    }
-
-    private void PredeclareBuiltins()
-    {
-        foreach (var name in BuiltinRegistry.Default.GetAllPublicNames())
-        {
-            var symbol = new NameSymbol(name, NameSymbolKind.Builtin, Span.Empty, FunctionDepth: 0);
-            _scope.Symbols[name] = symbol;
         }
     }
 
@@ -290,7 +279,7 @@ public class NameResolver
             return;
         }
 
-        if (symbol.Kind is NameSymbolKind.Global or NameSymbolKind.Builtin)
+        if (symbol.Kind is NameSymbolKind.Global)
         {
             return;
         }

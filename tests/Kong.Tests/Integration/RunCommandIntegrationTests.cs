@@ -84,13 +84,13 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandExecutesArrayAndBuiltinProgramWithClrBackend()
+    public void TestRunCommandExecutesArrayAndStaticClrProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let s: string = \"abc\"; let xs: int[] = [1, 2, 3]; len(s) + first(xs) + last(push(xs, 4)); }");
+        var filePath = CreateTempProgram("fn Main() { let xs: int[] = [1, 2, 3]; System.Console.WriteLine(xs[0]); System.Math.Abs(-4); }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
-            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("1", stdout);
             Assert.DoesNotContain("[IR001]", stderr);
             Assert.Equal(string.Empty, stderr.Trim());
         }
@@ -149,9 +149,9 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandSupportsPutsBuiltinOutput()
+    public void TestRunCommandSupportsStaticClrOutput()
     {
-        var filePath = CreateTempProgram("fn Main() { puts(42); }");
+        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42); }");
         try
         {
             var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);

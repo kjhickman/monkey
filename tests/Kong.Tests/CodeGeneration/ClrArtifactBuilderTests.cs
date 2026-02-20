@@ -88,21 +88,21 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
-    public void TestExecutesBuiltinStringLength()
+    public void TestExecutesStaticClrConsoleWriteLine()
     {
-        var result = Execute("let s: string = \"hello\"; len(s);");
+        var result = Execute("System.Console.WriteLine(42); 1;");
 
         Assert.True(result.Executed);
-        Assert.Equal(5, result.Value);
+        Assert.Equal(1, result.Value);
     }
 
     [Fact]
-    public void TestExecutesBuiltinArrayOperations()
+    public void TestExecutesStaticClrMathAbs()
     {
-        var result = Execute("let xs: int[] = [1, 2, 3]; let ys: int[] = push(xs, 4); first(ys) + last(ys);");
+        var result = Execute("System.Math.Abs(-42);");
 
         Assert.True(result.Executed);
-        Assert.Equal(5, result.Value);
+        Assert.Equal(42, result.Value);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesReturnInsideIfBranches()
     {
-        var result = Execute("fn Pick(flag: bool) -> int { if (flag) { return 1; } else { return 2; } } fn Main() { puts(Pick(false)); }");
+        var result = Execute("fn Pick(flag: bool) -> int { if (flag) { return 1; } else { return 2; } } fn Main() { System.Console.WriteLine(Pick(false)); }");
 
         Assert.True(result.Executed);
     }
