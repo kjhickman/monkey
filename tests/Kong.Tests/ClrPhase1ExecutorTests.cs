@@ -176,6 +176,17 @@ public class ClrPhase1ExecutorTests
     }
 
     [Fact]
+    public void TestExecutesReturnInsideIfBranches()
+    {
+        var unit = Parse("fn Pick(flag: bool) -> int { if (flag) { return 1; } else { return 2; } } fn Main() { puts(Pick(false)); }");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+    }
+
+    [Fact]
     public void TestExecutesProgramWithImplicitVoidNamedFunctionDeclaration()
     {
         var unit = Parse("fn Main() { } 1;");

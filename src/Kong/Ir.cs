@@ -50,6 +50,10 @@ public enum IrBinaryOperator
     Subtract,
     Multiply,
     Divide,
+    LessThan,
+    GreaterThan,
+    Equal,
+    NotEqual,
 }
 
 public sealed record class IrBinary(

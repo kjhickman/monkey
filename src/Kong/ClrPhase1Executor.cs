@@ -346,14 +346,37 @@ public class ClrPhase1Executor
                     case IrBinary binary:
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
-                        il.Emit(binary.Operator switch
+                        switch (binary.Operator)
                         {
-                            IrBinaryOperator.Add => OpCodes.Add,
-                            IrBinaryOperator.Subtract => OpCodes.Sub,
-                            IrBinaryOperator.Multiply => OpCodes.Mul,
-                            IrBinaryOperator.Divide => OpCodes.Div,
-                            _ => throw new InvalidOperationException(),
-                        });
+                            case IrBinaryOperator.Add:
+                                il.Emit(OpCodes.Add);
+                                break;
+                            case IrBinaryOperator.Subtract:
+                                il.Emit(OpCodes.Sub);
+                                break;
+                            case IrBinaryOperator.Multiply:
+                                il.Emit(OpCodes.Mul);
+                                break;
+                            case IrBinaryOperator.Divide:
+                                il.Emit(OpCodes.Div);
+                                break;
+                            case IrBinaryOperator.LessThan:
+                                il.Emit(OpCodes.Clt);
+                                break;
+                            case IrBinaryOperator.GreaterThan:
+                                il.Emit(OpCodes.Cgt);
+                                break;
+                            case IrBinaryOperator.Equal:
+                                il.Emit(OpCodes.Ceq);
+                                break;
+                            case IrBinaryOperator.NotEqual:
+                                il.Emit(OpCodes.Ceq);
+                                il.Emit(OpCodes.Ldc_I4_0);
+                                il.Emit(OpCodes.Ceq);
+                                break;
+                            default:
+                                throw new InvalidOperationException();
+                        }
                         il.Emit(OpCodes.Stloc, valueLocals[binary.Destination]);
                         break;
 

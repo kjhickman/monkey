@@ -518,6 +518,30 @@ public class IrLowerer
                 return destination;
             }
 
+            case PrefixExpression prefixExpression when prefixExpression.Operator == "!":
+            {
+                if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || rightType != TypeSymbols.Bool)
+                {
+                    _result.Diagnostics.Report(prefixExpression.Span,
+                        "phase-6 IR lowerer supports unary '!' only for bool",
+                        "IR001");
+                    return null;
+                }
+
+                var right = LowerExpression(prefixExpression.Right);
+                if (right == null)
+                {
+                    return null;
+                }
+
+                var falseValue = AllocateValue(TypeSymbols.Bool);
+                _currentBlock.Instructions.Add(new IrConstBool(falseValue, false));
+
+                var destination = AllocateValue(TypeSymbols.Bool);
+                _currentBlock.Instructions.Add(new IrBinary(destination, IrBinaryOperator.Equal, right.Value, falseValue));
+                return destination;
+            }
+
             case InfixExpression infixExpression:
             {
                 if (!TryMapBinaryOperator(infixExpression.Operator, out var op))
@@ -534,12 +558,39 @@ public class IrLowerer
                     return null;
                 }
 
-                if (leftType != TypeSymbols.Int || rightType != TypeSymbols.Int)
+                var areBothInt = leftType == TypeSymbols.Int && rightType == TypeSymbols.Int;
+                var areSameType = TypeEquals(leftType, rightType);
+                var supportsEqualityType = leftType == TypeSymbols.Int || leftType == TypeSymbols.Bool || leftType == TypeSymbols.String;
+
+                if (op is IrBinaryOperator.Add or IrBinaryOperator.Subtract or IrBinaryOperator.Multiply or IrBinaryOperator.Divide)
                 {
-                    _result.Diagnostics.Report(infixExpression.Span,
-                        $"phase-4 IR lowerer supports arithmetic operators only for int, got '{leftType}' and '{rightType}'",
-                        "IR001");
-                    return null;
+                    if (!areBothInt)
+                    {
+                        _result.Diagnostics.Report(infixExpression.Span,
+                            $"phase-6 IR lowerer supports arithmetic operators only for int, got '{leftType}' and '{rightType}'",
+                            "IR001");
+                        return null;
+                    }
+                }
+                else if (op is IrBinaryOperator.LessThan or IrBinaryOperator.GreaterThan)
+                {
+                    if (!areBothInt)
+                    {
+                        _result.Diagnostics.Report(infixExpression.Span,
+                            $"phase-6 IR lowerer supports comparison operators only for int, got '{leftType}' and '{rightType}'",
+                            "IR001");
+                        return null;
+                    }
+                }
+                else if (op is IrBinaryOperator.Equal or IrBinaryOperator.NotEqual)
+                {
+                    if (!areSameType || !supportsEqualityType)
+                    {
+                        _result.Diagnostics.Report(infixExpression.Span,
+                            $"phase-6 IR lowerer supports equality operators for matching int/bool/string types, got '{leftType}' and '{rightType}'",
+                            "IR001");
+                        return null;
+                    }
                 }
 
                 var left = LowerExpression(infixExpression.Left);
@@ -549,7 +600,12 @@ public class IrLowerer
                     return null;
                 }
 
-                var destination = AllocateValue(TypeSymbols.Int);
+                if (!TryGetExpressionType(infixExpression, out var expressionType))
+                {
+                    return null;
+                }
+
+                var destination = AllocateValue(expressionType);
                 _currentBlock.Instructions.Add(new IrBinary(destination, op, left.Value, right.Value));
                 return destination;
             }
@@ -606,6 +662,11 @@ public class IrLowerer
             return null;
         }
 
+        if (resultType == TypeSymbols.Void)
+        {
+            return LowerVoidIfExpression(ifExpression, condition.Value);
+        }
+
         var resultLocal = AllocateAnonymousLocal(resultType);
 
         var thenBlock = NewBlock();
@@ -636,6 +697,104 @@ public class IrLowerer
         var destination = AllocateValue(resultType);
         _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal));
         return destination;
+    }
+
+    private IrValueId? LowerVoidIfExpression(IfExpression ifExpression, IrValueId condition)
+    {
+        var thenBlock = NewBlock();
+        var elseBlock = NewBlock();
+        var mergeBlock = NewBlock();
+
+        _currentBlock.Terminator = new IrBranch(condition, thenBlock.Id, elseBlock.Id);
+
+        _currentBlock = thenBlock;
+        var thenTerminated = LowerVoidBranchBlock(ifExpression.Consequence, mergeBlock.Id);
+        if (thenTerminated == null)
+        {
+            return null;
+        }
+
+        _currentBlock = elseBlock;
+        var elseTerminated = LowerVoidBranchBlock(ifExpression.Alternative!, mergeBlock.Id);
+        if (elseTerminated == null)
+        {
+            return null;
+        }
+
+        if (thenTerminated.Value && elseTerminated.Value)
+        {
+            _function.Blocks.Remove(mergeBlock);
+            _currentBlock = thenBlock;
+            return null;
+        }
+
+        _currentBlock = mergeBlock;
+        return null;
+    }
+
+    private bool? LowerVoidBranchBlock(BlockStatement block, int mergeBlockId)
+    {
+        foreach (var statement in block.Statements)
+        {
+            switch (statement)
+            {
+                case LetStatement letStatement:
+                    if (!LowerLetStatement(letStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
+                case ReturnStatement returnStatement:
+                    if (returnStatement.ReturnValue == null)
+                    {
+                        if (_function.ReturnType == TypeSymbols.Void)
+                        {
+                            _currentBlock.Terminator = new IrReturnVoid();
+                            return true;
+                        }
+
+                        _result.Diagnostics.Report(returnStatement.Span,
+                            "phase-6 IR lowerer requires return values for non-void functions",
+                            "IR001");
+                        return null;
+                    }
+
+                    var returnValue = LowerExpression(returnStatement.ReturnValue);
+                    if (returnValue == null)
+                    {
+                        return null;
+                    }
+
+                    _currentBlock.Terminator = new IrReturn(returnValue.Value);
+                    return true;
+
+                case ExpressionStatement { Expression: { } expression }:
+                {
+                    var value = LowerExpression(expression);
+                    if (value == null && (!TryGetExpressionType(expression, out var type) || type != TypeSymbols.Void))
+                    {
+                        return null;
+                    }
+
+                    break;
+                }
+
+                default:
+                    _result.Diagnostics.Report(statement.Span,
+                        "phase-6 IR lowerer does not support this statement in if branch",
+                        "IR001");
+                    return null;
+            }
+
+            if (_currentBlock.Terminator != null)
+            {
+                return true;
+            }
+        }
+
+        _currentBlock.Terminator = new IrJump(mergeBlockId);
+        return false;
     }
 
     private IrValueId? LowerBlockResultExpression(BlockStatement block, TypeSymbol expectedType)
@@ -972,6 +1131,40 @@ public class IrLowerer
                IsSupportedRuntimeType(functionType.ReturnType);
     }
 
+    private static bool TypeEquals(TypeSymbol left, TypeSymbol right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is ArrayTypeSymbol leftArray && right is ArrayTypeSymbol rightArray)
+        {
+            return TypeEquals(leftArray.ElementType, rightArray.ElementType);
+        }
+
+        if (left is FunctionTypeSymbol leftFunction && right is FunctionTypeSymbol rightFunction)
+        {
+            if (!TypeEquals(leftFunction.ReturnType, rightFunction.ReturnType) ||
+                leftFunction.ParameterTypes.Count != rightFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
+            {
+                if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return left == right;
+    }
+
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)
     {
         irOp = op switch
@@ -980,9 +1173,13 @@ public class IrLowerer
             "-" => IrBinaryOperator.Subtract,
             "*" => IrBinaryOperator.Multiply,
             "/" => IrBinaryOperator.Divide,
+            "<" => IrBinaryOperator.LessThan,
+            ">" => IrBinaryOperator.GreaterThan,
+            "==" => IrBinaryOperator.Equal,
+            "!=" => IrBinaryOperator.NotEqual,
             _ => default,
         };
 
-        return op is "+" or "-" or "*" or "/";
+        return op is "+" or "-" or "*" or "/" or "<" or ">" or "==" or "!=";
     }
 }
