@@ -1,4 +1,5 @@
 using DotMake.CommandLine;
+using Kong.Cli;
 
 namespace Kong.Cli.Commands;
 
@@ -35,6 +36,20 @@ public class RunFile
         if (typeCheckResult.Diagnostics.HasErrors)
         {
             PrintDiagnostics(typeCheckResult.Diagnostics);
+            return;
+        }
+
+        var clrExecutor = new ClrPhase1Executor();
+        var clrResult = clrExecutor.Execute(program);
+        if (clrResult.Executed)
+        {
+            Console.WriteLine(clrResult.Value);
+            return;
+        }
+
+        if (!clrResult.IsUnsupported)
+        {
+            PrintDiagnostics(clrResult.Diagnostics);
             return;
         }
 

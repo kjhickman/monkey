@@ -53,6 +53,22 @@ public class RunCommandIntegrationTests
         }
     }
 
+    [Fact]
+    public void TestRunCommandExecutesSimpleAdditionWithClrPhase1Backend()
+    {
+        var filePath = CreateTempProgram("1 + 1;");
+        try
+        {
+            var (stdout, stderr) = ExecuteRunCommand(filePath);
+            Assert.Equal("2", stdout.Trim());
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            System.IO.File.Delete(filePath);
+        }
+    }
+
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");
