@@ -14,6 +14,7 @@ public class TypeChecker
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
     private NameResolution _names = null!;
+    private readonly ControlFlowAnalyzer _controlFlowAnalyzer = new();
 
     public TypeCheckResult Check(CompilationUnit unit, NameResolution names)
     {
@@ -289,6 +290,12 @@ public class TypeChecker
         _currentFunctionReturnTypes.Push(returnType);
         CheckBlockStatement(functionLiteral.Body);
         _currentFunctionReturnTypes.Pop();
+
+        _controlFlowAnalyzer.AnalyzeFunction(
+            functionLiteral,
+            returnType,
+            _result.ExpressionTypes,
+            _result.Diagnostics);
 
         return functionType;
     }
