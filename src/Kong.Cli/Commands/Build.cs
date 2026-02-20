@@ -16,6 +16,12 @@ public class BuildFile
             return;
         }
 
+        if (!CommandCompilation.ValidateProgramEntrypoint(unit, typeCheck, out var entryDiagnostics))
+        {
+            CommandCompilation.PrintDiagnostics(entryDiagnostics);
+            return;
+        }
+
         var outputDirectory = ResolveOutputDirectory();
         var assemblyName = ResolveAssemblyName();
 

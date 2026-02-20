@@ -22,6 +22,7 @@ public class Parser
 
     private readonly Dictionary<TokenType, Func<IExpression>> _prefixParseFns;
     private readonly Dictionary<TokenType, Func<IExpression, IExpression>> _infixParseFns;
+    private int _blockDepth;
 
     private static readonly Dictionary<TokenType, Precedence> Precedences = new()
     {
@@ -153,12 +154,75 @@ public class Parser
 
     private IStatement? ParseStatement()
     {
+        if (_blockDepth == 0 && CurTokenIs(TokenType.Function) && PeekTokenIs(TokenType.Identifier))
+        {
+            return ParseFunctionDeclaration();
+        }
+
         return _curToken.Type switch
         {
             TokenType.Let => ParseLetStatement(),
             TokenType.Return => ParseReturnStatement(),
             _ => ParseExpressionStatement(),
         };
+    }
+
+    private FunctionDeclaration? ParseFunctionDeclaration()
+    {
+        var startSpan = _curToken.Span;
+        var declaration = new FunctionDeclaration
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        declaration.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null;
+        }
+
+        declaration.Parameters = ParseFunctionParameters();
+
+        if (PeekTokenIs(TokenType.Arrow))
+        {
+            NextToken();
+            NextToken();
+
+            declaration.ReturnTypeAnnotation = ParseTypeNode();
+            if (declaration.ReturnTypeAnnotation == null)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            declaration.ReturnTypeAnnotation = new NamedType
+            {
+                Token = new Token(TokenType.Identifier, "void"),
+                Name = "void",
+                Span = declaration.Name.Span,
+            };
+        }
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Body = ParseBlockStatement();
+        declaration.Span = new Span(startSpan.Start, declaration.Body.Span.End);
+        return declaration;
     }
 
     private LetStatement? ParseLetStatement()
@@ -365,6 +429,7 @@ public class Parser
         var startSpan = _curToken.Span;
         var block = new BlockStatement { Token = _curToken };
 
+        _blockDepth++;
         NextToken();
 
         while (!CurTokenIs(TokenType.RightBrace) && !CurTokenIs(TokenType.EndOfFile))
@@ -376,6 +441,7 @@ public class Parser
             }
             NextToken();
         }
+        _blockDepth--;
 
         // _curToken is now the '}' token
         block.Span = new Span(startSpan.Start, _curToken.Span.End);

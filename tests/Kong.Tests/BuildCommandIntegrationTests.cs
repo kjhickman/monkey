@@ -8,7 +8,7 @@ public class BuildCommandIntegrationTests
     [Fact]
     public void TestBuildCommandCreatesRunnableArtifact()
     {
-        var sourcePath = CreateTempProgram("let x = 40; x + 2;");
+        var sourcePath = CreateTempProgram("fn Main() { let x = 40; x + 2; }");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
 
         try
@@ -47,7 +47,49 @@ public class BuildCommandIntegrationTests
 
             var run = RunDotnet(assemblyPath);
             Assert.Equal(0, run.ExitCode);
-            Assert.Equal("42", run.StdOut.Trim());
+            Assert.Equal(string.Empty, run.StdOut.Trim());
+            Assert.Equal(string.Empty, run.StdErr.Trim());
+        }
+        finally
+        {
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+
+            System.IO.File.Delete(sourcePath);
+        }
+    }
+
+    [Fact]
+    public void TestBuiltArtifactUsesMainIntAsExitCode()
+    {
+        var sourcePath = CreateTempProgram("fn Main() -> int { 5; }");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(workingDir);
+            var command = new BuildFile { File = sourcePath };
+
+            var originalDirectory = Directory.GetCurrentDirectory();
+            try
+            {
+                Directory.SetCurrentDirectory(workingDir);
+                command.Run(null!);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+
+            var assemblyName = Path.GetFileNameWithoutExtension(sourcePath);
+            var outputDir = Path.Combine(workingDir, "dist", assemblyName);
+            var assemblyPath = Path.Combine(outputDir, $"{assemblyName}.dll");
+
+            var run = RunDotnet(assemblyPath);
+            Assert.Equal(5, run.ExitCode);
+            Assert.Equal(string.Empty, run.StdOut.Trim());
             Assert.Equal(string.Empty, run.StdErr.Trim());
         }
         finally

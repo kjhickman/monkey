@@ -327,6 +327,42 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestNamedFunctionDeclarationParsing()
+    {
+        var input = "fn Add(x: int, y: int) -> int { x + y; } Add(1, 2);";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        Assert.Equal("Add", declaration.Name.Value);
+        Assert.Equal(2, declaration.Parameters.Count);
+        Assert.Equal("int", declaration.ReturnTypeAnnotation?.String());
+
+        var callStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var callExpression = Assert.IsType<CallExpression>(callStatement.Expression);
+        var callIdentifier = Assert.IsType<Identifier>(callExpression.Function);
+        Assert.Equal("Add", callIdentifier.Value);
+    }
+
+    [Fact]
+    public void TestNamedFunctionDeclarationDefaultsReturnTypeToVoid()
+    {
+        var input = "fn Main() { }";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        var returnType = Assert.IsType<NamedType>(declaration.ReturnTypeAnnotation);
+        Assert.Equal("void", returnType.Name);
+    }
+
+    [Fact]
     public void TestCallExpressionParsing()
     {
         var input = "add(1, 2 * 3, 4 + 5);";

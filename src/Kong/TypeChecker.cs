@@ -5,6 +5,7 @@ public class TypeCheckResult
     public Dictionary<IExpression, TypeSymbol> ExpressionTypes { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
+    public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
     public DiagnosticBag Diagnostics { get; } = new();
 }
 
@@ -20,6 +21,7 @@ public class TypeChecker
     {
         _names = names;
         _result.Diagnostics.AddRange(names.Diagnostics);
+        PredeclareFunctionDeclarations(unit);
 
         foreach (var statement in unit.Statements)
         {
@@ -29,12 +31,53 @@ public class TypeChecker
         return _result;
     }
 
+    private void PredeclareFunctionDeclarations(CompilationUnit unit)
+    {
+        foreach (var statement in unit.Statements)
+        {
+            if (statement is not FunctionDeclaration declaration)
+            {
+                continue;
+            }
+
+            var parameterTypes = new List<TypeSymbol>(declaration.Parameters.Count);
+            foreach (var parameter in declaration.Parameters)
+            {
+                if (parameter.TypeAnnotation == null)
+                {
+                    _result.Diagnostics.Report(parameter.Span,
+                        $"missing type annotation for parameter '{parameter.Name}'",
+                        "T105");
+                    parameterTypes.Add(TypeSymbols.Error);
+                    continue;
+                }
+
+                parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error);
+            }
+
+            var returnType = declaration.ReturnTypeAnnotation == null
+                ? TypeSymbols.Void
+                : TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error;
+
+            var functionType = new FunctionTypeSymbol(parameterTypes, returnType);
+            _result.DeclaredFunctionTypes[declaration] = functionType;
+
+            if (_names.IdentifierSymbols.TryGetValue(declaration.Name, out var symbol))
+            {
+                _symbolTypes[symbol] = functionType;
+            }
+        }
+    }
+
     private void CheckStatement(IStatement statement)
     {
         switch (statement)
         {
             case LetStatement letStatement:
                 CheckLetStatement(letStatement);
+                break;
+            case FunctionDeclaration functionDeclaration:
+                CheckFunctionDeclaration(functionDeclaration);
                 break;
             case ReturnStatement returnStatement:
                 CheckReturnStatement(returnStatement);
@@ -49,6 +92,23 @@ public class TypeChecker
                 CheckBlockStatement(blockStatement);
                 break;
         }
+    }
+
+    private void CheckFunctionDeclaration(FunctionDeclaration declaration)
+    {
+        var functionLiteral = declaration.ToFunctionLiteral();
+        if (!_result.DeclaredFunctionTypes.TryGetValue(declaration, out var functionType))
+        {
+            var symbol = _names.IdentifierSymbols.TryGetValue(declaration.Name, out var resolvedSymbol)
+                ? resolvedSymbol
+                : (NameSymbol?)null;
+            functionType = CheckFunctionLiteral(functionLiteral, symbol);
+            _result.DeclaredFunctionTypes[declaration] = functionType;
+            return;
+        }
+
+        _result.FunctionTypes[functionLiteral] = functionType;
+        CheckFunctionBody(functionLiteral, functionType, functionType.ParameterTypes);
     }
 
     private void CheckLetStatement(LetStatement statement)
@@ -197,7 +257,7 @@ public class TypeChecker
         type = symbol.Name switch
         {
             "len" => new FunctionTypeSymbol([TypeSymbols.String], TypeSymbols.Int),
-            "puts" => new FunctionTypeSymbol([], TypeSymbols.Void),
+            "puts" => new FunctionTypeSymbol([TypeSymbols.Int], TypeSymbols.Void),
             "first" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], TypeSymbols.Int),
             "last" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], TypeSymbols.Int),
             "rest" => new FunctionTypeSymbol([new ArrayTypeSymbol(TypeSymbols.Int)], new ArrayTypeSymbol(TypeSymbols.Int)),
@@ -284,18 +344,13 @@ public class TypeChecker
         return lastType ?? TypeSymbols.Void;
     }
 
-    private TypeSymbol CheckFunctionLiteral(FunctionLiteral functionLiteral)
+    private FunctionTypeSymbol CheckFunctionLiteral(FunctionLiteral functionLiteral, NameSymbol? declaredSymbol = null)
     {
         var parameterTypes = new List<TypeSymbol>(functionLiteral.Parameters.Count);
         foreach (var parameter in functionLiteral.Parameters)
         {
             var parameterType = CheckFunctionParameter(parameter);
             parameterTypes.Add(parameterType);
-
-            if (_names.ParameterSymbols.TryGetValue(parameter, out var parameterSymbol))
-            {
-                _symbolTypes[parameterSymbol] = parameterType;
-            }
         }
 
         TypeSymbol returnType;
@@ -314,17 +369,36 @@ public class TypeChecker
         var functionType = new FunctionTypeSymbol(parameterTypes, returnType);
         _result.FunctionTypes[functionLiteral] = functionType;
 
-        _currentFunctionReturnTypes.Push(returnType);
+        if (declaredSymbol != null)
+        {
+            _symbolTypes[declaredSymbol.Value] = functionType;
+        }
+
+        CheckFunctionBody(functionLiteral, functionType, parameterTypes);
+
+        return functionType;
+    }
+
+    private void CheckFunctionBody(FunctionLiteral functionLiteral, FunctionTypeSymbol functionType, IReadOnlyList<TypeSymbol> parameterTypes)
+    {
+        for (var i = 0; i < functionLiteral.Parameters.Count && i < parameterTypes.Count; i++)
+        {
+            var parameter = functionLiteral.Parameters[i];
+            if (_names.ParameterSymbols.TryGetValue(parameter, out var parameterSymbol))
+            {
+                _symbolTypes[parameterSymbol] = parameterTypes[i];
+            }
+        }
+
+        _currentFunctionReturnTypes.Push(functionType.ReturnType);
         CheckBlockStatement(functionLiteral.Body);
         _currentFunctionReturnTypes.Pop();
 
         _controlFlowAnalyzer.AnalyzeFunction(
             functionLiteral,
-            returnType,
+            functionType.ReturnType,
             _result.ExpressionTypes,
             _result.Diagnostics);
-
-        return functionType;
     }
 
     private TypeSymbol CheckFunctionParameter(FunctionParameter parameter)

@@ -17,6 +17,12 @@ public class RunFile
             return;
         }
 
+        if (!CommandCompilation.ValidateProgramEntrypoint(unit, typeCheck, out var entryDiagnostics))
+        {
+            CommandCompilation.PrintDiagnostics(entryDiagnostics);
+            return;
+        }
+
         var assemblyName = Path.GetFileNameWithoutExtension(File);
         var outputDirectory = Path.Combine(Path.GetTempPath(), "kong-run", Guid.NewGuid().ToString("N"));
 
@@ -41,7 +47,7 @@ public class RunFile
 
         if (run.ExitCode != 0)
         {
-            Console.Error.WriteLine($"dotnet exited with code {run.ExitCode}");
+            Environment.ExitCode = run.ExitCode;
             return;
         }
     }

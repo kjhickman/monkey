@@ -2,6 +2,21 @@ namespace Kong;
 
 public static class ClrRuntimeBuiltins
 {
+    public static void PutsInt(long value)
+    {
+        Console.WriteLine(value);
+    }
+
+    public static void PutsString(string value)
+    {
+        Console.WriteLine(value);
+    }
+
+    public static void PutsBool(bool value)
+    {
+        Console.WriteLine(value);
+    }
+
     public static long LenString(string value)
     {
         return value.Length;

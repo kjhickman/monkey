@@ -129,6 +129,25 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "N001");
     }
 
+    [Fact]
+    public void TestNamedFunctionDeclarationWithImplicitVoidReturnType()
+    {
+        var (_, names, result) = ParseResolveAndCheck("fn Main() { } let x: int = 1; x;");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T106");
+    }
+
+    [Fact]
+    public void TestForwardReferenceAcrossNamedFunctionDeclarations()
+    {
+        var input = "fn A() -> int { B(); } fn B() -> int { 1; } A();";
+        var (_, names, result) = ParseResolveAndCheck(input);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);

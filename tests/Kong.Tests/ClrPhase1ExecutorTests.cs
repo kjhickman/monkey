@@ -163,6 +163,30 @@ public class ClrPhase1ExecutorTests
         Assert.Equal(42, result.Value);
     }
 
+    [Fact]
+    public void TestExecutesNamedFunctionDeclarationCall()
+    {
+        var unit = Parse("fn Add(x: int, y: int) -> int { x + y; } Add(20, 22);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesProgramWithImplicitVoidNamedFunctionDeclaration()
+    {
+        var unit = Parse("fn Main() { } 1;");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

@@ -5,6 +5,8 @@ public class IrLowerer
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
+    private readonly Dictionary<FunctionDeclaration, FunctionTypeSymbol> _declaredFunctionTypes = [];
+    private readonly Dictionary<string, FunctionTypeSymbol> _declaredFunctionTypesByName = [];
     private NameResolution? _nameResolution;
 
     private IrProgram _program = null!;
@@ -29,6 +31,8 @@ public class IrLowerer
         _nameResolution = nameResolution;
         _expressionTypes.Clear();
         _variableTypes.Clear();
+        _declaredFunctionTypes.Clear();
+        _declaredFunctionTypesByName.Clear();
         foreach (var pair in typeCheckResult.ExpressionTypes)
         {
             _expressionTypes[pair.Key] = pair.Value;
@@ -37,6 +41,12 @@ public class IrLowerer
         foreach (var pair in typeCheckResult.VariableTypes)
         {
             _variableTypes[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.DeclaredFunctionTypes)
+        {
+            _declaredFunctionTypes[pair.Key] = pair.Value;
+            _declaredFunctionTypesByName[pair.Key.Name.Value] = pair.Value;
         }
 
         _result.Diagnostics.AddRange(typeCheckResult.Diagnostics);
@@ -106,10 +116,24 @@ public class IrLowerer
                     }
                     break;
 
+                case FunctionDeclaration functionDeclaration:
+                    if (!LowerFunctionDeclaration(functionDeclaration, isTopLevel))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case ReturnStatement returnStatement:
                 {
                     if (returnStatement.ReturnValue == null)
                     {
+                        if (_function.ReturnType == TypeSymbols.Void)
+                        {
+                            _currentBlock.Terminator = new IrReturnVoid();
+                            break;
+                        }
+
                         _result.Diagnostics.Report(returnStatement.Span,
                             "phase-4 IR lowerer requires explicit return expressions",
                             "IR001");
@@ -133,14 +157,17 @@ public class IrLowerer
                     var expressionValue = LowerExpression(expression);
                     if (expressionValue == null)
                     {
-                        Restore();
-                        return false;
+                        if (!TryGetExpressionType(expression, out var expressionType) || expressionType != TypeSymbols.Void)
+                        {
+                            Restore();
+                            return false;
+                        }
                     }
-
-                    if (isLast)
+                    else if (isLast)
                     {
                         finalExpressionValue = expressionValue.Value;
                     }
+
                     break;
                 }
 
@@ -160,8 +187,24 @@ public class IrLowerer
 
         if (_currentBlock.Terminator == null)
         {
+            if (_function.ReturnType == TypeSymbols.Void)
+            {
+                _currentBlock.Terminator = new IrReturnVoid();
+                Restore();
+                return true;
+            }
+
             if (finalExpressionValue == null)
             {
+                if (isTopLevel)
+                {
+                    var zero = AllocateValue(TypeSymbols.Int);
+                    _currentBlock.Instructions.Add(new IrConstInt(zero, 0));
+                    _currentBlock.Terminator = new IrReturn(zero);
+                    Restore();
+                    return true;
+                }
+
                 _result.Diagnostics.Report(Span.Empty,
                     "phase-4 IR lowerer requires a final expression or return statement",
                     "IR001");
@@ -203,6 +246,37 @@ public class IrLowerer
         }
     }
 
+    private bool LowerFunctionDeclaration(FunctionDeclaration declaration, bool isTopLevel)
+    {
+        if (!isTopLevel)
+        {
+            _result.Diagnostics.Report(declaration.Span,
+                "phase-6 IR lowerer currently supports function declarations only at top-level",
+                "IR001");
+            return false;
+        }
+
+        if (!_declaredFunctionTypes.TryGetValue(declaration, out var functionType))
+        {
+            _result.Diagnostics.Report(declaration.Span,
+                "missing declared function type for IR lowering",
+                "IR002");
+            return false;
+        }
+
+        var lowered = LowerFunctionLiteral(declaration.ToFunctionLiteral(), declaration.Name.Value, functionType);
+        if (lowered == null)
+        {
+            return false;
+        }
+
+        var local = AllocateNamedLocal(declaration.Name.Value, functionType);
+        var closureValue = AllocateValue(functionType);
+        _currentBlock.Instructions.Add(new IrCreateClosure(closureValue, lowered.Value.FunctionName, lowered.Value.CapturedLocals));
+        _currentBlock.Instructions.Add(new IrStoreLocal(local, closureValue));
+        return true;
+    }
+
     private bool LowerLetStatement(LetStatement statement)
     {
         if (!_variableTypes.TryGetValue(statement, out var variableType))
@@ -239,12 +313,24 @@ public class IrLowerer
         return true;
     }
 
-    private (string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals)? LowerFunctionLiteral(FunctionLiteral functionLiteral, string? preferredName)
+    private (string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals)? LowerFunctionLiteral(
+        FunctionLiteral functionLiteral,
+        string? preferredName,
+        FunctionTypeSymbol? predeclaredType = null)
     {
-        if (!TryGetExpressionType(functionLiteral, out var functionTypeSymbol) || functionTypeSymbol is not FunctionTypeSymbol functionType)
+        FunctionTypeSymbol functionType;
+        if (predeclaredType != null)
+        {
+            functionType = predeclaredType;
+        }
+        else if (!TryGetExpressionType(functionLiteral, out var functionTypeSymbol) || functionTypeSymbol is not FunctionTypeSymbol inferredFunctionType)
         {
             _result.Diagnostics.Report(functionLiteral.Span, "missing function type for IR lowering", "IR002");
             return null;
+        }
+        else
+        {
+            functionType = inferredFunctionType;
         }
 
         if (!IsSupportedRuntimeType(functionType.ReturnType))
@@ -257,7 +343,9 @@ public class IrLowerer
 
         var functionName = preferredName == null
             ? $"__lambda{_nextLambdaId++}"
-            : $"__fn_{preferredName}_{_nextLambdaId++}";
+            : predeclaredType != null
+                ? preferredName
+                : $"__fn_{preferredName}_{_nextLambdaId++}";
 
         var capturedSymbols = _nameResolution?.GetCapturedSymbols(functionLiteral) ?? [];
         var capturedLocals = new List<IrLocalId>(capturedSymbols.Count);
@@ -392,9 +480,17 @@ public class IrLowerer
                     return destination;
                 }
 
+                if (_declaredFunctionTypesByName.TryGetValue(identifier.Value, out var declaredFunctionType))
+                {
+                    var destination = AllocateValue(declaredFunctionType);
+                    _currentBlock.Instructions.Add(new IrCreateClosure(destination, identifier.Value, []));
+                    return destination;
+                }
+
                 _result.Diagnostics.Report(identifier.Span,
                     $"phase-4 IR lowerer could not resolve local '{identifier.Value}'",
                     "IR002");
+
                 return null;
             }
 
@@ -629,6 +725,12 @@ public class IrLowerer
                 builtinArguments.Add(value.Value);
             }
 
+            if (returnType == TypeSymbols.Void)
+            {
+                _currentBlock.Instructions.Add(new IrCallVoid(builtinName, builtinArguments));
+                return null;
+            }
+
             var builtinDestination = AllocateValue(returnType);
             _currentBlock.Instructions.Add(new IrCall(builtinDestination, builtinName, builtinArguments));
             return builtinDestination;
@@ -650,6 +752,12 @@ public class IrLowerer
             }
 
             arguments.Add(value.Value);
+        }
+
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrInvokeClosureVoid(closureValue.Value, arguments));
+            return null;
         }
 
         var destination = AllocateValue(returnType);
@@ -689,6 +797,27 @@ public class IrLowerer
             TryGetExpressionType(callExpression.Arguments[0], out var argType) && argType == TypeSymbols.String)
         {
             builtinName = "__builtin_len_string";
+            return true;
+        }
+
+        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
+            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeInt) && putsArgTypeInt == TypeSymbols.Int)
+        {
+            builtinName = "__builtin_puts_int";
+            return true;
+        }
+
+        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
+            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeString) && putsArgTypeString == TypeSymbols.String)
+        {
+            builtinName = "__builtin_puts_string";
+            return true;
+        }
+
+        if (identifier.Value == "puts" && callExpression.Arguments.Count == 1 &&
+            TryGetExpressionType(callExpression.Arguments[0], out var putsArgTypeBool) && putsArgTypeBool == TypeSymbols.Bool)
+        {
+            builtinName = "__builtin_puts_bool";
             return true;
         }
 
@@ -829,6 +958,11 @@ public class IrLowerer
 
     private static bool IsSupportedRuntimeType(TypeSymbol type)
     {
+        if (type == TypeSymbols.Void)
+        {
+            return true;
+        }
+
         return type == TypeSymbols.Int ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||

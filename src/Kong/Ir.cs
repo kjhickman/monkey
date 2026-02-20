@@ -64,6 +64,8 @@ public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) :
 
 public sealed record class IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
+public sealed record class IrCallVoid(string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+
 public sealed record class IrCreateClosure(
     IrValueId Destination,
     string FunctionName,
@@ -74,6 +76,10 @@ public sealed record class IrInvokeClosure(
     IrValueId Closure,
     IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
+public sealed record class IrInvokeClosureVoid(
+    IrValueId Closure,
+    IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+
 public sealed record class IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
 
 public sealed record class IrIntArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index) : IrInstruction;
@@ -81,6 +87,8 @@ public sealed record class IrIntArrayIndex(IrValueId Destination, IrValueId Arra
 public abstract record class IrTerminator;
 
 public sealed record class IrReturn(IrValueId Value) : IrTerminator;
+
+public sealed record class IrReturnVoid() : IrTerminator;
 
 public sealed record class IrJump(int TargetBlockId) : IrTerminator;
 

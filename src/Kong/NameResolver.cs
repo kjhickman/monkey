@@ -62,6 +62,7 @@ public class NameResolver
     {
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
         PredeclareBuiltins();
+        PredeclareTopLevelFunctions(unit);
 
         foreach (var statement in unit.Statements)
         {
@@ -69,6 +70,27 @@ public class NameResolver
         }
 
         return _result;
+    }
+
+    private void PredeclareTopLevelFunctions(CompilationUnit unit)
+    {
+        foreach (var statement in unit.Statements)
+        {
+            if (statement is not FunctionDeclaration functionDeclaration)
+            {
+                continue;
+            }
+
+            if (_scope.TryLookupInCurrent(functionDeclaration.Name.Value, out _))
+            {
+                _result.Diagnostics.Report(functionDeclaration.Name.Span, $"duplicate declaration of '{functionDeclaration.Name.Value}'", "N002");
+                continue;
+            }
+
+            var symbol = new NameSymbol(functionDeclaration.Name.Value, NameSymbolKind.Global, functionDeclaration.Name.Span, _scope.FunctionDepth);
+            _scope.Symbols[functionDeclaration.Name.Value] = symbol;
+            _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
+        }
     }
 
     private void PredeclareBuiltins()
@@ -87,6 +109,9 @@ public class NameResolver
             case LetStatement letStatement:
                 ResolveLetStatement(letStatement);
                 break;
+            case FunctionDeclaration functionDeclaration:
+                ResolveFunctionDeclaration(functionDeclaration);
+                break;
             case ReturnStatement returnStatement:
                 if (returnStatement.ReturnValue != null)
                 {
@@ -103,6 +128,27 @@ public class NameResolver
                 ResolveBlockStatement(blockStatement);
                 break;
         }
+    }
+
+    private void ResolveFunctionDeclaration(FunctionDeclaration declaration)
+    {
+        EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth + 1);
+
+        foreach (var parameter in declaration.Parameters)
+        {
+            if (_scope.TryLookupInCurrent(parameter.Name, out _))
+            {
+                _result.Diagnostics.Report(parameter.Span, $"duplicate declaration of '{parameter.Name}'", "N002");
+                continue;
+            }
+
+            var symbol = new NameSymbol(parameter.Name, NameSymbolKind.Parameter, parameter.Span, _scope.FunctionDepth);
+            _scope.Symbols[parameter.Name] = symbol;
+            _result.ParameterSymbols[parameter] = symbol;
+        }
+
+        ResolveBlockStatement(declaration.Body);
+        LeaveScope();
     }
 
     private void ResolveLetStatement(LetStatement statement)

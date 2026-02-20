@@ -104,6 +104,50 @@ public class ReturnStatement : IStatement
     }
 }
 
+public class FunctionDeclaration : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'fn' token
+    public Identifier Name { get; set; } = null!;
+    public List<FunctionParameter> Parameters { get; set; } = [];
+    public ITypeNode? ReturnTypeAnnotation { get; set; }
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var sb = new StringBuilder();
+        var paramStrings = Parameters.Select(p => p.String());
+        sb.Append("fn ");
+        sb.Append(Name.String());
+        sb.Append('(');
+        sb.Append(string.Join(", ", paramStrings));
+        sb.Append(')');
+        if (ReturnTypeAnnotation != null)
+        {
+            sb.Append(" -> ");
+            sb.Append(ReturnTypeAnnotation.String());
+        }
+        sb.Append(' ');
+        sb.Append(Body.String());
+        return sb.ToString();
+    }
+
+    public FunctionLiteral ToFunctionLiteral()
+    {
+        return new FunctionLiteral
+        {
+            Token = Token,
+            Name = Name.Value,
+            Parameters = Parameters,
+            ReturnTypeAnnotation = ReturnTypeAnnotation,
+            Body = Body,
+            Span = Span,
+        };
+    }
+}
+
 public class ExpressionStatement : IStatement
 {
     public Span Span { get; set; }

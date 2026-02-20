@@ -164,6 +164,26 @@ public class NameResolverTests
     }
 
     [Fact]
+    public void TestPredeclaresTopLevelNamedFunctionsForForwardReferences()
+    {
+        var unit = Parse("fn A() -> int { B(); } fn B() -> int { 1; } A();");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var declarationA = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        var callInAStmt = Assert.IsType<ExpressionStatement>(declarationA.Body.Statements[0]);
+        var callInA = Assert.IsType<CallExpression>(callInAStmt.Expression);
+        var bIdentifier = Assert.IsType<Identifier>(callInA.Function);
+
+        Assert.True(result.IdentifierSymbols.TryGetValue(bIdentifier, out var bSymbol));
+        Assert.Equal(NameSymbolKind.Global, bSymbol.Kind);
+        Assert.Equal("B", bSymbol.Name);
+    }
+
+    [Fact]
     public void TestCapturesOuterTypedFunctionParameter()
     {
         var unit = Parse("let f = fn(x: int) -> int { let g = fn() -> int { x; }; g(); };");

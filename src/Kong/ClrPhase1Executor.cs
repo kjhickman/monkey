@@ -201,14 +201,32 @@ public class ClrPhase1Executor
         }
 
         var mainMethod = new MethodDefinition(
-            "Main",
+            "__KongEntryPoint",
             CecilMethodAttributes.Public | CecilMethodAttributes.Static,
-            module.TypeSystem.Void);
+            module.TypeSystem.Int32);
         programType.Methods.Add(mainMethod);
-        var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
         var mainIl = mainMethod.Body.GetILProcessor();
-        mainIl.Emit(OpCodes.Call, methodMap[program.EntryPoint.Name]);
-        mainIl.Emit(OpCodes.Call, writeLineLong);
+
+        if (methodMap.TryGetValue("Main", out var userMain))
+        {
+            mainIl.Emit(OpCodes.Call, userMain);
+            if (userMain.ReturnType == module.TypeSystem.Void)
+            {
+                mainIl.Emit(OpCodes.Ldc_I4_0);
+            }
+            else
+            {
+                mainIl.Emit(OpCodes.Conv_I4);
+            }
+        }
+        else
+        {
+            var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
+            mainIl.Emit(OpCodes.Call, methodMap[program.EntryPoint.Name]);
+            mainIl.Emit(OpCodes.Call, writeLineLong);
+            mainIl.Emit(OpCodes.Ldc_I4_0);
+        }
+
         mainIl.Emit(OpCodes.Ret);
         module.EntryPoint = mainMethod;
 
@@ -386,6 +404,27 @@ public class ClrPhase1Executor
                         il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
                         break;
 
+                    case IrCallVoid callVoid:
+                        foreach (var argument in callVoid.Arguments)
+                        {
+                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+                        }
+
+                        if (methodMap.TryGetValue(callVoid.FunctionName, out var targetVoidMethod))
+                        {
+                            il.Emit(OpCodes.Call, targetVoidMethod);
+                            break;
+                        }
+
+                        if (!builtinMap.TryGetValue(callVoid.FunctionName, out var builtinVoidMethod))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-6 CLR backend could not resolve function '{callVoid.FunctionName}'", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Call, builtinVoidMethod);
+                        break;
+
                     case IrCreateClosure createClosure:
                         if (!functionMap.TryGetValue(createClosure.FunctionName, out var targetFunction) ||
                             !methodMap.TryGetValue(createClosure.FunctionName, out var targetClosureMethod))
@@ -483,6 +522,29 @@ public class ClrPhase1Executor
                         il.Emit(OpCodes.Stloc, valueLocals[invokeClosure.Destination]);
                         break;
 
+                    case IrInvokeClosureVoid invokeClosureVoid:
+                        if (!function.ValueTypes.TryGetValue(invokeClosureVoid.Closure, out var invokeVoidTargetType) ||
+                            invokeVoidTargetType is not FunctionTypeSymbol invokeVoidFunctionType)
+                        {
+                            diagnostics.Report(Span.Empty, "phase-6 CLR backend requires function type for closure invoke", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[invokeClosureVoid.Closure]);
+                        foreach (var argument in invokeClosureVoid.Arguments)
+                        {
+                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+                        }
+
+                        var invokeVoidMethod = BuildDelegateInvoke(invokeVoidFunctionType, module, diagnostics, delegateTypeMap);
+                        if (invokeVoidMethod == null)
+                        {
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Callvirt, invokeVoidMethod);
+                        break;
+
                     case IrNewIntArray newArray:
                         il.Emit(OpCodes.Ldc_I4, newArray.Elements.Count);
                         il.Emit(OpCodes.Newarr, module.TypeSystem.Int64);
@@ -515,6 +577,10 @@ public class ClrPhase1Executor
             {
                 case IrReturn ret:
                     il.Emit(OpCodes.Ldloc, valueLocals[ret.Value]);
+                    il.Emit(OpCodes.Ret);
+                    break;
+
+                case IrReturnVoid:
                     il.Emit(OpCodes.Ret);
                     break;
 
@@ -568,6 +634,11 @@ public class ClrPhase1Executor
         if (type == TypeSymbols.String)
         {
             return module.TypeSystem.String;
+        }
+
+        if (type == TypeSymbols.Void)
+        {
+            return module.TypeSystem.Void;
         }
 
         if (type is ArrayTypeSymbol { ElementType: IntTypeSymbol })
@@ -837,6 +908,9 @@ public class ClrPhase1Executor
         return new Dictionary<string, MethodReference>
         {
             ["__builtin_len_string"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LenString))!),
+            ["__builtin_puts_int"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsInt))!),
+            ["__builtin_puts_string"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsString))!),
+            ["__builtin_puts_bool"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.PutsBool))!),
             ["__builtin_first_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.FirstIntArray))!),
             ["__builtin_last_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.LastIntArray))!),
             ["__builtin_rest_int_array"] = module.ImportReference(runtimeType.GetMethod(nameof(ClrRuntimeBuiltins.RestIntArray))!),

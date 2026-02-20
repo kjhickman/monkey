@@ -154,6 +154,22 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersNamedFunctionDeclarationAndCall()
+    {
+        var input = "fn Add(x: int, y: int) -> int { x + y; } Add(1, 2);";
+        var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck, names);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        Assert.Single(lowering.Program!.Functions);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrCreateClosure);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrInvokeClosure);
+    }
+
+    [Fact]
     public void TestLowererRejectsNonIntTopLevelExpression()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("true;");
