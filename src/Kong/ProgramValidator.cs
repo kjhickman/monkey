@@ -1,0 +1,60 @@
+namespace Kong;
+
+public static class ProgramValidator
+{
+    public static DiagnosticBag ValidateEntrypoint(CompilationUnit unit, TypeCheckResult typeCheck)
+    {
+        var diagnostics = new DiagnosticBag();
+
+        foreach (var statement in unit.Statements)
+        {
+            if (statement is FunctionDeclaration)
+            {
+                continue;
+            }
+
+            diagnostics.Report(
+                statement.Span,
+                "top-level statements are not allowed; declare functions only",
+                "CLI002");
+        }
+
+        var mains = unit.Statements
+            .OfType<FunctionDeclaration>()
+            .Where(d => d.Name.Value == "Main")
+            .ToList();
+
+        if (mains.Count == 0)
+        {
+            diagnostics.Report(unit.Span, "missing required entrypoint 'fn Main() {}'", "CLI003");
+            return diagnostics;
+        }
+
+        if (mains.Count > 1)
+        {
+            foreach (var declaration in mains)
+            {
+                diagnostics.Report(declaration.Name.Span,
+                    "duplicate 'Main' function declaration",
+                    "CLI004");
+            }
+            return diagnostics;
+        }
+
+        var main = mains[0];
+        if (main.Parameters.Count != 0)
+        {
+            diagnostics.Report(main.Span, "'Main' must not declare parameters", "CLI005");
+        }
+
+        if (typeCheck.DeclaredFunctionTypes.TryGetValue(main, out var mainType))
+        {
+            if (mainType.ReturnType != TypeSymbols.Void && mainType.ReturnType != TypeSymbols.Int)
+            {
+                diagnostics.Report(main.Span, "'Main' must have return type 'void' or 'int'", "CLI006");
+            }
+        }
+
+        return diagnostics;
+    }
+}
