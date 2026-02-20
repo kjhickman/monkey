@@ -268,6 +268,22 @@ public class ArrayType : ITypeNode
     public string String() => $"{ElementType.String()}[]";
 }
 
+public class FunctionType : ITypeNode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'fn' token
+    public List<ITypeNode> ParameterTypes { get; set; } = [];
+    public ITypeNode ReturnType { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var parameters = ParameterTypes.Select(p => p.String());
+        return $"fn({string.Join(", ", parameters)}) -> {ReturnType.String()}";
+    }
+}
+
 public class CallExpression : IExpression
 {
     public Span Span { get; set; }

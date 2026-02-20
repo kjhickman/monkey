@@ -71,7 +71,7 @@ public class IrLowererTests
         Assert.NotNull(lowering.Program);
         Assert.False(lowering.Diagnostics.HasErrors);
         Assert.Single(lowering.Program!.Functions);
-        Assert.Contains(lowering.Program.EntryPoint.Blocks[0].Instructions, i => i is IrCall);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks[0].Instructions, i => i is IrInvokeClosure);
     }
 
     [Fact]
@@ -134,6 +134,23 @@ public class IrLowererTests
         Assert.NotNull(lowering.Program);
         Assert.False(lowering.Diagnostics.HasErrors);
         Assert.Equal(2, lowering.Program!.Functions.Count);
+    }
+
+    [Fact]
+    public void TestLowersEscapingClosureValueAndInvoke()
+    {
+        var input = "let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } }; let addTwo: fn(int) -> int = makeAdder(2); addTwo(40);";
+        var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck, names);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrCreateClosure);
+        Assert.Contains(instructions, i => i is IrInvokeClosure);
     }
 
     [Fact]

@@ -108,6 +108,40 @@ public class ControlFlowAnalyzer
             return true;
         }
 
-        return source == target;
+        return TypeEquals(source, target);
+    }
+
+    private static bool TypeEquals(TypeSymbol left, TypeSymbol right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is ArrayTypeSymbol leftArray && right is ArrayTypeSymbol rightArray)
+        {
+            return TypeEquals(leftArray.ElementType, rightArray.ElementType);
+        }
+
+        if (left is FunctionTypeSymbol leftFunction && right is FunctionTypeSymbol rightFunction)
+        {
+            if (!TypeEquals(leftFunction.ReturnType, rightFunction.ReturnType) ||
+                leftFunction.ParameterTypes.Count != rightFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
+            {
+                if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return left == right;
     }
 }

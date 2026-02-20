@@ -151,6 +151,18 @@ public class ClrPhase1ExecutorTests
         Assert.Equal(12, result.Value);
     }
 
+    [Fact]
+    public void TestExecutesEscapingClosureValue()
+    {
+        var unit = Parse("let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } }; let addTwo: fn(int) -> int = makeAdder(2); addTwo(40);");
+        var executor = new ClrPhase1Executor();
+
+        var result = executor.Execute(unit);
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

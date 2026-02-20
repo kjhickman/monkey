@@ -2,8 +2,6 @@ namespace Kong;
 
 public class IrLowerer
 {
-    private sealed record class FunctionBinding(string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals);
-
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
@@ -14,7 +12,6 @@ public class IrLowerer
     private IrBlock _currentBlock = null!;
 
     private readonly Dictionary<string, IrLocalId> _localsByName = [];
-    private readonly Dictionary<string, FunctionBinding> _functionBindingsByName = [];
 
     private int _nextValueId;
     private int _nextLocalId;
@@ -66,8 +63,7 @@ public class IrLowerer
     private bool LowerFunctionBody(
         IrFunction function,
         IReadOnlyList<IStatement> statements,
-        bool isTopLevel,
-        IReadOnlyDictionary<string, FunctionBinding>? seedFunctionBindings = null)
+        bool isTopLevel)
     {
         var savedFunction = _function;
         var savedBlock = _currentBlock;
@@ -75,21 +71,12 @@ public class IrLowerer
         var savedNextLocalId = _nextLocalId;
         var savedNextBlockId = _nextBlockId;
         var savedLocals = _localsByName.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        var savedFunctions = _functionBindingsByName.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
         _function = function;
         _nextValueId = 0;
         _nextLocalId = 0;
         _nextBlockId = 0;
         _localsByName.Clear();
-        _functionBindingsByName.Clear();
-        if (seedFunctionBindings != null)
-        {
-            foreach (var pair in seedFunctionBindings)
-            {
-                _functionBindingsByName[pair.Key] = pair.Value;
-            }
-        }
 
         foreach (var parameter in function.Parameters)
         {
@@ -213,11 +200,6 @@ public class IrLowerer
                 _localsByName[pair.Key] = pair.Value;
             }
 
-            _functionBindingsByName.Clear();
-            foreach (var pair in savedFunctions)
-            {
-                _functionBindingsByName[pair.Key] = pair.Value;
-            }
         }
     }
 
@@ -227,18 +209,6 @@ public class IrLowerer
         {
             _result.Diagnostics.Report(statement.Span, "missing variable type for IR lowering", "IR002");
             return false;
-        }
-
-        if (statement.Value is FunctionLiteral functionLiteral)
-        {
-            var binding = LowerFunctionLiteral(functionLiteral, statement.Name.Value);
-            if (binding == null)
-            {
-                return false;
-            }
-
-            _functionBindingsByName[statement.Name.Value] = binding;
-            return true;
         }
 
         if (!IsSupportedRuntimeType(variableType))
@@ -257,18 +227,19 @@ public class IrLowerer
             return false;
         }
 
+        var local = AllocateNamedLocal(statement.Name.Value, variableType);
+
         var value = LowerExpression(statement.Value);
         if (value == null)
         {
             return false;
         }
 
-        var local = AllocateNamedLocal(statement.Name.Value, variableType);
         _currentBlock.Instructions.Add(new IrStoreLocal(local, value.Value));
         return true;
     }
 
-    private FunctionBinding? LowerFunctionLiteral(FunctionLiteral functionLiteral, string? preferredName)
+    private (string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals)? LowerFunctionLiteral(FunctionLiteral functionLiteral, string? preferredName)
     {
         if (!TryGetExpressionType(functionLiteral, out var functionTypeSymbol) || functionTypeSymbol is not FunctionTypeSymbol functionType)
         {
@@ -288,10 +259,14 @@ public class IrLowerer
             ? $"__lambda{_nextLambdaId++}"
             : $"__fn_{preferredName}_{_nextLambdaId++}";
 
+        var capturedSymbols = _nameResolution?.GetCapturedSymbols(functionLiteral) ?? [];
+        var capturedLocals = new List<IrLocalId>(capturedSymbols.Count);
+
         var function = new IrFunction
         {
             Name = functionName,
             ReturnType = functionType.ReturnType,
+            CaptureParameterCount = capturedSymbols.Count,
         };
 
         if (functionLiteral.Parameters.Count != functionType.ParameterTypes.Count)
@@ -302,9 +277,6 @@ public class IrLowerer
             return null;
         }
 
-        var capturedSymbols = _nameResolution?.GetCapturedSymbols(functionLiteral) ?? [];
-        var capturedLocals = new List<IrLocalId>(capturedSymbols.Count);
-        var seedFunctionBindings = new Dictionary<string, FunctionBinding>();
         foreach (var capture in capturedSymbols)
         {
             if (!_localsByName.TryGetValue(capture.Name, out var capturedLocal))
@@ -346,20 +318,10 @@ public class IrLowerer
             function.Parameters.Add(new IrParameter(localId, parameter.Name, parameterType));
         }
 
-        if (preferredName != null)
-        {
-            var capturedParameterLocals = function.Parameters
-                .Take(capturedSymbols.Count)
-                .Select(p => p.LocalId)
-                .ToList();
-            seedFunctionBindings[preferredName] = new FunctionBinding(functionName, capturedParameterLocals);
-        }
-
         var bodyLowered = LowerFunctionBody(
             function,
             functionLiteral.Body.Statements,
-            isTopLevel: false,
-            seedFunctionBindings: seedFunctionBindings);
+            isTopLevel: false);
 
         if (!bodyLowered)
         {
@@ -367,7 +329,7 @@ public class IrLowerer
         }
 
         _program.Functions.Add(function);
-        return new FunctionBinding(functionName, capturedLocals);
+        return (functionName, capturedLocals);
     }
 
     private IrValueId? LowerExpression(IExpression expression)
@@ -395,6 +357,27 @@ public class IrLowerer
                 return destination;
             }
 
+            case FunctionLiteral functionLiteral:
+            {
+                var lowered = LowerFunctionLiteral(functionLiteral, preferredName: null);
+                if (lowered == null)
+                {
+                    return null;
+                }
+
+                if (!TryGetExpressionType(functionLiteral, out var functionType) || functionType is not FunctionTypeSymbol)
+                {
+                    _result.Diagnostics.Report(functionLiteral.Span,
+                        "phase-6 IR lowerer requires function type for function literal",
+                        "IR002");
+                    return null;
+                }
+
+                var destination = AllocateValue(functionType);
+                _currentBlock.Instructions.Add(new IrCreateClosure(destination, lowered.Value.FunctionName, lowered.Value.CapturedLocals));
+                return destination;
+            }
+
             case Identifier identifier:
             {
                 if (_localsByName.TryGetValue(identifier.Value, out var local))
@@ -407,14 +390,6 @@ public class IrLowerer
                     var destination = AllocateValue(identifierType);
                     _currentBlock.Instructions.Add(new IrLoadLocal(destination, local));
                     return destination;
-                }
-
-                if (_functionBindingsByName.ContainsKey(identifier.Value))
-                {
-                    _result.Diagnostics.Report(identifier.Span,
-                        $"phase-4 IR lowerer does not support using function '{identifier.Value}' as a value",
-                        "IR001");
-                    return null;
                 }
 
                 _result.Diagnostics.Report(identifier.Span,
@@ -635,48 +610,37 @@ public class IrLowerer
             return null;
         }
 
-        FunctionBinding? binding;
-        if (callExpression.Function is FunctionLiteral functionLiteral)
+        if (callExpression.Function is Identifier builtinIdentifier &&
+            ((_nameResolution != null &&
+              _nameResolution.IdentifierSymbols.TryGetValue(builtinIdentifier, out var symbol) &&
+              symbol.Kind == NameSymbolKind.Builtin) ||
+             BuiltinNames.All.Contains(builtinIdentifier.Value)) &&
+            TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
         {
-            binding = LowerFunctionLiteral(functionLiteral, preferredName: null);
-        }
-        else if (callExpression.Function is Identifier identifier && _functionBindingsByName.TryGetValue(identifier.Value, out var boundName))
-        {
-            binding = boundName;
-        }
-        else if (callExpression.Function is Identifier builtinIdentifier && TryLowerBuiltinCallName(builtinIdentifier, callExpression, out var builtinName))
-        {
-            binding = new FunctionBinding(builtinName, []);
-        }
-        else
-        {
-            _result.Diagnostics.Report(callExpression.Function.Span,
-                "phase-4 IR lowerer supports calls to function literals or let-bound functions",
-                "IR001");
-            return null;
-        }
-
-        if (binding == null)
-        {
-            return null;
-        }
-
-        var arguments = new List<IrValueId>(binding.CapturedLocals.Count + callExpression.Arguments.Count);
-        foreach (var capturedLocal in binding.CapturedLocals)
-        {
-            if (!_function.LocalTypes.TryGetValue(capturedLocal, out var capturedType))
+            var builtinArguments = new List<IrValueId>(callExpression.Arguments.Count);
+            foreach (var argument in callExpression.Arguments)
             {
-                _result.Diagnostics.Report(callExpression.Span,
-                    "phase-6 IR lowerer could not resolve captured local type at call site",
-                    "IR002");
-                return null;
+                var value = LowerExpression(argument);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                builtinArguments.Add(value.Value);
             }
 
-            var loadedCapture = AllocateValue(capturedType);
-            _currentBlock.Instructions.Add(new IrLoadLocal(loadedCapture, capturedLocal));
-            arguments.Add(loadedCapture);
+            var builtinDestination = AllocateValue(returnType);
+            _currentBlock.Instructions.Add(new IrCall(builtinDestination, builtinName, builtinArguments));
+            return builtinDestination;
         }
 
+        var closureValue = LowerExpression(callExpression.Function);
+        if (closureValue == null)
+        {
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
         foreach (var argument in callExpression.Arguments)
         {
             var value = LowerExpression(argument);
@@ -689,7 +653,7 @@ public class IrLowerer
         }
 
         var destination = AllocateValue(returnType);
-        _currentBlock.Instructions.Add(new IrCall(destination, binding.FunctionName, arguments));
+        _currentBlock.Instructions.Add(new IrInvokeClosure(destination, closureValue.Value, arguments));
         return destination;
     }
 
@@ -868,7 +832,10 @@ public class IrLowerer
         return type == TypeSymbols.Int ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
-               type is ArrayTypeSymbol { ElementType: IntTypeSymbol };
+               type is ArrayTypeSymbol { ElementType: IntTypeSymbol } ||
+               type is FunctionTypeSymbol functionType &&
+               functionType.ParameterTypes.All(IsSupportedRuntimeType) &&
+               IsSupportedRuntimeType(functionType.ReturnType);
     }
 
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)

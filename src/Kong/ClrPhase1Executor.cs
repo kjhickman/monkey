@@ -1,11 +1,14 @@
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq.Expressions;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using CecilMethodAttributes = Mono.Cecil.MethodAttributes;
 using CecilParameterAttributes = Mono.Cecil.ParameterAttributes;
 using CecilTypeAttributes = Mono.Cecil.TypeAttributes;
+using CecilFieldAttributes = Mono.Cecil.FieldAttributes;
+using CecilMethodImplAttributes = Mono.Cecil.MethodImplAttributes;
 
 namespace Kong;
 
@@ -19,6 +22,13 @@ public class ClrPhase1ExecutionResult
 
 public class ClrPhase1Executor
 {
+    private sealed record class DisplayClassInfo(
+        TypeDefinition Type,
+        MethodDefinition InvokeMethod,
+        IReadOnlyList<FieldDefinition> CaptureFields,
+        TypeReference DelegateType,
+        MethodReference DelegateCtor);
+
     [RequiresUnreferencedCode("Loads and invokes generated assemblies via reflection.")]
     public ClrPhase1ExecutionResult Execute(CompilationUnit unit, TypeCheckResult typeCheckResult, NameResolution? nameResolution = null)
     {
@@ -86,12 +96,18 @@ public class ClrPhase1Executor
 
         var allFunctions = new List<IrFunction> { program.EntryPoint };
         allFunctions.AddRange(program.Functions);
+        var functionMap = allFunctions.ToDictionary(f => f.Name, f => f);
+        var delegateTypeMap = BuildDelegateTypeMap(allFunctions, module, programType, diagnostics);
+        if (delegateTypeMap == null)
+        {
+            return null;
+        }
 
         var methodMap = new Dictionary<string, MethodDefinition>();
         var builtinMap = BuildBuiltinMap(module);
         foreach (var function in allFunctions)
         {
-            var returnType = MapType(function.ReturnType, module, diagnostics);
+            var returnType = MapType(function.ReturnType, module, diagnostics, delegateTypeMap);
             if (returnType == null)
             {
                 return null;
@@ -105,7 +121,7 @@ public class ClrPhase1Executor
             var method = new MethodDefinition(methodName, attributes, returnType);
             foreach (var parameter in function.Parameters)
             {
-                var parameterType = MapType(parameter.Type, module, diagnostics);
+                var parameterType = MapType(parameter.Type, module, diagnostics, delegateTypeMap);
                 if (parameterType == null)
                 {
                     return null;
@@ -118,9 +134,21 @@ public class ClrPhase1Executor
             methodMap[function.Name] = method;
         }
 
+        var displayClassMap = new Dictionary<string, DisplayClassInfo>();
+        foreach (var function in allFunctions.Where(f => f.CaptureParameterCount > 0))
+        {
+            var displayClass = BuildDisplayClass(function, methodMap, module, programType, diagnostics, delegateTypeMap);
+            if (displayClass == null)
+            {
+                return null;
+            }
+
+            displayClassMap[function.Name] = displayClass;
+        }
+
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, builtinMap, module, diagnostics))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, builtinMap, module, diagnostics, delegateTypeMap))
             {
                 return null;
             }
@@ -135,16 +163,19 @@ public class ClrPhase1Executor
         IrFunction function,
         MethodDefinition method,
         IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        IReadOnlyDictionary<string, IrFunction> functionMap,
+        IReadOnlyDictionary<string, DisplayClassInfo> displayClassMap,
         IReadOnlyDictionary<string, MethodReference> builtinMap,
         ModuleDefinition module,
-        DiagnosticBag diagnostics)
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
     {
         method.Body.InitLocals = true;
 
         var valueLocals = new Dictionary<IrValueId, VariableDefinition>();
         foreach (var (valueId, type) in function.ValueTypes)
         {
-            var variableType = MapType(type, module, diagnostics);
+            var variableType = MapType(type, module, diagnostics, delegateTypeMap);
             if (variableType == null)
             {
                 return false;
@@ -168,7 +199,7 @@ public class ClrPhase1Executor
                 continue;
             }
 
-            var variableType = MapType(type, module, diagnostics);
+            var variableType = MapType(type, module, diagnostics, delegateTypeMap);
             if (variableType == null)
             {
                 return false;
@@ -277,6 +308,103 @@ public class ClrPhase1Executor
                         il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
                         break;
 
+                    case IrCreateClosure createClosure:
+                        if (!functionMap.TryGetValue(createClosure.FunctionName, out var targetFunction) ||
+                            !methodMap.TryGetValue(createClosure.FunctionName, out var targetClosureMethod))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-6 CLR backend could not resolve closure function '{createClosure.FunctionName}'", "IL001");
+                            return false;
+                        }
+
+                        if (!function.ValueTypes.TryGetValue(createClosure.Destination, out var closureType) || closureType is not FunctionTypeSymbol closureFunctionType)
+                        {
+                            diagnostics.Report(Span.Empty, "phase-6 CLR backend requires function type for closure value", "IL001");
+                            return false;
+                        }
+
+                        var delegateType = MapType(closureFunctionType, module, diagnostics, delegateTypeMap);
+                        if (delegateType == null)
+                        {
+                            return false;
+                        }
+
+                        var delegateCtor = BuildDelegateConstructor(delegateType, module);
+
+                        if (targetFunction.CaptureParameterCount == 0)
+                        {
+                            il.Emit(OpCodes.Ldnull);
+                            il.Emit(OpCodes.Ldftn, targetClosureMethod);
+                            il.Emit(OpCodes.Newobj, delegateCtor);
+                            il.Emit(OpCodes.Stloc, valueLocals[createClosure.Destination]);
+                            break;
+                        }
+
+                        if (!displayClassMap.TryGetValue(createClosure.FunctionName, out var displayClassInfo))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-6 CLR backend missing display class for '{createClosure.FunctionName}'", "IL001");
+                            return false;
+                        }
+
+                        var displayLocal = new VariableDefinition(displayClassInfo.Type);
+                        method.Body.Variables.Add(displayLocal);
+
+                        var displayCtor = displayClassInfo.Type.Methods.First(m => m.IsConstructor && !m.HasParameters);
+                        il.Emit(OpCodes.Newobj, displayCtor);
+                        il.Emit(OpCodes.Stloc, displayLocal);
+
+                        if (createClosure.CapturedLocals.Count != displayClassInfo.CaptureFields.Count)
+                        {
+                            diagnostics.Report(Span.Empty, "phase-6 CLR backend capture count mismatch for closure", "IL001");
+                            return false;
+                        }
+
+                        for (var captureIndex = 0; captureIndex < createClosure.CapturedLocals.Count; captureIndex++)
+                        {
+                            il.Emit(OpCodes.Ldloc, displayLocal);
+
+                            var captureLocalId = createClosure.CapturedLocals[captureIndex];
+                            if (parameterLocalIndexes.TryGetValue(captureLocalId, out var captureParameterIndex))
+                            {
+                                il.Emit(OpCodes.Ldarg, method.Parameters[captureParameterIndex]);
+                            }
+                            else
+                            {
+                                il.Emit(OpCodes.Ldloc, localVariables[captureLocalId]);
+                            }
+
+                            il.Emit(OpCodes.Stfld, displayClassInfo.CaptureFields[captureIndex]);
+                        }
+
+                        il.Emit(OpCodes.Ldloc, displayLocal);
+                        il.Emit(OpCodes.Ldftn, displayClassInfo.InvokeMethod);
+                        il.Emit(OpCodes.Newobj, displayClassInfo.DelegateCtor);
+                        il.Emit(OpCodes.Stloc, valueLocals[createClosure.Destination]);
+                        break;
+
+                    case IrInvokeClosure invokeClosure:
+                        if (!function.ValueTypes.TryGetValue(invokeClosure.Closure, out var invokeTargetType) ||
+                            invokeTargetType is not FunctionTypeSymbol invokeFunctionType)
+                        {
+                            diagnostics.Report(Span.Empty, "phase-6 CLR backend requires function type for closure invoke", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[invokeClosure.Closure]);
+                        foreach (var argument in invokeClosure.Arguments)
+                        {
+                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+                        }
+
+                        var invokeMethod = BuildDelegateInvoke(invokeFunctionType, module, diagnostics, delegateTypeMap);
+                        if (invokeMethod == null)
+                        {
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Callvirt, invokeMethod);
+                        il.Emit(OpCodes.Stloc, valueLocals[invokeClosure.Destination]);
+                        break;
+
                     case IrNewIntArray newArray:
                         il.Emit(OpCodes.Ldc_I4, newArray.Elements.Count);
                         il.Emit(OpCodes.Newarr, module.TypeSystem.Int64);
@@ -343,7 +471,11 @@ public class ClrPhase1Executor
         return true;
     }
 
-    private static TypeReference? MapType(TypeSymbol type, ModuleDefinition module, DiagnosticBag diagnostics)
+    private static TypeReference? MapType(
+        TypeSymbol type,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
     {
         if (type == TypeSymbols.Int)
         {
@@ -365,8 +497,259 @@ public class ClrPhase1Executor
             return new Mono.Cecil.ArrayType(module.TypeSystem.Int64);
         }
 
+        if (type is FunctionTypeSymbol functionType)
+        {
+            if (delegateTypeMap.TryGetValue(functionType.Name, out var delegateType))
+            {
+                return delegateType;
+            }
+
+            diagnostics.Report(Span.Empty, $"phase-6 CLR backend is missing delegate type for '{functionType}'", "IL001");
+            return null;
+        }
+
         diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");
         return null;
+    }
+
+    private static Dictionary<string, TypeDefinition>? BuildDelegateTypeMap(
+        IReadOnlyList<IrFunction> functions,
+        ModuleDefinition module,
+        TypeDefinition programType,
+        DiagnosticBag diagnostics)
+    {
+        var functionTypes = new Dictionary<string, FunctionTypeSymbol>();
+        foreach (var function in functions)
+        {
+            CollectFunctionTypes(function.ReturnType, functionTypes);
+            foreach (var parameter in function.Parameters)
+            {
+                CollectFunctionTypes(parameter.Type, functionTypes);
+            }
+
+            foreach (var type in function.ValueTypes.Values)
+            {
+                CollectFunctionTypes(type, functionTypes);
+            }
+
+            foreach (var type in function.LocalTypes.Values)
+            {
+                CollectFunctionTypes(type, functionTypes);
+            }
+        }
+
+        var delegateMap = new Dictionary<string, TypeDefinition>();
+        foreach (var (key, _) in functionTypes)
+        {
+            var delegateType = new TypeDefinition(
+                "Kong.Generated",
+                $"__delegate_{delegateMap.Count}",
+                CecilTypeAttributes.NestedPublic | CecilTypeAttributes.Sealed | CecilTypeAttributes.Class,
+                module.ImportReference(typeof(MulticastDelegate)));
+            programType.NestedTypes.Add(delegateType);
+            delegateMap[key] = delegateType;
+        }
+
+        foreach (var (key, functionType) in functionTypes)
+        {
+            var delegateType = delegateMap[key];
+
+            var ctor = new MethodDefinition(
+                ".ctor",
+                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.SpecialName | CecilMethodAttributes.RTSpecialName,
+                module.TypeSystem.Void)
+            {
+                ImplAttributes = CecilMethodImplAttributes.Runtime | CecilMethodImplAttributes.Managed,
+            };
+            ctor.Parameters.Add(new ParameterDefinition(module.TypeSystem.Object));
+            ctor.Parameters.Add(new ParameterDefinition(module.TypeSystem.IntPtr));
+            delegateType.Methods.Add(ctor);
+
+            var returnType = MapType(functionType.ReturnType, module, diagnostics, delegateMap);
+            if (returnType == null)
+            {
+                return null;
+            }
+
+            var invoke = new MethodDefinition(
+                "Invoke",
+                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.NewSlot | CecilMethodAttributes.Virtual,
+                returnType)
+            {
+                ImplAttributes = CecilMethodImplAttributes.Runtime | CecilMethodImplAttributes.Managed,
+            };
+
+            foreach (var parameterType in functionType.ParameterTypes)
+            {
+                var mapped = MapType(parameterType, module, diagnostics, delegateMap);
+                if (mapped == null)
+                {
+                    return null;
+                }
+
+                invoke.Parameters.Add(new ParameterDefinition(mapped));
+            }
+
+            delegateType.Methods.Add(invoke);
+        }
+
+        return delegateMap;
+
+        static void CollectFunctionTypes(TypeSymbol type, Dictionary<string, FunctionTypeSymbol> map)
+        {
+            if (type is not FunctionTypeSymbol functionType)
+            {
+                if (type is ArrayTypeSymbol arrayType)
+                {
+                    CollectFunctionTypes(arrayType.ElementType, map);
+                }
+
+                return;
+            }
+
+            if (!map.ContainsKey(functionType.Name))
+            {
+                map[functionType.Name] = functionType;
+            }
+
+            foreach (var parameterType in functionType.ParameterTypes)
+            {
+                CollectFunctionTypes(parameterType, map);
+            }
+
+            CollectFunctionTypes(functionType.ReturnType, map);
+        }
+    }
+
+    private static MethodReference BuildDelegateConstructor(TypeReference delegateType, ModuleDefinition module)
+    {
+        var resolved = delegateType.Resolve()!;
+        var ctorDefinition = resolved.Methods.First(m => m.IsConstructor && m.Parameters.Count == 2);
+
+        if (delegateType is GenericInstanceType genericInstanceType)
+        {
+            return module.ImportReference(ctorDefinition, genericInstanceType);
+        }
+
+        return module.ImportReference(ctorDefinition);
+    }
+
+    private static MethodReference? BuildDelegateInvoke(
+        FunctionTypeSymbol functionType,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+    {
+        if (!delegateTypeMap.TryGetValue(functionType.Name, out var delegateType))
+        {
+            diagnostics.Report(Span.Empty, $"phase-6 CLR backend is missing delegate type for '{functionType}'", "IL001");
+            return null;
+        }
+
+        var invokeDefinition = delegateType.Methods.FirstOrDefault(m => m.Name == "Invoke");
+        if (invokeDefinition == null)
+        {
+            diagnostics.Report(Span.Empty, "phase-6 CLR backend could not resolve delegate invoke method", "IL001");
+            return null;
+        }
+
+        return module.ImportReference(invokeDefinition);
+    }
+
+    private static DisplayClassInfo? BuildDisplayClass(
+        IrFunction function,
+        IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        ModuleDefinition module,
+        TypeDefinition programType,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+    {
+        if (!methodMap.TryGetValue(function.Name, out var targetMethod))
+        {
+            diagnostics.Report(Span.Empty, $"phase-6 CLR backend missing target method for '{function.Name}'", "IL001");
+            return null;
+        }
+
+        var closureType = new FunctionTypeSymbol(
+            function.Parameters.Skip(function.CaptureParameterCount).Select(p => p.Type).ToList(),
+            function.ReturnType);
+        var delegateType = MapType(closureType, module, diagnostics, delegateTypeMap);
+        if (delegateType == null)
+        {
+            return null;
+        }
+
+        var displayClass = new TypeDefinition(
+            "Kong.Generated",
+            $"__display_{function.Name}",
+            CecilTypeAttributes.NestedPrivate | CecilTypeAttributes.Class | CecilTypeAttributes.Sealed,
+            module.TypeSystem.Object);
+        programType.NestedTypes.Add(displayClass);
+
+        var objectCtor = module.ImportReference(typeof(object).GetConstructor(Type.EmptyTypes)!);
+        var ctor = new MethodDefinition(".ctor", CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.SpecialName | CecilMethodAttributes.RTSpecialName, module.TypeSystem.Void);
+        displayClass.Methods.Add(ctor);
+        var ctorIl = ctor.Body.GetILProcessor();
+        ctorIl.Emit(OpCodes.Ldarg_0);
+        ctorIl.Emit(OpCodes.Call, objectCtor);
+        ctorIl.Emit(OpCodes.Ret);
+
+        var captureFields = new List<FieldDefinition>(function.CaptureParameterCount);
+        for (var i = 0; i < function.CaptureParameterCount; i++)
+        {
+            var captureParameter = function.Parameters[i];
+            var fieldType = MapType(captureParameter.Type, module, diagnostics, delegateTypeMap);
+            if (fieldType == null)
+            {
+                return null;
+            }
+
+            var field = new FieldDefinition($"capture_{i}", CecilFieldAttributes.Public, fieldType);
+            displayClass.Fields.Add(field);
+            captureFields.Add(field);
+        }
+
+        var invokeReturnType = MapType(function.ReturnType, module, diagnostics, delegateTypeMap);
+        if (invokeReturnType == null)
+        {
+            return null;
+        }
+
+        var invoke = new MethodDefinition("Invoke", CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig, invokeReturnType);
+        displayClass.Methods.Add(invoke);
+        for (var i = function.CaptureParameterCount; i < function.Parameters.Count; i++)
+        {
+            var parameter = function.Parameters[i];
+            var parameterType = MapType(parameter.Type, module, diagnostics, delegateTypeMap);
+            if (parameterType == null)
+            {
+                return null;
+            }
+
+            invoke.Parameters.Add(new ParameterDefinition(parameter.Name, CecilParameterAttributes.None, parameterType));
+        }
+
+        var invokeIl = invoke.Body.GetILProcessor();
+        for (var i = 0; i < function.CaptureParameterCount; i++)
+        {
+            invokeIl.Emit(OpCodes.Ldarg_0);
+            invokeIl.Emit(OpCodes.Ldfld, captureFields[i]);
+        }
+
+        for (var i = 0; i < invoke.Parameters.Count; i++)
+        {
+            invokeIl.Emit(OpCodes.Ldarg, invoke.Parameters[i]);
+        }
+
+        invokeIl.Emit(OpCodes.Call, targetMethod);
+        invokeIl.Emit(OpCodes.Ret);
+
+        return new DisplayClassInfo(
+            displayClass,
+            invoke,
+            captureFields,
+            delegateType,
+            BuildDelegateConstructor(delegateType, module));
     }
 
     private static Dictionary<string, MethodReference> BuildBuiltinMap(ModuleDefinition module)
@@ -410,7 +793,8 @@ public class ClrPhase1Executor
         }
         catch (Exception ex)
         {
-            diagnostics.Report(Span.Empty, $"failed to execute generated CLR assembly: {ex.Message}", "IL004");
+            var message = ex.InnerException?.Message ?? ex.Message;
+            diagnostics.Report(Span.Empty, $"failed to execute generated CLR assembly: {message}", "IL004");
             return null;
         }
         finally

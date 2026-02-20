@@ -8,6 +8,7 @@ public static class TypeAnnotationBinder
         {
             NamedType namedType => BindNamedType(namedType, diagnostics),
             ArrayType arrayType => BindArrayType(arrayType, diagnostics),
+            FunctionType functionType => BindFunctionType(functionType, diagnostics),
             _ => BindUnknownType(typeNode, diagnostics),
         };
     }
@@ -33,6 +34,29 @@ public static class TypeAnnotationBinder
         }
 
         return new ArrayTypeSymbol(elementType);
+    }
+
+    private static TypeSymbol? BindFunctionType(FunctionType functionType, DiagnosticBag diagnostics)
+    {
+        var parameterTypes = new List<TypeSymbol>(functionType.ParameterTypes.Count);
+        foreach (var parameterTypeNode in functionType.ParameterTypes)
+        {
+            var parameterType = Bind(parameterTypeNode, diagnostics);
+            if (parameterType == null)
+            {
+                return null;
+            }
+
+            parameterTypes.Add(parameterType);
+        }
+
+        var returnType = Bind(functionType.ReturnType, diagnostics);
+        if (returnType == null)
+        {
+            return null;
+        }
+
+        return new FunctionTypeSymbol(parameterTypes, returnType);
     }
 
     private static TypeSymbol? BindUnknownType(ITypeNode typeNode, DiagnosticBag diagnostics)

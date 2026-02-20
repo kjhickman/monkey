@@ -20,6 +20,7 @@ public sealed class IrFunction
 {
     public required string Name { get; init; }
     public required TypeSymbol ReturnType { get; init; }
+    public int CaptureParameterCount { get; set; }
     public List<IrParameter> Parameters { get; } = [];
     public List<IrBlock> Blocks { get; } = [];
     public Dictionary<IrValueId, TypeSymbol> ValueTypes { get; } = [];
@@ -62,6 +63,16 @@ public sealed record class IrStoreLocal(IrLocalId Local, IrValueId Source) : IrI
 public sealed record class IrLoadLocal(IrValueId Destination, IrLocalId Local) : IrInstruction;
 
 public sealed record class IrCall(IrValueId Destination, string FunctionName, IReadOnlyList<IrValueId> Arguments) : IrInstruction;
+
+public sealed record class IrCreateClosure(
+    IrValueId Destination,
+    string FunctionName,
+    IReadOnlyList<IrLocalId> CapturedLocals) : IrInstruction;
+
+public sealed record class IrInvokeClosure(
+    IrValueId Destination,
+    IrValueId Closure,
+    IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
 public sealed record class IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
 

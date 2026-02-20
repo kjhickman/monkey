@@ -95,4 +95,33 @@ public class TypeAnnotationBinderTests
         Assert.Single(diagnostics.All);
         Assert.Equal("T001", diagnostics.All[0].Code);
     }
+
+    [Fact]
+    public void TestBindFunctionType()
+    {
+        var diagnostics = new DiagnosticBag();
+        var typeNode = new FunctionType
+        {
+            Token = new Token(TokenType.Function, "fn"),
+            ParameterTypes =
+            [
+                new NamedType { Token = new Token(TokenType.Identifier, "int"), Name = "int" },
+                new ArrayType
+                {
+                    Token = new Token(TokenType.LeftBracket, "["),
+                    ElementType = new NamedType { Token = new Token(TokenType.Identifier, "int"), Name = "int" },
+                },
+            ],
+            ReturnType = new NamedType { Token = new Token(TokenType.Identifier, "bool"), Name = "bool" },
+        };
+
+        var type = TypeAnnotationBinder.Bind(typeNode, diagnostics);
+
+        var functionType = Assert.IsType<FunctionTypeSymbol>(type);
+        Assert.Equal(2, functionType.ParameterTypes.Count);
+        Assert.Equal(TypeSymbols.Int, functionType.ParameterTypes[0]);
+        Assert.Equal(new ArrayTypeSymbol(TypeSymbols.Int), functionType.ParameterTypes[1]);
+        Assert.Equal(TypeSymbols.Bool, functionType.ReturnType);
+        Assert.False(diagnostics.HasErrors);
+    }
 }

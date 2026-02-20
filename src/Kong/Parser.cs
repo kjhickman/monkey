@@ -244,6 +244,11 @@ public class Parser
 
     private ITypeNode? ParseTypePrimary()
     {
+        if (CurTokenIs(TokenType.Function))
+        {
+            return ParseFunctionTypeNode();
+        }
+
         if (!CurTokenIs(TokenType.Identifier))
         {
             _diagnostics.Report(_curToken.Span, $"expected type name, got {_curToken.Type}", "P004");
@@ -256,6 +261,67 @@ public class Parser
             Name = _curToken.Literal,
             Span = _curToken.Span,
         };
+    }
+
+    private ITypeNode? ParseFunctionTypeNode()
+    {
+        var startSpan = _curToken.Span.Start;
+        var functionType = new FunctionType
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null;
+        }
+
+        if (!PeekTokenIs(TokenType.RightParenthesis))
+        {
+            NextToken();
+            var firstParameterType = ParseTypeNode();
+            if (firstParameterType == null)
+            {
+                return null;
+            }
+
+            functionType.ParameterTypes.Add(firstParameterType);
+
+            while (PeekTokenIs(TokenType.Comma))
+            {
+                NextToken();
+                NextToken();
+
+                var nextParameterType = ParseTypeNode();
+                if (nextParameterType == null)
+                {
+                    return null;
+                }
+
+                functionType.ParameterTypes.Add(nextParameterType);
+            }
+        }
+
+        if (!ExpectPeek(TokenType.RightParenthesis))
+        {
+            return null;
+        }
+
+        if (!ExpectPeek(TokenType.Arrow))
+        {
+            return null;
+        }
+
+        NextToken();
+        var returnType = ParseTypeNode();
+        if (returnType == null)
+        {
+            return null;
+        }
+
+        functionType.ReturnType = returnType;
+        functionType.Span = new Span(startSpan, returnType.Span.End);
+        return functionType;
     }
 
     private ReturnStatement ParseReturnStatement()
