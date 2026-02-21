@@ -14,19 +14,23 @@ Kong is a small, for-fun programming language implemented in C# with static sema
 ## Example
 
 ```text
-let age = 1;
-let message = "Hello, world!";
-let result = [1, 2, 3];
+import System;
 
-let add = fn(a: int, b: int) -> int {
+namespace Demo;
+
+fn Main() {
+    let sum = Add(20, 22);
+    Environment.SetEnvironmentVariable("KONG_SUM", "ok");
+    if (Environment.NewLine != "") {
+        Console.WriteLine(sum);
+    } else {
+        Console.WriteLine(0);
+    }
+}
+
+fn Add(a: int, b: int) -> int {
     a + b;
-};
-
-let multiply = fn(x: int, y: int) -> int {
-    return x * y;
-};
-
-add(10, multiply(2, 2)); // Returns 14
+}
 ```
 
 ## Running
