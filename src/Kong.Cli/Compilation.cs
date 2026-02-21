@@ -32,7 +32,7 @@ public static class Compilation
         var visiting = new Stack<string>();
         var rootFullPath = Path.GetFullPath(filePath);
 
-        if (!TryLoadWithPathImports(rootFullPath, orderedUnits, parsedUnits, visiting, out diagnostics))
+        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, orderedUnits, parsedUnits, visiting, out diagnostics))
         {
             return false;
         }
@@ -97,6 +97,7 @@ public static class Compilation
 
     private static bool TryLoadWithPathImports(
         string filePath,
+        string rootFilePath,
         List<LoadedUnit> orderedUnits,
         Dictionary<string, CompilationUnit> parsedUnits,
         Stack<string> visiting,
@@ -116,7 +117,7 @@ public static class Compilation
             return false;
         }
 
-        if (!TryParseFile(filePath, out var unit, out diagnostics))
+        if (!TryParseFile(filePath, string.Equals(filePath, rootFilePath, StringComparison.OrdinalIgnoreCase), out var unit, out diagnostics))
         {
             return false;
         }
@@ -144,7 +145,7 @@ public static class Compilation
                     return false;
                 }
 
-                if (!TryLoadWithPathImports(resolvedPath, orderedUnits, parsedUnits, visiting, out diagnostics))
+                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, orderedUnits, parsedUnits, visiting, out diagnostics))
                 {
                     return false;
                 }
@@ -160,7 +161,7 @@ public static class Compilation
         return true;
     }
 
-    private static bool TryParseFile(string filePath, out CompilationUnit unit, out DiagnosticBag diagnostics)
+    private static bool TryParseFile(string filePath, bool isRootFile, out CompilationUnit unit, out DiagnosticBag diagnostics)
     {
         unit = null!;
         diagnostics = new DiagnosticBag();
@@ -181,7 +182,7 @@ public static class Compilation
             return false;
         }
 
-        ValidateFileStructure(unit, filePath, diagnostics);
+        ValidateFileStructure(unit, filePath, isRootFile, diagnostics);
         if (diagnostics.HasErrors)
         {
             return false;
@@ -190,7 +191,7 @@ public static class Compilation
         return true;
     }
 
-    private static void ValidateFileStructure(CompilationUnit unit, string filePath, DiagnosticBag diagnostics)
+    private static void ValidateFileStructure(CompilationUnit unit, string filePath, bool isRootFile, DiagnosticBag diagnostics)
     {
         var seenNamespace = false;
         var seenDeclaration = false;
@@ -226,8 +227,21 @@ public static class Compilation
                     seenNamespace = true;
                     break;
                 default:
+                    if (!isRootFile && statement is not FunctionDeclaration)
+                    {
+                        diagnostics.Report(
+                            statement.Span,
+                            $"imported modules may only declare top-level functions in '{filePath}'",
+                            "CLI017");
+                    }
+
                     seenDeclaration = true;
                     break;
+            }
+
+            if (!isRootFile && statement is FunctionDeclaration { Name.Value: "Main" })
+            {
+                diagnostics.Report(statement.Span, $"imported modules must not declare 'Main' in '{filePath}'", "CLI018");
             }
 
             ValidateStatementStructure(statement, isTopLevel: true, filePath, diagnostics);

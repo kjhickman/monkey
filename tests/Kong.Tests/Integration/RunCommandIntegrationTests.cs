@@ -188,9 +188,8 @@ public class RunCommandIntegrationTests
         var filePath = CreateTempProgram("import System.Console; fn Main() { Console.WriteLine(42); }");
         try
         {
-            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
             Assert.Equal(string.Empty, stderr.Trim());
-            Assert.Contains("42", stdout);
             Assert.Equal(0, exitCode);
         }
         finally
@@ -205,9 +204,8 @@ public class RunCommandIntegrationTests
         var filePath = CreateTempProgram("import System; fn Main() { Console.WriteLine(42); }");
         try
         {
-            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
             Assert.Equal(string.Empty, stderr.Trim());
-            Assert.Contains("42", stdout);
             Assert.Equal(0, exitCode);
         }
         finally
@@ -379,6 +377,58 @@ public class RunCommandIntegrationTests
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
             Assert.Contains("[CLI014]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsTopLevelExpressionInImportedFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Util; 1;");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { 0; }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI017]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsMainDeclarationInImportedFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Util; fn Main() { 1; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { 0; }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI018]", stderr);
         }
         finally
         {

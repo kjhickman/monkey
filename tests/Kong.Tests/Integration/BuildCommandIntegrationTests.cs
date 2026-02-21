@@ -106,7 +106,8 @@ public class BuildCommandIntegrationTests
     [Fact]
     public void TestBuildCommandReportsMissingPathImport()
     {
-        var sourcePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 1; }");
+        var missingName = $"missing-{Guid.NewGuid():N}.kg";
+        var sourcePath = CreateTempProgram($"import \"./{missingName}\"; fn Main() {{ 1; }}");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
 
         try
