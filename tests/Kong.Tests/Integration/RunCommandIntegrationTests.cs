@@ -284,6 +284,34 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandReportsCyclicPathImport()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var aPath = Path.Combine(tempDirectory, "a.kg");
+        var bPath = Path.Combine(tempDirectory, "b.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(aPath, "import \"./b.kg\"; namespace ModA; fn A() -> int { 1; }");
+            File.WriteAllText(bPath, "import \"./a.kg\"; namespace ModB; fn B() -> int { 2; }");
+            File.WriteAllText(mainPath, "import \"./a.kg\"; namespace App; fn Main() { A(); }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI008]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsMissingNamespaceInImportedFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");

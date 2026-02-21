@@ -99,6 +99,14 @@ public static class Compilation
                     return false;
                 }
 
+                if (visiting.Contains(resolvedPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    var cycle = string.Join(" -> ", visiting.Reverse().Append(resolvedPath).Select(Path.GetFileName));
+                    diagnostics = new DiagnosticBag();
+                    diagnostics.Report(statement.Span, $"cyclic path import detected: {cycle}", "CLI008");
+                    return false;
+                }
+
                 if (!TryLoadWithPathImports(resolvedPath, orderedUnits, parsedUnits, visiting, out diagnostics))
                 {
                     return false;
