@@ -65,8 +65,15 @@ public class NameResolver
 
     public NameResolution Resolve(CompilationUnit unit)
     {
+        return Resolve(unit, []);
+    }
+
+    public NameResolution Resolve(
+        CompilationUnit unit,
+        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations)
+    {
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
-        PredeclareTopLevelFunctions(unit);
+        PredeclareTopLevelFunctions(unit, externalFunctionDeclarations);
 
         var seenNamespace = false;
         var seenDeclaration = false;
@@ -118,8 +125,15 @@ public class NameResolver
         return _result;
     }
 
-    private void PredeclareTopLevelFunctions(CompilationUnit unit)
+    private void PredeclareTopLevelFunctions(
+        CompilationUnit unit,
+        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations)
     {
+        foreach (var external in externalFunctionDeclarations)
+        {
+            DeclareTopLevelFunction(external.Name.Value, external.Name.Span);
+        }
+
         foreach (var statement in unit.Statements)
         {
             if (statement is not FunctionDeclaration functionDeclaration)
@@ -127,16 +141,24 @@ public class NameResolver
                 continue;
             }
 
-            if (_scope.TryLookupInCurrent(functionDeclaration.Name.Value, out _))
+            DeclareTopLevelFunction(functionDeclaration.Name.Value, functionDeclaration.Name.Span);
+            if (_scope.TryLookupInCurrent(functionDeclaration.Name.Value, out var symbol))
             {
-                _result.Diagnostics.Report(functionDeclaration.Name.Span, $"duplicate declaration of '{functionDeclaration.Name.Value}'", "N002");
-                continue;
+                _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
             }
-
-            var symbol = new NameSymbol(functionDeclaration.Name.Value, NameSymbolKind.Global, functionDeclaration.Name.Span, _scope.FunctionDepth);
-            _scope.Symbols[functionDeclaration.Name.Value] = symbol;
-            _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
         }
+    }
+
+    private void DeclareTopLevelFunction(string name, Span declarationSpan)
+    {
+        if (_scope.TryLookupInCurrent(name, out _))
+        {
+            _result.Diagnostics.Report(declarationSpan, $"duplicate declaration of '{name}'", "N002");
+            return;
+        }
+
+        var symbol = new NameSymbol(name, NameSymbolKind.Global, declarationSpan, _scope.FunctionDepth);
+        _scope.Symbols[name] = symbol;
     }
 
     private void ResolveStatement(IStatement statement)

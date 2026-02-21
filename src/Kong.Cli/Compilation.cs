@@ -8,6 +8,7 @@ namespace Kong.Cli;
 public static class Compilation
 {
     private sealed record LoadedUnit(string FilePath, CompilationUnit Unit);
+    private sealed record ModuleSemanticResult(string FilePath, NameResolution Names, TypeCheckResult TypeCheck);
 
     public static bool TryCompile(
         string filePath,
@@ -29,10 +30,11 @@ public static class Compilation
 
         var orderedUnits = new List<LoadedUnit>();
         var parsedUnits = new Dictionary<string, CompilationUnit>(StringComparer.OrdinalIgnoreCase);
+        var moduleImports = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         var visiting = new Stack<string>();
         var rootFullPath = Path.GetFullPath(filePath);
 
-        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, expectedNamespaceTail: null, orderedUnits, parsedUnits, visiting, out diagnostics))
+        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, expectedNamespaceTail: null, orderedUnits, parsedUnits, moduleImports, visiting, out diagnostics))
         {
             return false;
         }
@@ -45,21 +47,13 @@ public static class Compilation
 
         unit = MergeUnits(orderedUnits, rootFullPath);
 
-        var resolver = new NameResolver();
-        nameResolution = resolver.Resolve(unit);
-        if (nameResolution.Diagnostics.HasErrors)
+        if (!TryAnalyzeModules(orderedUnits, moduleImports, out var moduleSemantics, out diagnostics))
         {
-            diagnostics = nameResolution.Diagnostics;
             return false;
         }
 
-        var checker = new TypeChecker();
-        typeCheck = checker.Check(unit, nameResolution);
-        if (typeCheck.Diagnostics.HasErrors)
-        {
-            diagnostics = typeCheck.Diagnostics;
-            return false;
-        }
+        nameResolution = CombineNameResolutions(moduleSemantics);
+        typeCheck = CombineTypeCheckResults(moduleSemantics);
 
         return true;
     }
@@ -101,6 +95,7 @@ public static class Compilation
         string? expectedNamespaceTail,
         List<LoadedUnit> orderedUnits,
         Dictionary<string, CompilationUnit> parsedUnits,
+        Dictionary<string, List<string>> moduleImports,
         Stack<string> visiting,
         out DiagnosticBag diagnostics)
     {
@@ -155,9 +150,20 @@ public static class Compilation
                 }
 
                 var expectedTail = Path.GetFileNameWithoutExtension(resolvedPath);
-                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, expectedTail, orderedUnits, parsedUnits, visiting, out diagnostics))
+                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, expectedTail, orderedUnits, parsedUnits, moduleImports, visiting, out diagnostics))
                 {
                     return false;
+                }
+
+                if (!moduleImports.TryGetValue(filePath, out var imports))
+                {
+                    imports = [];
+                    moduleImports[filePath] = imports;
+                }
+
+                if (!imports.Contains(resolvedPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    imports.Add(resolvedPath);
                 }
             }
         }
@@ -470,6 +476,242 @@ public static class Compilation
         }
 
         return merged;
+    }
+
+    private static bool TryAnalyzeModules(
+        IReadOnlyList<LoadedUnit> loadedUnits,
+        IReadOnlyDictionary<string, List<string>> moduleImports,
+        out List<ModuleSemanticResult> moduleSemantics,
+        out DiagnosticBag diagnostics)
+    {
+        moduleSemantics = [];
+        diagnostics = new DiagnosticBag();
+
+        var modulesByPath = loadedUnits.ToDictionary(u => u.FilePath, StringComparer.OrdinalIgnoreCase);
+
+        var functionDeclsByFile = new Dictionary<string, List<FunctionDeclaration>>(StringComparer.OrdinalIgnoreCase);
+        var functionTypesByFile = new Dictionary<string, Dictionary<string, FunctionTypeSymbol>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var loadedUnit in loadedUnits)
+        {
+            var declarations = loadedUnit.Unit.Statements.OfType<FunctionDeclaration>().ToList();
+            functionDeclsByFile[loadedUnit.FilePath] = declarations;
+
+            var typeMap = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
+            foreach (var declaration in declarations)
+            {
+                if (TryBindFunctionType(declaration, out var functionType))
+                {
+                    typeMap[declaration.Name.Value] = functionType;
+                }
+            }
+
+            functionTypesByFile[loadedUnit.FilePath] = typeMap;
+        }
+
+        foreach (var loadedUnit in loadedUnits)
+        {
+            var reachable = ComputeReachableModules(loadedUnit.FilePath, moduleImports);
+            reachable.Remove(loadedUnit.FilePath);
+
+            var externalDeclarations = new List<FunctionDeclaration>();
+            var externalFunctionTypes = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
+
+            foreach (var path in reachable)
+            {
+                if (functionDeclsByFile.TryGetValue(path, out var declarations))
+                {
+                    externalDeclarations.AddRange(declarations);
+                }
+
+                if (functionTypesByFile.TryGetValue(path, out var typeMap))
+                {
+                    foreach (var pair in typeMap)
+                    {
+                        externalFunctionTypes[pair.Key] = pair.Value;
+                    }
+                }
+            }
+
+            var resolver = new NameResolver();
+            var names = resolver.Resolve(loadedUnit.Unit, externalDeclarations);
+            if (names.Diagnostics.HasErrors)
+            {
+                diagnostics = PrefixDiagnosticsWithFile(names.Diagnostics, loadedUnit.FilePath);
+                return false;
+            }
+
+            var checker = new TypeChecker();
+            var typeCheck = checker.Check(loadedUnit.Unit, names, externalFunctionTypes);
+            if (typeCheck.Diagnostics.HasErrors)
+            {
+                diagnostics = PrefixDiagnosticsWithFile(typeCheck.Diagnostics, loadedUnit.FilePath);
+                return false;
+            }
+
+            moduleSemantics.Add(new ModuleSemanticResult(loadedUnit.FilePath, names, typeCheck));
+        }
+
+        return true;
+    }
+
+    private static HashSet<string> ComputeReachableModules(
+        string rootFile,
+        IReadOnlyDictionary<string, List<string>> moduleImports)
+    {
+        var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var stack = new Stack<string>();
+        stack.Push(rootFile);
+
+        while (stack.Count > 0)
+        {
+            var current = stack.Pop();
+            if (!reachable.Add(current))
+            {
+                continue;
+            }
+
+            if (!moduleImports.TryGetValue(current, out var imports))
+            {
+                continue;
+            }
+
+            foreach (var imported in imports)
+            {
+                stack.Push(imported);
+            }
+        }
+
+        return reachable;
+    }
+
+    private static bool TryBindFunctionType(FunctionDeclaration declaration, out FunctionTypeSymbol functionType)
+    {
+        var diagnostics = new DiagnosticBag();
+        var parameterTypes = new List<TypeSymbol>(declaration.Parameters.Count);
+        foreach (var parameter in declaration.Parameters)
+        {
+            if (parameter.TypeAnnotation == null)
+            {
+                functionType = null!;
+                return false;
+            }
+
+            var boundParameterType = TypeAnnotationBinder.Bind(parameter.TypeAnnotation, diagnostics);
+            if (boundParameterType == null)
+            {
+                functionType = null!;
+                return false;
+            }
+
+            parameterTypes.Add(boundParameterType);
+        }
+
+        var returnType = declaration.ReturnTypeAnnotation != null
+            ? TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, diagnostics)
+            : TypeSymbols.Void;
+
+        if (returnType == null)
+        {
+            functionType = null!;
+            return false;
+        }
+
+        functionType = new FunctionTypeSymbol(parameterTypes, returnType);
+        return true;
+    }
+
+    private static NameResolution CombineNameResolutions(IReadOnlyList<ModuleSemanticResult> moduleSemantics)
+    {
+        var combined = new NameResolution();
+        foreach (var module in moduleSemantics)
+        {
+            foreach (var pair in module.Names.IdentifierSymbols)
+            {
+                combined.IdentifierSymbols[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.Names.ParameterSymbols)
+            {
+                combined.ParameterSymbols[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.Names.FunctionCaptures)
+            {
+                combined.FunctionCaptures[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.Names.ImportedTypeAliases)
+            {
+                combined.ImportedTypeAliases[pair.Key] = pair.Value;
+            }
+
+            foreach (var importedNamespace in module.Names.ImportedNamespaces)
+            {
+                combined.ImportedNamespaces.Add(importedNamespace);
+            }
+
+            if (combined.FileNamespace == null)
+            {
+                combined.FileNamespace = module.Names.FileNamespace;
+            }
+        }
+
+        return combined;
+    }
+
+    private static TypeCheckResult CombineTypeCheckResults(IReadOnlyList<ModuleSemanticResult> moduleSemantics)
+    {
+        var combined = new TypeCheckResult();
+        foreach (var module in moduleSemantics)
+        {
+            foreach (var pair in module.TypeCheck.ExpressionTypes)
+            {
+                combined.ExpressionTypes[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.ResolvedStaticMethodPaths)
+            {
+                combined.ResolvedStaticMethodPaths[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.ResolvedStaticValuePaths)
+            {
+                combined.ResolvedStaticValuePaths[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.VariableTypes)
+            {
+                combined.VariableTypes[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.FunctionTypes)
+            {
+                combined.FunctionTypes[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.DeclaredFunctionTypes)
+            {
+                combined.DeclaredFunctionTypes[pair.Key] = pair.Value;
+            }
+        }
+
+        return combined;
+    }
+
+    private static DiagnosticBag PrefixDiagnosticsWithFile(DiagnosticBag source, string filePath)
+    {
+        var prefixed = new DiagnosticBag();
+        var fileName = Path.GetFileName(filePath);
+        foreach (var diagnostic in source.All)
+        {
+            prefixed.Report(
+                diagnostic.Span,
+                $"[{fileName}] {diagnostic.Message}",
+                diagnostic.Code,
+                diagnostic.Severity);
+        }
+
+        return prefixed;
     }
 
     public static bool ValidateProgramEntrypoint(

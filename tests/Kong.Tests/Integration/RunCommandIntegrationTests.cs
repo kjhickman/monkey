@@ -413,6 +413,33 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandPrefixesImportedModuleDiagnosticsWithFileName()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { missing; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[N001]", stderr);
+            Assert.Contains("[util.kg]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsTopLevelExpressionInImportedFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");

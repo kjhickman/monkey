@@ -20,11 +20,22 @@ public class TypeChecker
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
     private NameResolution _names = null!;
+    private IReadOnlyDictionary<string, FunctionTypeSymbol> _externalFunctionTypes =
+        new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
     private readonly ControlFlowAnalyzer _controlFlowAnalyzer = new();
 
     public TypeCheckResult Check(CompilationUnit unit, NameResolution names)
     {
+        return Check(unit, names, new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal));
+    }
+
+    public TypeCheckResult Check(
+        CompilationUnit unit,
+        NameResolution names,
+        IReadOnlyDictionary<string, FunctionTypeSymbol> externalFunctionTypes)
+    {
         _names = names;
+        _externalFunctionTypes = externalFunctionTypes;
         _result.Diagnostics.AddRange(names.Diagnostics);
         PredeclareFunctionDeclarations(unit);
 
@@ -241,6 +252,13 @@ public class TypeChecker
         if (_symbolTypes.TryGetValue(symbol, out var declarationType))
         {
             return declarationType;
+        }
+
+        if (symbol.Kind == NameSymbolKind.Global &&
+            _externalFunctionTypes.TryGetValue(symbol.Name, out var externalFunctionType))
+        {
+            _symbolTypes[symbol] = externalFunctionType;
+            return externalFunctionType;
         }
 
         _result.Diagnostics.Report(identifier.Span,
