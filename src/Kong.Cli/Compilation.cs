@@ -136,7 +136,154 @@ public static class Compilation
             return false;
         }
 
+        ValidateFileStructure(unit, filePath, diagnostics);
+        if (diagnostics.HasErrors)
+        {
+            return false;
+        }
+
         return true;
+    }
+
+    private static void ValidateFileStructure(CompilationUnit unit, string filePath, DiagnosticBag diagnostics)
+    {
+        var seenNamespace = false;
+        var seenDeclaration = false;
+
+        foreach (var statement in unit.Statements)
+        {
+            switch (statement)
+            {
+                case ImportStatement:
+                    if (seenNamespace || seenDeclaration)
+                    {
+                        diagnostics.Report(
+                            statement.Span,
+                            $"import statements must appear before namespace and other top-level declarations in '{filePath}'",
+                            "CLI011");
+                    }
+
+                    break;
+                case NamespaceStatement:
+                    if (seenDeclaration)
+                    {
+                        diagnostics.Report(
+                            statement.Span,
+                            $"namespace declaration must appear before top-level declarations in '{filePath}'",
+                            "CLI012");
+                    }
+
+                    if (seenNamespace)
+                    {
+                        diagnostics.Report(statement.Span, $"duplicate namespace declaration in '{filePath}'", "CLI013");
+                    }
+
+                    seenNamespace = true;
+                    break;
+                default:
+                    seenDeclaration = true;
+                    break;
+            }
+
+            ValidateStatementStructure(statement, isTopLevel: true, filePath, diagnostics);
+        }
+
+        if (!seenNamespace)
+        {
+            diagnostics.Report(Span.Empty, $"missing required file-scoped namespace declaration in '{filePath}'", "CLI010");
+        }
+    }
+
+    private static void ValidateStatementStructure(
+        IStatement statement,
+        bool isTopLevel,
+        string filePath,
+        DiagnosticBag diagnostics)
+    {
+        if (!isTopLevel && statement is ImportStatement)
+        {
+            diagnostics.Report(statement.Span, $"import statements are only allowed at the top level in '{filePath}'", "CLI014");
+        }
+
+        if (!isTopLevel && statement is NamespaceStatement)
+        {
+            diagnostics.Report(statement.Span, $"namespace declarations are only allowed at the top level in '{filePath}'", "CLI015");
+        }
+
+        switch (statement)
+        {
+            case FunctionDeclaration functionDeclaration:
+                ValidateBlock(functionDeclaration.Body, filePath, diagnostics);
+                break;
+            case BlockStatement blockStatement:
+                ValidateBlock(blockStatement, filePath, diagnostics);
+                break;
+            case LetStatement { Value: { } value }:
+                ValidateExpression(value, filePath, diagnostics);
+                break;
+            case ReturnStatement { ReturnValue: { } returnValue }:
+                ValidateExpression(returnValue, filePath, diagnostics);
+                break;
+            case ExpressionStatement { Expression: { } expression }:
+                ValidateExpression(expression, filePath, diagnostics);
+                break;
+        }
+    }
+
+    private static void ValidateBlock(BlockStatement block, string filePath, DiagnosticBag diagnostics)
+    {
+        foreach (var statement in block.Statements)
+        {
+            ValidateStatementStructure(statement, isTopLevel: false, filePath, diagnostics);
+        }
+    }
+
+    private static void ValidateExpression(IExpression expression, string filePath, DiagnosticBag diagnostics)
+    {
+        switch (expression)
+        {
+            case IfExpression ifExpression:
+                ValidateExpression(ifExpression.Condition, filePath, diagnostics);
+                ValidateBlock(ifExpression.Consequence, filePath, diagnostics);
+                if (ifExpression.Alternative != null)
+                {
+                    ValidateBlock(ifExpression.Alternative, filePath, diagnostics);
+                }
+
+                break;
+            case PrefixExpression prefixExpression:
+                ValidateExpression(prefixExpression.Right, filePath, diagnostics);
+                break;
+            case InfixExpression infixExpression:
+                ValidateExpression(infixExpression.Left, filePath, diagnostics);
+                ValidateExpression(infixExpression.Right, filePath, diagnostics);
+                break;
+            case FunctionLiteral functionLiteral:
+                ValidateBlock(functionLiteral.Body, filePath, diagnostics);
+                break;
+            case CallExpression callExpression:
+                ValidateExpression(callExpression.Function, filePath, diagnostics);
+                foreach (var argument in callExpression.Arguments)
+                {
+                    ValidateExpression(argument, filePath, diagnostics);
+                }
+
+                break;
+            case MemberAccessExpression memberAccessExpression:
+                ValidateExpression(memberAccessExpression.Object, filePath, diagnostics);
+                break;
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    ValidateExpression(element, filePath, diagnostics);
+                }
+
+                break;
+            case IndexExpression indexExpression:
+                ValidateExpression(indexExpression.Left, filePath, diagnostics);
+                ValidateExpression(indexExpression.Index, filePath, diagnostics);
+                break;
+        }
     }
 
     private static bool TryResolveImportPath(string containingDirectory, string rawPath, out string resolvedPath, out string error)

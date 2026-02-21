@@ -284,6 +284,58 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandReportsMissingNamespaceInImportedFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI010]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsNestedImportInImportedFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Util; fn Helper() { import System; } fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI014]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");
