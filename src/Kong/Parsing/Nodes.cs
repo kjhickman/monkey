@@ -169,19 +169,11 @@ public class ImportStatement : IStatement
     public Span Span { get; set; }
     public Token Token { get; set; } // the 'import' token
     public string QualifiedName { get; set; } = "";
-    public string? Path { get; set; }
-
-    public bool IsPathImport => Path != null;
 
     public string Alias
     {
         get
         {
-            if (Path != null)
-            {
-                return "";
-            }
-
             var lastDot = QualifiedName.LastIndexOf('.');
             return lastDot < 0 ? QualifiedName : QualifiedName[(lastDot + 1)..];
         }
@@ -189,7 +181,7 @@ public class ImportStatement : IStatement
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => Path != null ? $"import \"{Path}\";" : $"import {QualifiedName};";
+    public string String() => $"import {QualifiedName};";
 }
 
 public class NamespaceStatement : IStatement

@@ -922,18 +922,15 @@ public class ParserTests
     }
 
     [Fact]
-    public void TestParsesPathImportStatement()
+    public void TestRejectsPathImportStatement()
     {
         var input = "import \"./util.kg\";";
         var l = new Lexer(input);
         var p = new Parser(l);
-        var unit = p.ParseCompilationUnit();
-        CheckParserErrors(p);
+        p.ParseCompilationUnit();
 
-        var importStatement = Assert.IsType<ImportStatement>(unit.Statements[0]);
-        Assert.True(importStatement.IsPathImport);
-        Assert.Equal("./util.kg", importStatement.Path);
-        Assert.Equal(string.Empty, importStatement.QualifiedName);
+        Assert.True(p.Diagnostics.HasErrors);
+        Assert.Contains(p.Diagnostics.All, d => d.Code == "P001");
     }
 
     [Fact]

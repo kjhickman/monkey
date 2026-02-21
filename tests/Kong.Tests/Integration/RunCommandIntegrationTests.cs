@@ -240,7 +240,7 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandSupportsPathImportFromAnotherKongFile()
+    public void TestRunCommandSupportsNamespaceImportFromAnotherKongFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
@@ -250,7 +250,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(20, 22); }");
+            File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -266,14 +266,14 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandReportsMissingPathImport()
+    public void TestRunCommandRejectsPathImportSyntax()
     {
-        var filePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 1; }");
+        var filePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 0; }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
             Assert.Equal(string.Empty, stdout.Trim());
-            Assert.Contains("[CLI009]", stderr);
+            Assert.Contains("[P001]", stderr);
         }
         finally
         {
@@ -282,23 +282,23 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandReportsCyclicPathImport()
+    public void TestRunCommandAllowsDuplicateNamespaceAcrossFiles()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
-        var aPath = Path.Combine(tempDirectory, "a.kg");
-        var bPath = Path.Combine(tempDirectory, "b.kg");
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mathPath = Path.Combine(tempDirectory, "math.kg");
         var mainPath = Path.Combine(tempDirectory, "main.kg");
 
         try
         {
-            File.WriteAllText(aPath, "import \"./b.kg\"; namespace A; fn A() -> int { 1; }");
-            File.WriteAllText(bPath, "import \"./a.kg\"; namespace B; fn B() -> int { 2; }");
-            File.WriteAllText(mainPath, "import \"./a.kg\"; namespace App; fn Main() { A(); }");
+            File.WriteAllText(utilPath, "namespace Shared; fn Inc(x: int) -> int { x + 1; }");
+            File.WriteAllText(mathPath, "namespace Shared; fn Twice(x: int) -> int { x * 2; }");
+            File.WriteAllText(mainPath, "import Shared; namespace App; fn Main() { Twice(Inc(20)); }");
 
-            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
-            Assert.Equal(string.Empty, stdout.Trim());
-            Assert.Contains("[CLI008]", stderr);
+            var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
         }
         finally
         {
@@ -310,7 +310,7 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
-    public void TestRunCommandReportsNamespacePathMismatchInImportedFile()
+    public void TestRunCommandReportsUnknownFunctionWithoutNamespaceImport()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDirectory);
@@ -320,11 +320,11 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { Add(1, 2); }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
-            Assert.Contains("[CLI019]", stderr);
+            Assert.Contains("[N001]", stderr);
         }
         finally
         {
@@ -345,8 +345,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "namespace Shared; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -372,7 +372,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { 1; }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -398,7 +398,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Util; fn Helper() { import System; } fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -424,7 +424,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { missing; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -451,7 +451,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Util; 1;");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { 0; }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -477,7 +477,7 @@ public class RunCommandIntegrationTests
         try
         {
             File.WriteAllText(utilPath, "namespace Util; fn Main() { 1; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { 0; }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());

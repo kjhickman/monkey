@@ -207,8 +207,11 @@ public class NameResolver
             return;
         }
 
-        if (statement.IsPathImport)
+        if (string.IsNullOrWhiteSpace(statement.QualifiedName))
         {
+            _result.Diagnostics.Report(statement.Span,
+                "import statements must specify a qualified namespace",
+                "N010");
             return;
         }
 

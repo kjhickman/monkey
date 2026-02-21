@@ -106,7 +106,7 @@ public class BuildCommandIntegrationTests
     }
 
     [Fact]
-    public void TestBuildCommandReportsMissingPathImport()
+    public void TestBuildCommandRejectsPathImportSyntax()
     {
         var missingName = $"missing-{Guid.NewGuid():N}.kg";
         var sourcePath = CreateTempProgram($"import \"./{missingName}\"; fn Main() {{ 1; }}");
@@ -116,7 +116,7 @@ public class BuildCommandIntegrationTests
         {
             Directory.CreateDirectory(workingDir);
             var (_, stdErr) = ExecuteBuildCommand(sourcePath, workingDir);
-            Assert.Contains("[CLI009]", stdErr);
+            Assert.Contains("[P001]", stdErr);
         }
         finally
         {
@@ -142,8 +142,8 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "namespace Shared; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
 
             var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
             Assert.Contains("[CLI016]", stdErr);
@@ -163,7 +163,7 @@ public class BuildCommandIntegrationTests
     }
 
     [Fact]
-    public void TestBuildCommandReportsNamespacePathMismatchInImportedFile()
+    public void TestBuildCommandReportsUnknownFunctionWithoutNamespaceImport()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
@@ -176,10 +176,10 @@ public class BuildCommandIntegrationTests
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
             File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(mainPath, "namespace App; fn Main() { Add(1, 2); }");
 
             var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
-            Assert.Contains("[CLI019]", stdErr);
+            Assert.Contains("[N001]", stdErr);
         }
         finally
         {
@@ -196,7 +196,7 @@ public class BuildCommandIntegrationTests
     }
 
     [Fact]
-    public void TestBuildCommandSupportsPathImportFromAnotherKongFile()
+    public void TestBuildCommandSupportsNamespaceImportFromAnotherKongFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
@@ -209,7 +209,7 @@ public class BuildCommandIntegrationTests
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
             File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(20, 22); }");
+            File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
 
             var command = new BuildFile { File = mainPath };
             var originalDirectory = Directory.GetCurrentDirectory();

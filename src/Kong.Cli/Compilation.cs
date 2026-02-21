@@ -7,7 +7,7 @@ namespace Kong.Cli;
 
 public static class Compilation
 {
-    private sealed record LoadedUnit(string FilePath, CompilationUnit Unit);
+    private sealed record LoadedUnit(string FilePath, CompilationUnit Unit, string FileNamespace);
     private sealed record ModuleSemanticResult(string FilePath, NameResolution Names, TypeCheckResult TypeCheck);
 
     public static bool TryCompileModules(
@@ -30,13 +30,10 @@ public static class Compilation
             return false;
         }
 
-        var orderedUnits = new List<LoadedUnit>();
-        var parsedUnits = new Dictionary<string, CompilationUnit>(StringComparer.OrdinalIgnoreCase);
-        var moduleImports = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        var visiting = new Stack<string>();
         var rootFullPath = Path.GetFullPath(filePath);
+        var rootDirectory = Path.GetDirectoryName(rootFullPath) ?? Directory.GetCurrentDirectory();
 
-        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, expectedNamespaceTail: null, orderedUnits, parsedUnits, moduleImports, visiting, out diagnostics))
+        if (!TryLoadProjectUnits(rootFullPath, rootDirectory, out var orderedUnits, out diagnostics))
         {
             return false;
         }
@@ -47,12 +44,11 @@ public static class Compilation
             return false;
         }
 
-        if (!TryAnalyzeModules(orderedUnits, moduleImports, out var moduleSemantics, out diagnostics))
+        if (!TryAnalyzeModules(orderedUnits, out var moduleSemantics, out diagnostics))
         {
             return false;
         }
 
-        var moduleByPath = orderedUnits.ToDictionary(u => u.FilePath, StringComparer.OrdinalIgnoreCase);
         var semanticByPath = moduleSemantics.ToDictionary(s => s.FilePath, StringComparer.OrdinalIgnoreCase);
         var builtModules = new List<ModuleAnalysis>(orderedUnits.Count);
         foreach (var loadedUnit in orderedUnits)
@@ -97,7 +93,7 @@ public static class Compilation
         }
 
         var rootFilePath = Path.GetFullPath(filePath);
-        unit = MergeUnits(modules.Select(m => new LoadedUnit(m.FilePath, m.Unit)).ToList(), rootFilePath);
+        unit = MergeUnits(modules.Select(m => new LoadedUnit(m.FilePath, m.Unit, m.NameResolution.FileNamespace ?? string.Empty)).ToList(), rootFilePath);
 
         var moduleSemantics = modules
             .Select(m => new ModuleSemanticResult(m.FilePath, m.NameResolution, m.TypeCheck))
@@ -112,16 +108,16 @@ public static class Compilation
     private static DiagnosticBag ValidateCrossFileFunctionCollisions(IReadOnlyList<LoadedUnit> loadedUnits)
     {
         var diagnostics = new DiagnosticBag();
-        var declarationsByName = new Dictionary<string, (string FilePath, FunctionDeclaration Declaration)>(StringComparer.Ordinal);
+        var declarationsByKey = new Dictionary<string, (string FilePath, FunctionDeclaration Declaration)>(StringComparer.Ordinal);
 
         foreach (var loadedUnit in loadedUnits)
         {
             foreach (var declaration in loadedUnit.Unit.Statements.OfType<FunctionDeclaration>())
             {
-                var name = declaration.Name.Value;
-                if (!declarationsByName.TryGetValue(name, out var existing))
+                var key = loadedUnit.FileNamespace + "::" + declaration.Name.Value;
+                if (!declarationsByKey.TryGetValue(key, out var existing))
                 {
-                    declarationsByName[name] = (loadedUnit.FilePath, declaration);
+                    declarationsByKey[key] = (loadedUnit.FilePath, declaration);
                     continue;
                 }
 
@@ -132,7 +128,7 @@ public static class Compilation
 
                 diagnostics.Report(
                     declaration.Span,
-                    $"duplicate top-level function '{name}' across modules '{existing.FilePath}' and '{loadedUnit.FilePath}'",
+                    $"duplicate top-level function '{declaration.Name.Value}' in namespace '{loadedUnit.FileNamespace}' across modules '{existing.FilePath}' and '{loadedUnit.FilePath}'",
                     "CLI016");
             }
         }
@@ -140,117 +136,52 @@ public static class Compilation
         return diagnostics;
     }
 
-    private static bool TryLoadWithPathImports(
-        string filePath,
+    private static bool TryLoadProjectUnits(
         string rootFilePath,
-        string? expectedNamespaceTail,
-        List<LoadedUnit> orderedUnits,
-        Dictionary<string, CompilationUnit> parsedUnits,
-        Dictionary<string, List<string>> moduleImports,
-        Stack<string> visiting,
+        string rootDirectory,
+        out List<LoadedUnit> loadedUnits,
         out DiagnosticBag diagnostics)
     {
         diagnostics = new DiagnosticBag();
+        loadedUnits = [];
 
-        if (parsedUnits.ContainsKey(filePath))
+        var discoveredPaths = Directory
+            .GetFiles(rootDirectory, "*.kg", SearchOption.AllDirectories)
+            .Select(Path.GetFullPath)
+            .ToList();
+
+        if (!discoveredPaths.Contains(rootFilePath, StringComparer.OrdinalIgnoreCase))
         {
-            return true;
+            discoveredPaths.Add(rootFilePath);
         }
 
-        if (visiting.Contains(filePath, StringComparer.OrdinalIgnoreCase))
-        {
-            var cycle = string.Join(" -> ", visiting.Reverse().Append(filePath).Select(Path.GetFileName));
-            diagnostics.Report(Span.Empty, $"cyclic path import detected: {cycle}", "CLI008");
-            return false;
-        }
+        discoveredPaths.Sort(StringComparer.OrdinalIgnoreCase);
 
-        if (!TryParseFile(filePath, string.Equals(filePath, rootFilePath, StringComparison.OrdinalIgnoreCase), out var unit, out diagnostics))
+        foreach (var discoveredPath in discoveredPaths)
         {
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(expectedNamespaceTail) &&
-            !IsNamespaceCompatibleWithImport(unit, expectedNamespaceTail!, out var namespaceMismatchMessage))
-        {
-            diagnostics = new DiagnosticBag();
-            diagnostics.Report(Span.Empty, $"{namespaceMismatchMessage} in '{filePath}'", "CLI019");
-            return false;
-        }
-
-        visiting.Push(filePath);
-
-        try
-        {
-            var containingDirectory = Path.GetDirectoryName(filePath) ?? Directory.GetCurrentDirectory();
-            foreach (var statement in unit.Statements.OfType<ImportStatement>().Where(i => i.IsPathImport))
+            var isRootFile = string.Equals(discoveredPath, rootFilePath, StringComparison.OrdinalIgnoreCase);
+            if (!TryParseFile(discoveredPath, isRootFile, out var unit, out diagnostics))
             {
-                var rawPath = statement.Path!;
-                if (!TryResolveImportPath(containingDirectory, rawPath, out var resolvedPath, out var pathError))
-                {
-                    diagnostics = new DiagnosticBag();
-                    diagnostics.Report(statement.Span, pathError, "CLI009");
-                    return false;
-                }
-
-                if (visiting.Contains(resolvedPath, StringComparer.OrdinalIgnoreCase))
-                {
-                    var cycle = string.Join(" -> ", visiting.Reverse().Append(resolvedPath).Select(Path.GetFileName));
-                    diagnostics = new DiagnosticBag();
-                    diagnostics.Report(statement.Span, $"cyclic path import detected: {cycle}", "CLI008");
-                    return false;
-                }
-
-                var expectedTail = Path.GetFileNameWithoutExtension(resolvedPath);
-                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, expectedTail, orderedUnits, parsedUnits, moduleImports, visiting, out diagnostics))
-                {
-                    return false;
-                }
-
-                if (!moduleImports.TryGetValue(filePath, out var imports))
-                {
-                    imports = [];
-                    moduleImports[filePath] = imports;
-                }
-
-                if (!imports.Contains(resolvedPath, StringComparer.OrdinalIgnoreCase))
-                {
-                    imports.Add(resolvedPath);
-                }
+                return false;
             }
-        }
-        finally
-        {
-            visiting.Pop();
+
+            var fileNamespace = GetFileNamespace(unit);
+            if (fileNamespace == null)
+            {
+                diagnostics = new DiagnosticBag();
+                diagnostics.Report(Span.Empty, $"missing required file-scoped namespace declaration in '{discoveredPath}'", "CLI010");
+                return false;
+            }
+
+            loadedUnits.Add(new LoadedUnit(discoveredPath, unit, fileNamespace));
         }
 
-        parsedUnits[filePath] = unit;
-        orderedUnits.Add(new LoadedUnit(filePath, unit));
         return true;
     }
 
-    private static bool IsNamespaceCompatibleWithImport(
-        CompilationUnit unit,
-        string expectedTail,
-        out string message)
+    private static string? GetFileNamespace(CompilationUnit unit)
     {
-        message = string.Empty;
-
-        var namespaceStatement = unit.Statements.OfType<NamespaceStatement>().FirstOrDefault();
-        if (namespaceStatement == null)
-        {
-            return true;
-        }
-
-        var actual = namespaceStatement.QualifiedName;
-        var lastDot = actual.LastIndexOf('.');
-        var actualTail = lastDot < 0 ? actual : actual[(lastDot + 1)..];
-        if (string.Equals(actualTail, expectedTail, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        message = $"namespace '{actual}' is incompatible with imported file name; expected namespace to end with '{expectedTail}'";
-        return false;
+        return unit.Statements.OfType<NamespaceStatement>().FirstOrDefault()?.QualifiedName;
     }
 
     private static bool TryParseFile(string filePath, bool isRootFile, out CompilationUnit unit, out DiagnosticBag diagnostics)
@@ -323,7 +254,7 @@ public static class Compilation
                     {
                         diagnostics.Report(
                             statement.Span,
-                            $"imported modules may only declare top-level functions in '{filePath}'",
+                            $"non-root modules may only declare top-level functions in '{filePath}'",
                             "CLI017");
                     }
 
@@ -333,7 +264,7 @@ public static class Compilation
 
             if (!isRootFile && statement is FunctionDeclaration { Name.Value: "Main" })
             {
-                diagnostics.Report(statement.Span, $"imported modules must not declare 'Main' in '{filePath}'", "CLI018");
+                diagnostics.Report(statement.Span, $"non-root modules must not declare 'Main' in '{filePath}'", "CLI018");
             }
 
             ValidateStatementStructure(statement, isTopLevel: true, filePath, diagnostics);
@@ -437,33 +368,6 @@ public static class Compilation
         }
     }
 
-    private static bool TryResolveImportPath(string containingDirectory, string rawPath, out string resolvedPath, out string error)
-    {
-        resolvedPath = string.Empty;
-        error = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(rawPath))
-        {
-            error = "path import must specify a non-empty file path";
-            return false;
-        }
-
-        if (!rawPath.EndsWith(".kg", StringComparison.OrdinalIgnoreCase))
-        {
-            error = $"path import '{rawPath}' must reference a .kg file";
-            return false;
-        }
-
-        resolvedPath = Path.GetFullPath(rawPath, containingDirectory);
-        if (!File.Exists(resolvedPath))
-        {
-            error = $"imported file not found: {resolvedPath}";
-            return false;
-        }
-
-        return true;
-    }
-
     private static CompilationUnit MergeUnits(IReadOnlyList<LoadedUnit> loadedUnits, string rootFilePath)
     {
         var rootUnit = loadedUnits.Last(unit => string.Equals(unit.FilePath, rootFilePath, StringComparison.OrdinalIgnoreCase)).Unit;
@@ -480,8 +384,6 @@ public static class Compilation
             {
                 switch (statement)
                 {
-                    case ImportStatement importStatement when importStatement.IsPathImport:
-                        break;
                     case ImportStatement importStatement:
                     {
                         var key = importStatement.QualifiedName;
@@ -531,14 +433,15 @@ public static class Compilation
 
     private static bool TryAnalyzeModules(
         IReadOnlyList<LoadedUnit> loadedUnits,
-        IReadOnlyDictionary<string, List<string>> moduleImports,
         out List<ModuleSemanticResult> moduleSemantics,
         out DiagnosticBag diagnostics)
     {
         moduleSemantics = [];
         diagnostics = new DiagnosticBag();
 
-        var modulesByPath = loadedUnits.ToDictionary(u => u.FilePath, StringComparer.OrdinalIgnoreCase);
+        var modulesByNamespace = loadedUnits
+            .GroupBy(u => u.FileNamespace, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(u => u.FilePath).ToList(), StringComparer.Ordinal);
 
         var functionDeclsByFile = new Dictionary<string, List<FunctionDeclaration>>(StringComparer.OrdinalIgnoreCase);
         var functionTypesByFile = new Dictionary<string, Dictionary<string, FunctionTypeSymbol>>(StringComparer.OrdinalIgnoreCase);
@@ -561,13 +464,32 @@ public static class Compilation
 
         foreach (var loadedUnit in loadedUnits)
         {
-            var reachable = ComputeReachableModules(loadedUnit.FilePath, moduleImports);
-            reachable.Remove(loadedUnit.FilePath);
+            var importedNamespaces = loadedUnit.Unit.Statements
+                .OfType<ImportStatement>()
+                .Select(i => i.QualifiedName)
+                .ToHashSet(StringComparer.Ordinal);
+            importedNamespaces.Add(loadedUnit.FileNamespace);
+
+            var visibleModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var importedNamespace in importedNamespaces)
+            {
+                if (!modulesByNamespace.TryGetValue(importedNamespace, out var modulePaths))
+                {
+                    continue;
+                }
+
+                foreach (var modulePath in modulePaths)
+                {
+                    visibleModules.Add(modulePath);
+                }
+            }
+
+            visibleModules.Remove(loadedUnit.FilePath);
 
             var externalDeclarations = new List<FunctionDeclaration>();
             var externalFunctionTypes = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
 
-            foreach (var path in reachable)
+            foreach (var path in visibleModules)
             {
                 if (functionDeclsByFile.TryGetValue(path, out var declarations))
                 {
@@ -603,36 +525,6 @@ public static class Compilation
         }
 
         return true;
-    }
-
-    private static HashSet<string> ComputeReachableModules(
-        string rootFile,
-        IReadOnlyDictionary<string, List<string>> moduleImports)
-    {
-        var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var stack = new Stack<string>();
-        stack.Push(rootFile);
-
-        while (stack.Count > 0)
-        {
-            var current = stack.Pop();
-            if (!reachable.Add(current))
-            {
-                continue;
-            }
-
-            if (!moduleImports.TryGetValue(current, out var imports))
-            {
-                continue;
-            }
-
-            foreach (var imported in imports)
-            {
-                stack.Push(imported);
-            }
-        }
-
-        return reachable;
     }
 
     private static bool TryBindFunctionType(FunctionDeclaration declaration, out FunctionTypeSymbol functionType)

@@ -183,20 +183,6 @@ public class Parser
             Token = _curToken,
         };
 
-        if (PeekTokenIs(TokenType.String))
-        {
-            NextToken();
-            statement.Path = _curToken.Literal;
-
-            if (PeekTokenIs(TokenType.Semicolon))
-            {
-                NextToken();
-            }
-
-            statement.Span = new Span(startSpan.Start, _curToken.Span.End);
-            return statement;
-        }
-
         if (!ExpectPeek(TokenType.Identifier))
         {
             return null;
