@@ -904,6 +904,35 @@ public class IrLowerer
             return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
         }
 
+        if (callExpression.Function is Identifier identifier &&
+            _nameResolution != null &&
+            _nameResolution.IdentifierSymbols.TryGetValue(identifier, out var symbol) &&
+            symbol.Kind == NameSymbolKind.Global &&
+            _nameResolution.GlobalFunctionNames.Contains(symbol.Name))
+        {
+            var globalArguments = new List<IrValueId>(callExpression.Arguments.Count);
+            foreach (var argument in callExpression.Arguments)
+            {
+                var value = LowerExpression(argument);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                globalArguments.Add(value.Value);
+            }
+
+            if (returnType == TypeSymbols.Void)
+            {
+                _currentBlock.Instructions.Add(new IrCallVoid(symbol.Name, globalArguments));
+                return null;
+            }
+
+            var globalDestination = AllocateValue(returnType);
+            _currentBlock.Instructions.Add(new IrCall(globalDestination, symbol.Name, globalArguments));
+            return globalDestination;
+        }
+
         var closureValue = LowerExpression(callExpression.Function);
         if (closureValue == null)
         {

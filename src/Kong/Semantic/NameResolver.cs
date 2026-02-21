@@ -17,6 +17,7 @@ public class NameResolution
     public Dictionary<Identifier, NameSymbol> IdentifierSymbols { get; } = [];
     public Dictionary<FunctionParameter, NameSymbol> ParameterSymbols { get; } = [];
     public Dictionary<FunctionLiteral, List<NameSymbol>> FunctionCaptures { get; } = [];
+    public HashSet<string> GlobalFunctionNames { get; } = [];
     public Dictionary<string, string> ImportedTypeAliases { get; } = [];
     public HashSet<string> ImportedNamespaces { get; } = [];
     public string? FileNamespace { get; set; }
@@ -159,6 +160,7 @@ public class NameResolver
 
         var symbol = new NameSymbol(name, NameSymbolKind.Global, declarationSpan, _scope.FunctionDepth);
         _scope.Symbols[name] = symbol;
+        _result.GlobalFunctionNames.Add(name);
     }
 
     private void ResolveStatement(IStatement statement)

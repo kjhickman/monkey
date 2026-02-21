@@ -11,7 +11,7 @@ public class BuildFile
 
     public void Run(CliContext context)
     {
-        if (!Compilation.TryCompile(File, out var unit, out var names, out var typeCheck, out var diagnostics))
+        if (!Compilation.TryCompileModules(File, out var modules, out var unit, out _, out var typeCheck, out var diagnostics))
         {
             Compilation.PrintDiagnostics(diagnostics);
             return;
@@ -27,7 +27,7 @@ public class BuildFile
         var assemblyName = ResolveAssemblyName();
 
         var builder = new ClrArtifactBuilder();
-        var result = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
+        var result = builder.BuildArtifact(modules, outputDirectory, assemblyName);
         if (!result.Built)
         {
             Compilation.PrintDiagnostics(result.Diagnostics);

@@ -87,6 +87,146 @@ public class ClrArtifactBuilder
         return result;
     }
 
+    public ClrArtifactBuildResult BuildArtifact(
+        IReadOnlyList<ModuleAnalysis> modules,
+        string outputDirectory,
+        string assemblyName)
+    {
+        var result = new ClrArtifactBuildResult();
+        if (modules.Count == 0)
+        {
+            result.Diagnostics.Report(Span.Empty, "no modules were provided for CLR artifact build", "IL001");
+            return result;
+        }
+
+        var rootModule = modules.FirstOrDefault(m => m.IsRootModule);
+        if (rootModule == null)
+        {
+            result.Diagnostics.Report(Span.Empty, "no root module provided for CLR artifact build", "IL001");
+            return result;
+        }
+
+        var lowerer = new IrLowerer();
+        var loweredPrograms = new List<(ModuleAnalysis Module, IrProgram Program)>(modules.Count);
+
+        foreach (var module in modules)
+        {
+            var loweringResult = lowerer.Lower(module.Unit, module.TypeCheck, module.NameResolution);
+            result.Diagnostics.AddRange(loweringResult.Diagnostics);
+            if (loweringResult.Program == null)
+            {
+                result.IsUnsupported = result.Diagnostics.All.Count > 0 && result.Diagnostics.All.All(d => d.Code == "IR001");
+                return result;
+            }
+
+            loweredPrograms.Add((module, loweringResult.Program));
+
+        }
+
+        var rootLowered = loweredPrograms.FirstOrDefault(p => p.Module.IsRootModule);
+        if (rootLowered == default)
+        {
+            result.Diagnostics.Report(Span.Empty, "no lowered root program generated", "IL001");
+            return result;
+        }
+
+        var combinedProgram = new IrProgram
+        {
+            EntryPoint = rootLowered.Program.EntryPoint,
+        };
+
+        var nonRootIndex = 0;
+        foreach (var (module, program) in loweredPrograms)
+        {
+            var functions = program.Functions;
+            if (!module.IsRootModule)
+            {
+                PrefixSyntheticFunctionNames(functions, nonRootIndex);
+                nonRootIndex++;
+            }
+
+            foreach (var function in functions)
+            {
+                combinedProgram.Functions.Add(function);
+            }
+        }
+
+        var assemblyBytes = EmitAssembly(combinedProgram, result.Diagnostics);
+        if (assemblyBytes == null)
+        {
+            result.IsUnsupported = result.Diagnostics.All.All(d => d.Code == "IL001");
+            return result;
+        }
+
+        Directory.CreateDirectory(outputDirectory);
+        var assemblyPath = Path.Combine(outputDirectory, $"{assemblyName}.dll");
+        File.WriteAllBytes(assemblyPath, assemblyBytes);
+
+        var runtimeConfigPath = Path.Combine(outputDirectory, $"{assemblyName}.runtimeconfig.json");
+        var runtimeConfigJson = """
+        {
+          "runtimeOptions": {
+            "tfm": "net10.0",
+            "framework": {
+              "name": "Microsoft.NETCore.App",
+              "version": "10.0.0"
+            }
+          }
+        }
+        """;
+        File.WriteAllText(runtimeConfigPath, runtimeConfigJson + Environment.NewLine);
+
+        var kongAssemblyFileName = $"{typeof(ClrArtifactBuilder).Assembly.GetName().Name}.dll";
+        var kongAssemblyPath = Path.Combine(AppContext.BaseDirectory, kongAssemblyFileName);
+        if (File.Exists(kongAssemblyPath))
+        {
+            var kongDestination = Path.Combine(outputDirectory, Path.GetFileName(kongAssemblyPath));
+            File.Copy(kongAssemblyPath, kongDestination, overwrite: true);
+        }
+
+        result.Built = true;
+        result.AssemblyPath = assemblyPath;
+        result.RuntimeConfigPath = runtimeConfigPath;
+        return result;
+    }
+
+    private static void PrefixSyntheticFunctionNames(IReadOnlyList<IrFunction> functions, int moduleIndex)
+    {
+        var renameMap = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var function in functions)
+        {
+            if (!function.Name.StartsWith("__lambda", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var newName = $"__m{moduleIndex}_{function.Name}";
+            renameMap[function.Name] = newName;
+            function.Name = newName;
+        }
+
+        if (renameMap.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var function in functions)
+        {
+            foreach (var block in function.Blocks)
+            {
+                for (var i = 0; i < block.Instructions.Count; i++)
+                {
+                    if (block.Instructions[i] is IrCreateClosure createClosure &&
+                        renameMap.TryGetValue(createClosure.FunctionName, out var renamed))
+                    {
+                        block.Instructions[i] = createClosure with { FunctionName = renamed };
+                    }
+                }
+            }
+        }
+    }
+
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
     {
         var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));

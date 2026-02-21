@@ -248,7 +248,7 @@ public class IrLowererTests
         Assert.False(lowering.Diagnostics.HasErrors);
         Assert.Single(lowering.Program!.Functions);
         Assert.Contains(lowering.Program.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrCreateClosure);
-        Assert.Contains(lowering.Program.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrInvokeClosure);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrCall { FunctionName: "Add" });
     }
 
     [Fact]

@@ -12,7 +12,7 @@ public class RunFile
 
     public void Run(CliContext context)
     {
-        if (!Compilation.TryCompile(File, out var unit, out var names, out var typeCheck, out var diagnostics))
+        if (!Compilation.TryCompileModules(File, out var modules, out var unit, out _, out var typeCheck, out var diagnostics))
         {
             Compilation.PrintDiagnostics(diagnostics);
             return;
@@ -28,7 +28,7 @@ public class RunFile
         var outputDirectory = Path.Combine(Path.GetTempPath(), "kong-run", Guid.NewGuid().ToString("N"));
 
         var builder = new ClrArtifactBuilder();
-        var build = builder.BuildArtifact(unit, typeCheck, outputDirectory, assemblyName, names);
+        var build = builder.BuildArtifact(modules, outputDirectory, assemblyName);
         if (!build.Built || build.AssemblyPath == null)
         {
             Compilation.PrintDiagnostics(build.Diagnostics);

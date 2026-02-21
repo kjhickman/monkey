@@ -15,13 +15,13 @@ public readonly record struct IrLocalId(int Id)
 
 public sealed class IrProgram
 {
-    public IrFunction EntryPoint { get; init; } = null!;
+    public IrFunction EntryPoint { get; set; } = null!;
     public List<IrFunction> Functions { get; } = [];
 }
 
 public sealed class IrFunction
 {
-    public required string Name { get; init; }
+    public required string Name { get; set; }
     public required TypeSymbol ReturnType { get; init; }
     public int CaptureParameterCount { get; set; }
     public List<IrParameter> Parameters { get; } = [];

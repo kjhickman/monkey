@@ -10,16 +10,18 @@ public static class Compilation
     private sealed record LoadedUnit(string FilePath, CompilationUnit Unit);
     private sealed record ModuleSemanticResult(string FilePath, NameResolution Names, TypeCheckResult TypeCheck);
 
-    public static bool TryCompile(
+    public static bool TryCompileModules(
         string filePath,
-        out CompilationUnit unit,
-        out NameResolution nameResolution,
-        out TypeCheckResult typeCheck,
+        out IReadOnlyList<ModuleAnalysis> modules,
+        out CompilationUnit rootUnit,
+        out NameResolution rootNameResolution,
+        out TypeCheckResult rootTypeCheck,
         out DiagnosticBag diagnostics)
     {
-        unit = null!;
-        nameResolution = null!;
-        typeCheck = null!;
+        modules = [];
+        rootUnit = null!;
+        rootNameResolution = null!;
+        rootTypeCheck = null!;
         diagnostics = new DiagnosticBag();
 
         if (!File.Exists(filePath))
@@ -45,12 +47,61 @@ public static class Compilation
             return false;
         }
 
-        unit = MergeUnits(orderedUnits, rootFullPath);
-
         if (!TryAnalyzeModules(orderedUnits, moduleImports, out var moduleSemantics, out diagnostics))
         {
             return false;
         }
+
+        var moduleByPath = orderedUnits.ToDictionary(u => u.FilePath, StringComparer.OrdinalIgnoreCase);
+        var semanticByPath = moduleSemantics.ToDictionary(s => s.FilePath, StringComparer.OrdinalIgnoreCase);
+        var builtModules = new List<ModuleAnalysis>(orderedUnits.Count);
+        foreach (var loadedUnit in orderedUnits)
+        {
+            if (!semanticByPath.TryGetValue(loadedUnit.FilePath, out var semantic))
+            {
+                diagnostics.Report(Span.Empty, $"internal error: missing semantic result for module '{loadedUnit.FilePath}'", "CLI020");
+                return false;
+            }
+
+            builtModules.Add(new ModuleAnalysis(
+                loadedUnit.FilePath,
+                loadedUnit.Unit,
+                semantic.Names,
+                semantic.TypeCheck,
+                string.Equals(loadedUnit.FilePath, rootFullPath, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        var rootModule = builtModules.Single(m => m.IsRootModule);
+        modules = builtModules;
+        rootUnit = rootModule.Unit;
+        rootNameResolution = rootModule.NameResolution;
+        rootTypeCheck = rootModule.TypeCheck;
+        return true;
+    }
+
+    public static bool TryCompile(
+        string filePath,
+        out CompilationUnit unit,
+        out NameResolution nameResolution,
+        out TypeCheckResult typeCheck,
+        out DiagnosticBag diagnostics)
+    {
+        unit = null!;
+        nameResolution = null!;
+        typeCheck = null!;
+        diagnostics = new DiagnosticBag();
+
+        if (!TryCompileModules(filePath, out var modules, out _, out _, out _, out diagnostics))
+        {
+            return false;
+        }
+
+        var rootFilePath = Path.GetFullPath(filePath);
+        unit = MergeUnits(modules.Select(m => new LoadedUnit(m.FilePath, m.Unit)).ToList(), rootFilePath);
+
+        var moduleSemantics = modules
+            .Select(m => new ModuleSemanticResult(m.FilePath, m.NameResolution, m.TypeCheck))
+            .ToList();
 
         nameResolution = CombineNameResolutions(moduleSemantics);
         typeCheck = CombineTypeCheckResults(moduleSemantics);
@@ -638,6 +689,11 @@ public static class Compilation
             foreach (var pair in module.Names.FunctionCaptures)
             {
                 combined.FunctionCaptures[pair.Key] = pair.Value;
+            }
+
+            foreach (var functionName in module.Names.GlobalFunctionNames)
+            {
+                combined.GlobalFunctionNames.Add(functionName);
             }
 
             foreach (var pair in module.Names.ImportedTypeAliases)
