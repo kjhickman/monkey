@@ -115,6 +115,24 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrMathMax()
+    {
+        var result = Execute("System.Math.Max(10, 3);");
+
+        Assert.True(result.Executed);
+        Assert.Equal(10, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesStaticClrFileExistsViaNamespaceImport()
+    {
+        var result = Execute("import System.IO; if (File.Exists(\"/tmp/kong-test-never-exists\")) { 1; } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(0, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
         var result = Execute("System.Math.Abs(-42);");

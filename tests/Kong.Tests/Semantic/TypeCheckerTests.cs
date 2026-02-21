@@ -205,6 +205,36 @@ public class TypeCheckerTests
         Assert.Equal("System.Console.WriteLine", result.ResolvedStaticMethodPaths[call]);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrMethodCallWithTwoArguments()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.Max(10, 3);");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.Int, callType);
+        Assert.Equal("System.Math.Max", result.ResolvedStaticMethodPaths[call]);
+    }
+
+    [Fact]
+    public void TestTypeChecksStaticClrFileCallViaNamespaceImport()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System.IO; File.Exists(\"/tmp/missing-file\");");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.Bool, callType);
+        Assert.Equal("System.IO.File.Exists", result.ResolvedStaticMethodPaths[call]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = EnsureFileScopedNamespace(input);

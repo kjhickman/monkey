@@ -154,6 +154,23 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersTwoArgumentStaticClrMethodCall()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("System.Math.Max(10, 3);");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var call = Assert.IsType<IrStaticCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrStaticCall));
+        Assert.Equal("System.Math.Max", call.MethodPath);
+        Assert.Equal(2, call.Arguments.Count);
+        Assert.Equal(2, call.ArgumentTypes.Count);
+        Assert.All(call.ArgumentTypes, t => Assert.Equal(TypeSymbols.Int, t));
+    }
+
+    [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
         var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";

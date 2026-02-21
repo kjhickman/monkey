@@ -217,6 +217,31 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsStaticClrFileIo()
+    {
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"kong-io-test-{Guid.NewGuid():N}.txt");
+        var escapedPath = tempFilePath.Replace("\\", "\\\\");
+        var source = $"import System; import System.IO; fn Main() {{ File.WriteAllText(\"{escapedPath}\", \"hello\"); Console.WriteLine(File.ReadAllText(\"{escapedPath}\")); File.Delete(\"{escapedPath}\"); }}";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("hello", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            if (File.Exists(tempFilePath))
+            {
+                File.Delete(tempFilePath);
+            }
+
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");
