@@ -104,6 +104,62 @@ public class BuildCommandIntegrationTests
     }
 
     [Fact]
+    public void TestBuildCommandReportsMissingPathImport()
+    {
+        var sourcePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 1; }");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(workingDir);
+            var (_, stdErr) = ExecuteBuildCommand(sourcePath, workingDir);
+            Assert.Contains("[CLI009]", stdErr);
+        }
+        finally
+        {
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+
+            File.Delete(sourcePath);
+        }
+    }
+
+    [Fact]
+    public void TestBuildCommandReportsDuplicateTopLevelFunctionAcrossModules()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(tempDirectory);
+            Directory.CreateDirectory(workingDir);
+
+            var utilPath = Path.Combine(tempDirectory, "util.kg");
+            var mainPath = Path.Combine(tempDirectory, "main.kg");
+            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
+
+            var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
+            Assert.Contains("[CLI016]", stdErr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TestBuildCommandSupportsPathImportFromAnotherKongFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
@@ -169,6 +225,34 @@ public class BuildCommandIntegrationTests
         var stdErr = process.StandardError.ReadToEnd();
         process.WaitForExit();
         return (process.ExitCode, stdOut, stdErr);
+    }
+
+    private static (string StdOut, string StdErr) ExecuteBuildCommand(string sourcePath, string workingDir)
+    {
+        var command = new BuildFile
+        {
+            File = sourcePath,
+        };
+
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var originalOut = Console.Out;
+        var originalError = Console.Error;
+        var originalDirectory = Directory.GetCurrentDirectory();
+        try
+        {
+            Directory.SetCurrentDirectory(workingDir);
+            Console.SetOut(stdout);
+            Console.SetError(stderr);
+            command.Run(null!);
+            return (stdout.ToString(), stderr.ToString());
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalDirectory);
+            Console.SetOut(originalOut);
+            Console.SetError(originalError);
+        }
     }
 
     private static string CreateTempProgram(string source)
