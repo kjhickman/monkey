@@ -37,6 +37,12 @@ public static class Compilation
             return false;
         }
 
+        diagnostics = ValidateCrossFileFunctionCollisions(orderedUnits);
+        if (diagnostics.HasErrors)
+        {
+            return false;
+        }
+
         unit = MergeUnits(orderedUnits, rootFullPath);
 
         var resolver = new NameResolver();
@@ -56,6 +62,37 @@ public static class Compilation
         }
 
         return true;
+    }
+
+    private static DiagnosticBag ValidateCrossFileFunctionCollisions(IReadOnlyList<LoadedUnit> loadedUnits)
+    {
+        var diagnostics = new DiagnosticBag();
+        var declarationsByName = new Dictionary<string, (string FilePath, FunctionDeclaration Declaration)>(StringComparer.Ordinal);
+
+        foreach (var loadedUnit in loadedUnits)
+        {
+            foreach (var declaration in loadedUnit.Unit.Statements.OfType<FunctionDeclaration>())
+            {
+                var name = declaration.Name.Value;
+                if (!declarationsByName.TryGetValue(name, out var existing))
+                {
+                    declarationsByName[name] = (loadedUnit.FilePath, declaration);
+                    continue;
+                }
+
+                if (string.Equals(existing.FilePath, loadedUnit.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                diagnostics.Report(
+                    declaration.Span,
+                    $"duplicate top-level function '{name}' across modules '{existing.FilePath}' and '{loadedUnit.FilePath}'",
+                    "CLI016");
+            }
+        }
+
+        return diagnostics;
     }
 
     private static bool TryLoadWithPathImports(
