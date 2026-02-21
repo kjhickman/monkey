@@ -126,6 +126,20 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersImportedStaticClrMethodCallToQualifiedPath()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("import System.Math; Math.Abs(-42);");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var call = Assert.IsType<IrStaticCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrStaticCall));
+        Assert.Equal("System.Math.Abs", call.MethodPath);
+    }
+
+    [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
         var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";

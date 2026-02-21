@@ -8,6 +8,7 @@ public class IrLowerer
 {
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
+    private readonly Dictionary<CallExpression, string> _resolvedStaticMethodPaths = [];
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
     private readonly Dictionary<FunctionDeclaration, FunctionTypeSymbol> _declaredFunctionTypes = [];
     private readonly Dictionary<string, FunctionTypeSymbol> _declaredFunctionTypesByName = [];
@@ -35,12 +36,18 @@ public class IrLowerer
         _result = new IrLoweringResult();
         _nameResolution = nameResolution;
         _expressionTypes.Clear();
+        _resolvedStaticMethodPaths.Clear();
         _variableTypes.Clear();
         _declaredFunctionTypes.Clear();
         _declaredFunctionTypesByName.Clear();
         foreach (var pair in typeCheckResult.ExpressionTypes)
         {
             _expressionTypes[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedStaticMethodPaths)
+        {
+            _resolvedStaticMethodPaths[pair.Key] = pair.Value;
         }
 
         foreach (var pair in typeCheckResult.VariableTypes)
@@ -127,6 +134,9 @@ public class IrLowerer
                         Restore();
                         return false;
                     }
+                    break;
+
+                case ImportStatement:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -756,6 +766,9 @@ public class IrLowerer
                     }
                     break;
 
+                case ImportStatement:
+                    break;
+
                 case ReturnStatement returnStatement:
                     if (returnStatement.ReturnValue == null)
                     {
@@ -823,6 +836,9 @@ public class IrLowerer
                     {
                         return null;
                     }
+                    break;
+
+                case ImportStatement:
                     break;
 
                 case ExpressionStatement { Expression: { } expression }:
@@ -921,6 +937,11 @@ public class IrLowerer
                 "phase-4 IR lowerer could not determine static method path",
                 "IR002");
             return null;
+        }
+
+        if (_resolvedStaticMethodPaths.TryGetValue(callExpression, out var resolvedMethodPath))
+        {
+            methodPath = resolvedMethodPath;
         }
 
         var arguments = new List<IrValueId>(callExpression.Arguments.Count);

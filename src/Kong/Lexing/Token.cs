@@ -48,6 +48,7 @@ public enum TokenType
     If,
     Else,
     Return,
+    Import,
 }
 
 public record struct Token(TokenType Type, string Literal, Span Span = default)
@@ -61,6 +62,7 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "if", TokenType.If },
         { "else", TokenType.Else },
         { "return", TokenType.Return },
+        { "import", TokenType.Import },
     };
 
     public static TokenType LookupIdentifier(string keyword)

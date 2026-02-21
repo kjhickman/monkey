@@ -155,8 +155,8 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
-            Assert.Contains("42", stdout);
             Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("42", stdout);
             Assert.Equal(0, exitCode);
         }
         finally
@@ -172,8 +172,25 @@ public class RunCommandIntegrationTests
         try
         {
             var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
-            Assert.Contains("42", stdout);
             Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("42", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandSupportsImportedStaticClrWriteLineOutput()
+    {
+        var filePath = CreateTempProgram("import System.Console; fn Main() { Console.WriteLine(42); }");
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("42", stdout);
             Assert.Equal(0, exitCode);
         }
         finally

@@ -175,6 +175,21 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrMethodCallViaImportAlias()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System.Math; Math.Abs(-42);");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.Int, callType);
+        Assert.Equal("System.Math.Abs", result.ResolvedStaticMethodPaths[call]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);

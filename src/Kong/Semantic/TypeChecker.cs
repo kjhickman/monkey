@@ -6,6 +6,7 @@ namespace Kong.Semantic;
 public class TypeCheckResult
 {
     public Dictionary<IExpression, TypeSymbol> ExpressionTypes { get; } = [];
+    public Dictionary<CallExpression, string> ResolvedStaticMethodPaths { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
@@ -84,6 +85,8 @@ public class TypeChecker
                 break;
             case ReturnStatement returnStatement:
                 CheckReturnStatement(returnStatement);
+                break;
+            case ImportStatement:
                 break;
             case ExpressionStatement expressionStatement:
                 if (expressionStatement.Expression != null)
@@ -395,7 +398,7 @@ public class TypeChecker
         var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
 
         if (expression.Function is MemberAccessExpression memberAccessExpression &&
-            TryCheckStaticMethodCall(memberAccessExpression, argumentTypes, out var staticReturnType))
+            TryCheckStaticMethodCall(expression, memberAccessExpression, argumentTypes, out var staticReturnType))
         {
             return staticReturnType;
         }
@@ -441,6 +444,7 @@ public class TypeChecker
     }
 
     private bool TryCheckStaticMethodCall(
+        CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
         IReadOnlyList<TypeSymbol> argumentTypes,
         out TypeSymbol returnType)
@@ -451,29 +455,32 @@ public class TypeChecker
         {
             _result.Diagnostics.Report(
                 memberAccessExpression.Span,
-                "static method call target must be a qualified name like 'System.Console.WriteLine'",
+                "static method call target must be a member path like 'System.Console.WriteLine' or 'Console.WriteLine'",
                 "T122");
             return true;
         }
 
-        if (!StaticClrMethodResolver.IsKnownMethodPath(methodPath))
+        var resolvedMethodPath = ResolveImportedMethodPath(methodPath);
+
+        if (!StaticClrMethodResolver.IsKnownMethodPath(resolvedMethodPath))
         {
             _result.Diagnostics.Report(memberAccessExpression.Span,
-                $"unknown static method '{methodPath}'",
+                $"unknown static method '{resolvedMethodPath}'",
                 "T122");
             return true;
         }
 
-        var binding = StaticClrMethodResolver.Resolve(methodPath, argumentTypes);
+        var binding = StaticClrMethodResolver.Resolve(resolvedMethodPath, argumentTypes);
         if (binding == null)
         {
             _result.Diagnostics.Report(
                 memberAccessExpression.Span,
-                $"no matching overload for static method '{methodPath}' with argument types ({string.Join(", ", argumentTypes)})",
+                $"no matching overload for static method '{resolvedMethodPath}' with argument types ({string.Join(", ", argumentTypes)})",
                 "T113");
             return true;
         }
 
+        _result.ResolvedStaticMethodPaths[callExpression] = resolvedMethodPath;
         returnType = binding.ReturnType;
 
         return true;
@@ -505,6 +512,23 @@ public class TypeChecker
         segments.Push(identifier.Value);
         methodPath = string.Join('.', segments);
         return true;
+    }
+
+    private string ResolveImportedMethodPath(string methodPath)
+    {
+        var firstDot = methodPath.IndexOf('.');
+        if (firstDot <= 0)
+        {
+            return methodPath;
+        }
+
+        var root = methodPath[..firstDot];
+        if (!_names.ImportedTypeAliases.TryGetValue(root, out var qualifiedTypeName))
+        {
+            return methodPath;
+        }
+
+        return qualifiedTypeName + methodPath[firstDot..];
     }
 
     private TypeSymbol CheckArrayLiteral(ArrayLiteral expression)

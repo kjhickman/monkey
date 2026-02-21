@@ -50,6 +50,16 @@ public class ProgramValidatorTests
         Assert.Contains(diagnostics.All, d => d.Code == "CLI005");
     }
 
+    [Fact]
+    public void TestAllowsTopLevelImports()
+    {
+        var (unit, typeCheck) = ParseResolveAndCheck("import System.Console; fn Main() { Console.WriteLine(1); }");
+
+        var diagnostics = ProgramValidator.ValidateEntrypoint(unit, typeCheck);
+
+        Assert.False(diagnostics.HasErrors);
+    }
+
     private static (CompilationUnit Unit, TypeCheckResult TypeCheck) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);

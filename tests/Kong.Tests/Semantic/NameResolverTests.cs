@@ -244,6 +244,43 @@ public class NameResolverTests
         Assert.False(result.Diagnostics.HasErrors);
     }
 
+    [Fact]
+    public void TestResolvesTopLevelImportAlias()
+    {
+        var unit = Parse("import System.Console; import System.Math;");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Equal("System.Console", result.ImportedTypeAliases["Console"]);
+        Assert.Equal("System.Math", result.ImportedTypeAliases["Math"]);
+    }
+
+    [Fact]
+    public void TestReportsImportAliasConflict()
+    {
+        var unit = Parse("import System.Console; import Foo.Console;");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "N004");
+    }
+
+    [Fact]
+    public void TestReportsImportInsideFunctionBody()
+    {
+        var unit = Parse("fn Main() { import System.Console; }");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "N003");
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);

@@ -17,6 +17,7 @@ public class NameResolution
     public Dictionary<Identifier, NameSymbol> IdentifierSymbols { get; } = [];
     public Dictionary<FunctionParameter, NameSymbol> ParameterSymbols { get; } = [];
     public Dictionary<FunctionLiteral, List<NameSymbol>> FunctionCaptures { get; } = [];
+    public Dictionary<string, string> ImportedTypeAliases { get; } = [];
     public DiagnosticBag Diagnostics { get; } = new();
 
     public IReadOnlyList<NameSymbol> GetCapturedSymbols(FunctionLiteral function)
@@ -110,6 +111,9 @@ public class NameResolver
                     ResolveExpression(returnStatement.ReturnValue);
                 }
                 break;
+            case ImportStatement importStatement:
+                ResolveImportStatement(importStatement);
+                break;
             case ExpressionStatement expressionStatement:
                 if (expressionStatement.Expression != null)
                 {
@@ -120,6 +124,32 @@ public class NameResolver
                 ResolveBlockStatement(blockStatement);
                 break;
         }
+    }
+
+    private void ResolveImportStatement(ImportStatement statement)
+    {
+        if (!_scope.IsGlobalRoot)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "import statements are only allowed at the top level",
+                "N003");
+            return;
+        }
+
+        var alias = statement.Alias;
+        if (_result.ImportedTypeAliases.TryGetValue(alias, out var existingQualifiedName))
+        {
+            if (existingQualifiedName != statement.QualifiedName)
+            {
+                _result.Diagnostics.Report(statement.Span,
+                    $"import alias '{alias}' conflicts with existing import '{existingQualifiedName}'",
+                    "N004");
+            }
+
+            return;
+        }
+
+        _result.ImportedTypeAliases[alias] = statement.QualifiedName;
     }
 
     private void ResolveFunctionDeclaration(FunctionDeclaration declaration)

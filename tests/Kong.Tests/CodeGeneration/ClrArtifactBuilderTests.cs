@@ -106,6 +106,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesImportedStaticClrMathAbs()
+    {
+        var result = Execute("import System.Math; Math.Abs(-42);");
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
         var result = Execute("System.Math.Abs(-42);");

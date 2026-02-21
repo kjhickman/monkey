@@ -317,4 +317,28 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesImportKeyword()
+    {
+        var input = "import System.Console;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Import, "import"),
+            (TokenType.Identifier, "System"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "Console"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

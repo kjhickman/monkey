@@ -908,6 +908,20 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesImportStatement()
+    {
+        var input = "import System.Console;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var importStatement = Assert.IsType<ImportStatement>(unit.Statements[0]);
+        Assert.Equal("System.Console", importStatement.QualifiedName);
+        Assert.Equal("Console", importStatement.Alias);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

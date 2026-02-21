@@ -164,6 +164,26 @@ public class ExpressionStatement : IStatement
     }
 }
 
+public class ImportStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'import' token
+    public string QualifiedName { get; set; } = "";
+
+    public string Alias
+    {
+        get
+        {
+            var lastDot = QualifiedName.LastIndexOf('.');
+            return lastDot < 0 ? QualifiedName : QualifiedName[(lastDot + 1)..];
+        }
+    }
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String() => $"import {QualifiedName};";
+}
+
 public class IntegerLiteral : IExpression
 {
     public Span Span { get; set; }

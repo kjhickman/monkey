@@ -11,14 +11,14 @@ public static class ProgramValidator
 
         foreach (var statement in unit.Statements)
         {
-            if (statement is FunctionDeclaration)
+            if (statement is FunctionDeclaration or ImportStatement)
             {
                 continue;
             }
 
             diagnostics.Report(
                 statement.Span,
-                "top-level statements are not allowed; declare functions only",
+                "top-level statements are not allowed; declare functions and imports only",
                 "CLI002");
         }
 
