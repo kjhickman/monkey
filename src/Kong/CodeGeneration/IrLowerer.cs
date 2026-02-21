@@ -137,6 +137,7 @@ public class IrLowerer
                     break;
 
                 case ImportStatement:
+                case NamespaceStatement:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -767,6 +768,7 @@ public class IrLowerer
                     break;
 
                 case ImportStatement:
+                case NamespaceStatement:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -839,6 +841,7 @@ public class IrLowerer
                     break;
 
                 case ImportStatement:
+                case NamespaceStatement:
                     break;
 
                 case ExpressionStatement { Expression: { } expression }:

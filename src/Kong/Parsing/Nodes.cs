@@ -184,6 +184,17 @@ public class ImportStatement : IStatement
     public string String() => $"import {QualifiedName};";
 }
 
+public class NamespaceStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'namespace' token
+    public string QualifiedName { get; set; } = "";
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String() => $"namespace {QualifiedName};";
+}
+
 public class IntegerLiteral : IExpression
 {
     public Span Span { get; set; }

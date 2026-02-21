@@ -922,6 +922,19 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesNamespaceStatement()
+    {
+        var input = "namespace Foo.Bar;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var namespaceStatement = Assert.IsType<NamespaceStatement>(unit.Statements[0]);
+        Assert.Equal("Foo.Bar", namespaceStatement.QualifiedName);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

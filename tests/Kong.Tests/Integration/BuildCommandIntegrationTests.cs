@@ -124,7 +124,38 @@ public class BuildCommandIntegrationTests
     private static string CreateTempProgram(string source)
     {
         var filePath = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}.kg");
-        File.WriteAllText(filePath, source);
+        File.WriteAllText(filePath, EnsureFileScopedNamespace(source));
         return filePath;
+    }
+
+    private static string EnsureFileScopedNamespace(string source)
+    {
+        if (source.Contains("namespace "))
+        {
+            return source;
+        }
+
+        var insertIndex = 0;
+        while (true)
+        {
+            var remainder = source[insertIndex..].TrimStart();
+            var skipped = source[insertIndex..].Length - remainder.Length;
+            insertIndex += skipped;
+
+            if (!source[insertIndex..].StartsWith("import "))
+            {
+                break;
+            }
+
+            var semicolonIndex = source.IndexOf(';', insertIndex);
+            if (semicolonIndex < 0)
+            {
+                break;
+            }
+
+            insertIndex = semicolonIndex + 1;
+        }
+
+        return source.Insert(insertIndex, " namespace Test; ");
     }
 }

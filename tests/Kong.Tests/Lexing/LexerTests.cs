@@ -341,4 +341,28 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesNamespaceKeyword()
+    {
+        var input = "namespace Foo.Bar;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Namespace, "namespace"),
+            (TokenType.Identifier, "Foo"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "Bar"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

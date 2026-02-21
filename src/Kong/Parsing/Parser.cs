@@ -168,6 +168,7 @@ public class Parser
         return _curToken.Type switch
         {
             TokenType.Import => ParseImportStatement(),
+            TokenType.Namespace => ParseNamespaceStatement(),
             TokenType.Let => ParseLetStatement(),
             TokenType.Return => ParseReturnStatement(),
             _ => ParseExpressionStatement(),
@@ -178,6 +179,42 @@ public class Parser
     {
         var startSpan = _curToken.Span;
         var statement = new ImportStatement
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        var segments = new List<string> { _curToken.Literal };
+        while (PeekTokenIs(TokenType.Dot))
+        {
+            NextToken();
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return null;
+            }
+
+            segments.Add(_curToken.Literal);
+        }
+
+        statement.QualifiedName = string.Join('.', segments);
+
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+        }
+
+        statement.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return statement;
+    }
+
+    private NamespaceStatement? ParseNamespaceStatement()
+    {
+        var startSpan = _curToken.Span;
+        var statement = new NamespaceStatement
         {
             Token = _curToken,
         };

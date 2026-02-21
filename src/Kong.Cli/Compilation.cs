@@ -38,6 +38,11 @@ public static class Compilation
 
         var resolver = new NameResolver();
         nameResolution = resolver.Resolve(unit);
+        if (nameResolution.Diagnostics.HasErrors)
+        {
+            diagnostics = nameResolution.Diagnostics;
+            return false;
+        }
 
         var checker = new TypeChecker();
         typeCheck = checker.Check(unit, nameResolution);

@@ -11,7 +11,7 @@ public static class ProgramValidator
 
         foreach (var statement in unit.Statements)
         {
-            if (statement is FunctionDeclaration or ImportStatement)
+            if (statement is FunctionDeclaration or ImportStatement or NamespaceStatement)
             {
                 continue;
             }

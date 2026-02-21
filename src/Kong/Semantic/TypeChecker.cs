@@ -87,6 +87,7 @@ public class TypeChecker
                 CheckReturnStatement(returnStatement);
                 break;
             case ImportStatement:
+            case NamespaceStatement:
                 break;
             case ExpressionStatement expressionStatement:
                 if (expressionStatement.Expression != null)

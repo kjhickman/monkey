@@ -14,7 +14,7 @@ public class TypeCheckerTests
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
 
-        var yStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var yStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var yIdentifier = Assert.IsType<Identifier>(yStatement.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(yIdentifier, out var yType));
         Assert.Equal(TypeSymbols.Int, yType);
@@ -37,11 +37,11 @@ public class TypeCheckerTests
 
         Assert.False(result.Diagnostics.HasErrors);
 
-        var xLet = Assert.IsType<LetStatement>(unit.Statements[0]);
+        var xLet = Assert.IsType<LetStatement>(unit.Statements[1]);
         Assert.True(result.VariableTypes.TryGetValue(xLet, out var xType));
         Assert.Equal(TypeSymbols.Int, xType);
 
-        var xUse = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var xUse = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var xIdentifier = Assert.IsType<Identifier>(xUse.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(xIdentifier, out var xUseType));
         Assert.Equal(TypeSymbols.Int, xUseType);
@@ -118,7 +118,7 @@ public class TypeCheckerTests
 
         Assert.False(result.Diagnostics.HasErrors);
 
-        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var indexExpression = Assert.IsType<IndexExpression>(expressionStatement.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(indexExpression, out var type));
         Assert.Equal(TypeSymbols.Int, type);
@@ -160,7 +160,7 @@ public class TypeCheckerTests
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
 
-        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
         Assert.Equal(TypeSymbols.Int, callType);
@@ -183,7 +183,7 @@ public class TypeCheckerTests
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
 
-        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
         Assert.Equal(TypeSymbols.Int, callType);
@@ -198,7 +198,7 @@ public class TypeCheckerTests
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
 
-        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
         var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
         Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
         Assert.Equal(TypeSymbols.Void, callType);
@@ -207,6 +207,7 @@ public class TypeCheckerTests
 
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
+        input = EnsureFileScopedNamespace(input);
         var lexer = new Lexer(input);
         var parser = new Parser(lexer);
         var unit = parser.ParseCompilationUnit();
@@ -228,5 +229,36 @@ public class TypeCheckerTests
         var result = checker.Check(unit, names);
 
         return (unit, names, result);
+    }
+
+    private static string EnsureFileScopedNamespace(string source)
+    {
+        if (source.Contains("namespace "))
+        {
+            return source;
+        }
+
+        var insertIndex = 0;
+        while (true)
+        {
+            var remainder = source[insertIndex..].TrimStart();
+            var skipped = source[insertIndex..].Length - remainder.Length;
+            insertIndex += skipped;
+
+            if (!source[insertIndex..].StartsWith("import "))
+            {
+                break;
+            }
+
+            var semicolonIndex = source.IndexOf(';', insertIndex);
+            if (semicolonIndex < 0)
+            {
+                break;
+            }
+
+            insertIndex = semicolonIndex + 1;
+        }
+
+        return source.Insert(insertIndex, " namespace Test; ");
     }
 }

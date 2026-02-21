@@ -19,6 +19,7 @@ public class NameResolution
     public Dictionary<FunctionLiteral, List<NameSymbol>> FunctionCaptures { get; } = [];
     public Dictionary<string, string> ImportedTypeAliases { get; } = [];
     public HashSet<string> ImportedNamespaces { get; } = [];
+    public string? FileNamespace { get; set; }
     public DiagnosticBag Diagnostics { get; } = new();
 
     public IReadOnlyList<NameSymbol> GetCapturedSymbols(FunctionLiteral function)
@@ -67,25 +68,51 @@ public class NameResolver
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
         PredeclareTopLevelFunctions(unit);
 
-        var seenNonImportTopLevelStatement = false;
+        var seenNamespace = false;
+        var seenDeclaration = false;
 
         foreach (var statement in unit.Statements)
         {
-            if (statement is ImportStatement)
+            switch (statement)
             {
-                if (seenNonImportTopLevelStatement)
-                {
-                    _result.Diagnostics.Report(statement.Span,
-                        "import statements must appear before other top-level declarations",
-                        "N005");
-                }
-            }
-            else
-            {
-                seenNonImportTopLevelStatement = true;
+                case ImportStatement:
+                    if (seenNamespace || seenDeclaration)
+                    {
+                        _result.Diagnostics.Report(statement.Span,
+                            "import statements must appear before namespace and other top-level declarations",
+                            "N005");
+                    }
+                    break;
+                case NamespaceStatement namespaceStatement:
+                    if (seenDeclaration)
+                    {
+                        _result.Diagnostics.Report(namespaceStatement.Span,
+                            "namespace declaration must appear before top-level declarations",
+                            "N007");
+                    }
+
+                    if (seenNamespace)
+                    {
+                        _result.Diagnostics.Report(namespaceStatement.Span,
+                            "duplicate namespace declaration",
+                            "N008");
+                    }
+
+                    seenNamespace = true;
+                    break;
+                default:
+                    seenDeclaration = true;
+                    break;
             }
 
             ResolveStatement(statement);
+        }
+
+        if (!seenNamespace)
+        {
+            _result.Diagnostics.Report(unit.Span,
+                "missing required file-scoped namespace declaration",
+                "N006");
         }
 
         return _result;
@@ -131,6 +158,9 @@ public class NameResolver
             case ImportStatement importStatement:
                 ResolveImportStatement(importStatement);
                 break;
+            case NamespaceStatement namespaceStatement:
+                ResolveNamespaceStatement(namespaceStatement);
+                break;
             case ExpressionStatement expressionStatement:
                 if (expressionStatement.Expression != null)
                 {
@@ -169,6 +199,22 @@ public class NameResolver
         }
 
         _result.ImportedTypeAliases[alias] = statement.QualifiedName;
+    }
+
+    private void ResolveNamespaceStatement(NamespaceStatement statement)
+    {
+        if (!_scope.IsGlobalRoot)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "namespace declarations are only allowed at the top level",
+                "N009");
+            return;
+        }
+
+        if (_result.FileNamespace == null)
+        {
+            _result.FileNamespace = statement.QualifiedName;
+        }
     }
 
     private void ResolveFunctionDeclaration(FunctionDeclaration declaration)
