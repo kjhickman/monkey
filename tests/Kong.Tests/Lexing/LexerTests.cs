@@ -343,6 +343,28 @@ public class LexerTests
     }
 
     [Fact]
+    public void TestLexesPathImportStatement()
+    {
+        var input = "import \"./util.kg\";";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Import, "import"),
+            (TokenType.String, "./util.kg"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
     public void TestLexesNamespaceKeyword()
     {
         var input = "namespace Foo.Bar;";

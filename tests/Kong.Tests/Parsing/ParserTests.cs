@@ -922,6 +922,21 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesPathImportStatement()
+    {
+        var input = "import \"./util.kg\";";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var importStatement = Assert.IsType<ImportStatement>(unit.Statements[0]);
+        Assert.True(importStatement.IsPathImport);
+        Assert.Equal("./util.kg", importStatement.Path);
+        Assert.Equal(string.Empty, importStatement.QualifiedName);
+    }
+
+    [Fact]
     public void TestParsesNamespaceStatement()
     {
         var input = "namespace Foo.Bar;";

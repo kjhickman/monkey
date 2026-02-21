@@ -183,6 +183,11 @@ public class NameResolver
             return;
         }
 
+        if (statement.IsPathImport)
+        {
+            return;
+        }
+
         _result.ImportedNamespaces.Add(statement.QualifiedName);
 
         var alias = statement.Alias;

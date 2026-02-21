@@ -103,6 +103,56 @@ public class BuildCommandIntegrationTests
         }
     }
 
+    [Fact]
+    public void TestBuildCommandSupportsPathImportFromAnotherKongFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(tempDirectory);
+            Directory.CreateDirectory(workingDir);
+
+            var utilPath = Path.Combine(tempDirectory, "util.kg");
+            var mainPath = Path.Combine(tempDirectory, "main.kg");
+            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(20, 22); }");
+
+            var command = new BuildFile { File = mainPath };
+            var originalDirectory = Directory.GetCurrentDirectory();
+            try
+            {
+                Directory.SetCurrentDirectory(workingDir);
+                command.Run(null!);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+            }
+
+            var outputDir = Path.Combine(workingDir, "dist", "main");
+            var assemblyPath = Path.Combine(outputDir, "main.dll");
+            Assert.True(File.Exists(assemblyPath));
+
+            var run = RunDotnet(assemblyPath);
+            Assert.Equal(0, run.ExitCode);
+            Assert.Equal(string.Empty, run.StdErr.Trim());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+        }
+    }
+
     private static (int ExitCode, string StdOut, string StdErr) RunDotnet(string assemblyPath)
     {
         var startInfo = new ProcessStartInfo

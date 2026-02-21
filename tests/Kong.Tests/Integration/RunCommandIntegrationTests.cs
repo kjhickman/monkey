@@ -242,6 +242,48 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsPathImportFromAnotherKongFile()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import \"./util.kg\"; namespace App; fn Main() { Add(20, 22); }");
+
+            var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsMissingPathImport()
+    {
+        var filePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 1; }");
+        try
+        {
+            var (stdout, stderr, _) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI009]", stderr);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");
