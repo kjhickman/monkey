@@ -460,7 +460,11 @@ public class TypeChecker
             return true;
         }
 
-        var resolvedMethodPath = ResolveImportedMethodPath(methodPath);
+        if (!TryResolveImportedMethodPath(methodPath, out var resolvedMethodPath, out var resolutionDiagnostic))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span, resolutionDiagnostic, "T122");
+            return true;
+        }
 
         if (!StaticClrMethodResolver.IsKnownMethodPath(resolvedMethodPath))
         {
@@ -514,21 +518,60 @@ public class TypeChecker
         return true;
     }
 
-    private string ResolveImportedMethodPath(string methodPath)
+    private bool TryResolveImportedMethodPath(string methodPath, out string resolvedPath, out string diagnostic)
     {
+        diagnostic = string.Empty;
+        resolvedPath = methodPath;
+
+        if (StaticClrMethodResolver.IsKnownMethodPath(methodPath))
+        {
+            return true;
+        }
+
         var firstDot = methodPath.IndexOf('.');
         if (firstDot <= 0)
         {
-            return methodPath;
+            return true;
         }
 
         var root = methodPath[..firstDot];
+        var suffix = methodPath[firstDot..];
+        var candidates = new HashSet<string>();
+
         if (!_names.ImportedTypeAliases.TryGetValue(root, out var qualifiedTypeName))
         {
-            return methodPath;
+            foreach (var importedNamespace in _names.ImportedNamespaces)
+            {
+                candidates.Add(importedNamespace + "." + methodPath);
+            }
+        }
+        else
+        {
+            candidates.Add(qualifiedTypeName + suffix);
+
+            foreach (var importedNamespace in _names.ImportedNamespaces)
+            {
+                candidates.Add(importedNamespace + "." + methodPath);
+            }
         }
 
-        return qualifiedTypeName + methodPath[firstDot..];
+        var knownCandidates = candidates
+            .Where(StaticClrMethodResolver.IsKnownMethodPath)
+            .ToList();
+
+        if (knownCandidates.Count == 0)
+        {
+            return true;
+        }
+
+        if (knownCandidates.Count == 1)
+        {
+            resolvedPath = knownCandidates[0];
+            return true;
+        }
+
+        diagnostic = $"ambiguous static method call '{methodPath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
+        return false;
     }
 
     private TypeSymbol CheckArrayLiteral(ArrayLiteral expression)

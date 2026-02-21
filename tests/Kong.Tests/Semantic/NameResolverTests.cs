@@ -247,14 +247,18 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesTopLevelImportAlias()
     {
-        var unit = Parse("import System.Console; import System.Math;");
+        var unit = Parse("import System; import System.Console; import System.Math;");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
 
         Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains("System", result.ImportedNamespaces);
+        Assert.Contains("System.Console", result.ImportedNamespaces);
+        Assert.Contains("System.Math", result.ImportedNamespaces);
         Assert.Equal("System.Console", result.ImportedTypeAliases["Console"]);
         Assert.Equal("System.Math", result.ImportedTypeAliases["Math"]);
+        Assert.Equal("System", result.ImportedTypeAliases["System"]);
     }
 
     [Fact]
@@ -279,6 +283,18 @@ public class NameResolverTests
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "N003");
+    }
+
+    [Fact]
+    public void TestReportsImportAfterTopLevelFunctionDeclaration()
+    {
+        var unit = Parse("fn Main() { } import System;");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "N005");
     }
 
     private static CompilationUnit Parse(string input)

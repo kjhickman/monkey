@@ -18,6 +18,7 @@ public class NameResolution
     public Dictionary<FunctionParameter, NameSymbol> ParameterSymbols { get; } = [];
     public Dictionary<FunctionLiteral, List<NameSymbol>> FunctionCaptures { get; } = [];
     public Dictionary<string, string> ImportedTypeAliases { get; } = [];
+    public HashSet<string> ImportedNamespaces { get; } = [];
     public DiagnosticBag Diagnostics { get; } = new();
 
     public IReadOnlyList<NameSymbol> GetCapturedSymbols(FunctionLiteral function)
@@ -66,8 +67,24 @@ public class NameResolver
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
         PredeclareTopLevelFunctions(unit);
 
+        var seenNonImportTopLevelStatement = false;
+
         foreach (var statement in unit.Statements)
         {
+            if (statement is ImportStatement)
+            {
+                if (seenNonImportTopLevelStatement)
+                {
+                    _result.Diagnostics.Report(statement.Span,
+                        "import statements must appear before other top-level declarations",
+                        "N005");
+                }
+            }
+            else
+            {
+                seenNonImportTopLevelStatement = true;
+            }
+
             ResolveStatement(statement);
         }
 
@@ -135,6 +152,8 @@ public class NameResolver
                 "N003");
             return;
         }
+
+        _result.ImportedNamespaces.Add(statement.QualifiedName);
 
         var alias = statement.Alias;
         if (_result.ImportedTypeAliases.TryGetValue(alias, out var existingQualifiedName))

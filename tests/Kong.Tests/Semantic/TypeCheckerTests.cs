@@ -190,6 +190,21 @@ public class TypeCheckerTests
         Assert.Equal("System.Math.Abs", result.ResolvedStaticMethodPaths[call]);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrMethodCallViaNamespaceImport()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System; Console.WriteLine(42);");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.Void, callType);
+        Assert.Equal("System.Console.WriteLine", result.ResolvedStaticMethodPaths[call]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);
