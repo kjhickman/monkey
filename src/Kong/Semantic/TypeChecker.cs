@@ -7,6 +7,7 @@ public class TypeCheckResult
 {
     public Dictionary<IExpression, TypeSymbol> ExpressionTypes { get; } = [];
     public Dictionary<CallExpression, string> ResolvedStaticMethodPaths { get; } = [];
+    public Dictionary<MemberAccessExpression, string> ResolvedStaticValuePaths { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
@@ -437,11 +438,30 @@ public class TypeChecker
 
     private TypeSymbol CheckMemberAccessExpression(MemberAccessExpression expression)
     {
-        _result.Diagnostics.Report(
-            expression.Span,
-            "member access expressions are only supported as static method call targets",
-            "T121");
-        return TypeSymbols.Error;
+        if (!TryGetQualifiedMemberPath(expression, out var memberPath))
+        {
+            _result.Diagnostics.Report(
+                expression.Span,
+                "static member access target must be a member path like 'System.Environment.NewLine' or 'Environment.NewLine'",
+                "T122");
+            return TypeSymbols.Error;
+        }
+
+        if (!TryResolveImportedPath(memberPath, StaticClrMethodResolver.IsKnownValuePath, out var resolvedPath, out var resolutionDiagnostic))
+        {
+            _result.Diagnostics.Report(expression.Span, resolutionDiagnostic, "T122");
+            return TypeSymbols.Error;
+        }
+
+        if (!StaticClrMethodResolver.TryResolveValue(resolvedPath, out var binding, out var resolutionError, out var resolutionMessage))
+        {
+            var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+            _result.Diagnostics.Report(expression.Span, resolutionMessage, code);
+            return TypeSymbols.Error;
+        }
+
+        _result.ResolvedStaticValuePaths[expression] = resolvedPath;
+        return binding.Type;
     }
 
     private bool TryCheckStaticMethodCall(
@@ -461,7 +481,7 @@ public class TypeChecker
             return true;
         }
 
-        if (!TryResolveImportedMethodPath(methodPath, out var resolvedMethodPath, out var resolutionDiagnostic))
+        if (!TryResolveImportedPath(methodPath, StaticClrMethodResolver.IsKnownMethodPath, out var resolvedMethodPath, out var resolutionDiagnostic))
         {
             _result.Diagnostics.Report(memberAccessExpression.Span, resolutionDiagnostic, "T122");
             return true;
@@ -513,31 +533,35 @@ public class TypeChecker
         return true;
     }
 
-    private bool TryResolveImportedMethodPath(string methodPath, out string resolvedPath, out string diagnostic)
+    private bool TryResolveImportedPath(
+        string memberPath,
+        Func<string, bool> isKnownCandidate,
+        out string resolvedPath,
+        out string diagnostic)
     {
         diagnostic = string.Empty;
-        resolvedPath = methodPath;
+        resolvedPath = memberPath;
 
-        if (StaticClrMethodResolver.IsKnownMethodPath(methodPath))
+        if (isKnownCandidate(memberPath))
         {
             return true;
         }
 
-        var firstDot = methodPath.IndexOf('.');
+        var firstDot = memberPath.IndexOf('.');
         if (firstDot <= 0)
         {
             return true;
         }
 
-        var root = methodPath[..firstDot];
-        var suffix = methodPath[firstDot..];
+        var root = memberPath[..firstDot];
+        var suffix = memberPath[firstDot..];
         var candidates = new HashSet<string>();
 
         if (!_names.ImportedTypeAliases.TryGetValue(root, out var qualifiedTypeName))
         {
             foreach (var importedNamespace in _names.ImportedNamespaces)
             {
-                candidates.Add(importedNamespace + "." + methodPath);
+                candidates.Add(importedNamespace + "." + memberPath);
             }
         }
         else
@@ -546,12 +570,12 @@ public class TypeChecker
 
             foreach (var importedNamespace in _names.ImportedNamespaces)
             {
-                candidates.Add(importedNamespace + "." + methodPath);
+                candidates.Add(importedNamespace + "." + memberPath);
             }
         }
 
         var knownCandidates = candidates
-            .Where(StaticClrMethodResolver.IsKnownMethodPath)
+            .Where(isKnownCandidate)
             .ToList();
 
         if (knownCandidates.Count == 0)
@@ -565,7 +589,7 @@ public class TypeChecker
             return true;
         }
 
-        diagnostic = $"ambiguous static method call '{methodPath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
+        diagnostic = $"ambiguous static member reference '{memberPath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
         return false;
     }
 

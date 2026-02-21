@@ -171,6 +171,20 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersStaticClrPropertyAccess()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("import System; if (Environment.NewLine != \"\") { 1; } else { 0; }");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var get = Assert.IsType<IrStaticValueGet>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrStaticValueGet));
+        Assert.Equal("System.Environment.NewLine", get.MemberPath);
+    }
+
+    [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
         var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";

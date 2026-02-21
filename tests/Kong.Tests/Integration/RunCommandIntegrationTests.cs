@@ -498,6 +498,22 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsStaticClrPropertyAccess()
+    {
+        var filePath = CreateTempProgram("import System; fn Main() { if (Environment.NewLine != \"\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }");
+        try
+        {
+            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");

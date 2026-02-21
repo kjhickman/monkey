@@ -151,6 +151,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrPropertyAccessAndStringInequality()
+    {
+        var result = Execute("import System; if (Environment.NewLine != \"\") { 1; } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
         var result = Execute("System.Math.Abs(-42);");

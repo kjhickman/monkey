@@ -9,6 +9,7 @@ public class IrLowerer
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<CallExpression, string> _resolvedStaticMethodPaths = [];
+    private readonly Dictionary<MemberAccessExpression, string> _resolvedStaticValuePaths = [];
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
     private readonly Dictionary<FunctionDeclaration, FunctionTypeSymbol> _declaredFunctionTypes = [];
     private readonly Dictionary<string, FunctionTypeSymbol> _declaredFunctionTypesByName = [];
@@ -37,6 +38,7 @@ public class IrLowerer
         _nameResolution = nameResolution;
         _expressionTypes.Clear();
         _resolvedStaticMethodPaths.Clear();
+        _resolvedStaticValuePaths.Clear();
         _variableTypes.Clear();
         _declaredFunctionTypes.Clear();
         _declaredFunctionTypesByName.Clear();
@@ -48,6 +50,11 @@ public class IrLowerer
         foreach (var pair in typeCheckResult.ResolvedStaticMethodPaths)
         {
             _resolvedStaticMethodPaths[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedStaticValuePaths)
+        {
+            _resolvedStaticValuePaths[pair.Key] = pair.Value;
         }
 
         foreach (var pair in typeCheckResult.VariableTypes)
@@ -633,10 +640,7 @@ public class IrLowerer
                 return LowerCallExpression(callExpression);
 
             case MemberAccessExpression memberAccessExpression:
-                _result.Diagnostics.Report(memberAccessExpression.Span,
-                    "phase-4 IR lowerer supports member access only as static call targets",
-                    "IR002");
-                return null;
+                return LowerStaticValueAccessExpression(memberAccessExpression);
 
             case ArrayLiteral arrayLiteral:
                 return LowerArrayLiteral(arrayLiteral);
@@ -974,6 +978,32 @@ public class IrLowerer
 
         var destination = AllocateValue(returnType);
         _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes));
+        return destination;
+    }
+
+    private IrValueId? LowerStaticValueAccessExpression(MemberAccessExpression memberAccessExpression)
+    {
+        if (!TryGetExpressionType(memberAccessExpression, out var valueType) || !IsSupportedRuntimeType(valueType))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                "phase-4 IR lowerer requires supported static member value type",
+                "IR001");
+            return null;
+        }
+
+        if (!_resolvedStaticValuePaths.TryGetValue(memberAccessExpression, out var memberPath))
+        {
+            if (!TryExtractMethodPath(memberAccessExpression, out memberPath))
+            {
+                _result.Diagnostics.Report(memberAccessExpression.Span,
+                    "phase-4 IR lowerer could not determine static member path",
+                    "IR002");
+                return null;
+            }
+        }
+
+        var destination = AllocateValue(valueType);
+        _currentBlock.Instructions.Add(new IrStaticValueGet(destination, memberPath));
         return destination;
     }
 

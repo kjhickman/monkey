@@ -84,6 +84,10 @@ public sealed record IrStaticCallVoid(
     IReadOnlyList<IrValueId> Arguments,
     IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
 
+public sealed record IrStaticValueGet(
+    IrValueId Destination,
+    string MemberPath) : IrInstruction;
+
 public sealed record IrCreateClosure(
     IrValueId Destination,
     string FunctionName,

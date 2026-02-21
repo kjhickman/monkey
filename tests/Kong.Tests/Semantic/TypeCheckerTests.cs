@@ -265,6 +265,21 @@ public class TypeCheckerTests
         Assert.Equal("System.Environment.GetEnvironmentVariable", result.ResolvedStaticMethodPaths[getCall]);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrEnvironmentPropertyAccess()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System; Environment.NewLine;");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var memberAccess = Assert.IsType<MemberAccessExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(memberAccess, out var memberType));
+        Assert.Equal(TypeSymbols.String, memberType);
+        Assert.Equal("System.Environment.NewLine", result.ResolvedStaticValuePaths[memberAccess]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = EnsureFileScopedNamespace(input);

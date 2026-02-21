@@ -285,6 +285,13 @@ public class ClrArtifactBuilder
                         break;
 
                     case IrBinary binary:
+                        if (!function.ValueTypes.TryGetValue(binary.Left, out var leftOperandType) ||
+                            !function.ValueTypes.TryGetValue(binary.Right, out var rightOperandType))
+                        {
+                            diagnostics.Report(Span.Empty, "phase-5 CLR backend missing operand types for binary expression", "IL001");
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Left]);
                         il.Emit(OpCodes.Ldloc, valueLocals[binary.Right]);
                         switch (binary.Operator)
@@ -308,12 +315,28 @@ public class ClrArtifactBuilder
                                 il.Emit(OpCodes.Cgt);
                                 break;
                             case IrBinaryOperator.Equal:
-                                il.Emit(OpCodes.Ceq);
+                                if (leftOperandType == TypeSymbols.String && rightOperandType == TypeSymbols.String)
+                                {
+                                    var stringEquals = module.ImportReference(typeof(string).GetMethod("op_Equality", [typeof(string), typeof(string)])!);
+                                    il.Emit(OpCodes.Call, stringEquals);
+                                }
+                                else
+                                {
+                                    il.Emit(OpCodes.Ceq);
+                                }
                                 break;
                             case IrBinaryOperator.NotEqual:
-                                il.Emit(OpCodes.Ceq);
-                                il.Emit(OpCodes.Ldc_I4_0);
-                                il.Emit(OpCodes.Ceq);
+                                if (leftOperandType == TypeSymbols.String && rightOperandType == TypeSymbols.String)
+                                {
+                                    var stringNotEquals = module.ImportReference(typeof(string).GetMethod("op_Inequality", [typeof(string), typeof(string)])!);
+                                    il.Emit(OpCodes.Call, stringNotEquals);
+                                }
+                                else
+                                {
+                                    il.Emit(OpCodes.Ceq);
+                                    il.Emit(OpCodes.Ldc_I4_0);
+                                    il.Emit(OpCodes.Ceq);
+                                }
                                 break;
                             default:
                                 throw new InvalidOperationException();
@@ -414,6 +437,34 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Call, staticVoidMethod);
+                        break;
+                    }
+
+                    case IrStaticValueGet staticValueGet:
+                    {
+                        var staticValueMember = ImportStaticValueMember(module, staticValueGet.MemberPath, diagnostics);
+                        if (staticValueMember == null)
+                        {
+                            return false;
+                        }
+
+                        var importedMember = staticValueMember.Value;
+
+                        if (importedMember.GetterMethod != null)
+                        {
+                            il.Emit(OpCodes.Call, importedMember.GetterMethod);
+                        }
+                        else if (importedMember.Field != null)
+                        {
+                            il.Emit(OpCodes.Ldsfld, importedMember.Field);
+                        }
+                        else
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend invalid static member binding for '{staticValueGet.MemberPath}'", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[staticValueGet.Destination]);
                         break;
                     }
 
@@ -929,6 +980,22 @@ public class ClrArtifactBuilder
         }
 
         return module.ImportReference(binding.MethodDefinition);
+    }
+
+    private static (MethodReference? GetterMethod, FieldReference? Field)? ImportStaticValueMember(
+        ModuleDefinition module,
+        string memberPath,
+        DiagnosticBag diagnostics)
+    {
+        if (!StaticClrMethodResolver.TryResolveValue(memberPath, out var binding, out _, out var errorMessage))
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {errorMessage}", "IL001");
+            return null;
+        }
+
+        var getter = binding.PropertyGetter != null ? module.ImportReference(binding.PropertyGetter) : null;
+        var field = binding.Field != null ? module.ImportReference(binding.Field) : null;
+        return (getter, field);
     }
 
 }

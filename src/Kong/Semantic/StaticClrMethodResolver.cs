@@ -8,6 +8,12 @@ public sealed record StaticClrMethodBinding(
     TypeSymbol ReturnType,
     MethodDefinition MethodDefinition);
 
+public sealed record StaticClrValueBinding(
+    string MemberPath,
+    TypeSymbol Type,
+    MethodDefinition? PropertyGetter,
+    FieldDefinition? Field);
+
 public enum StaticClrMethodResolutionError
 {
     None,
@@ -27,6 +33,11 @@ public static class StaticClrMethodResolver
     public static bool IsKnownMethodPath(string methodPath)
     {
         return TryGetMethodCandidates(methodPath, out var _, out var methods, out _) && methods.Count > 0;
+    }
+
+    public static bool IsKnownValuePath(string memberPath)
+    {
+        return TryResolveValue(memberPath, out _, out _, out _);
     }
 
     public static StaticClrMethodBinding? Resolve(string methodPath, IReadOnlyList<TypeSymbol> parameterTypes)
@@ -100,6 +111,78 @@ public static class StaticClrMethodResolver
         return true;
     }
 
+    public static bool TryResolveValue(
+        string memberPath,
+        out StaticClrValueBinding binding,
+        out StaticClrMethodResolutionError error,
+        out string errorMessage)
+    {
+        binding = null!;
+        error = StaticClrMethodResolutionError.None;
+        errorMessage = string.Empty;
+
+        if (!TryGetTypeAndMember(memberPath, out var typeFullName, out var memberName, out error))
+        {
+            errorMessage = $"invalid static member path '{memberPath}'";
+            return false;
+        }
+
+        if (!TryFindType(typeFullName, out var typeDefinition))
+        {
+            error = StaticClrMethodResolutionError.TypeNotFound;
+            errorMessage = $"unknown CLR type '{typeFullName}'";
+            return false;
+        }
+
+        var properties = typeDefinition.Properties
+            .Where(p => p.Name == memberName && p.GetMethod is { IsStatic: true, IsPublic: true } getter && getter.Parameters.Count == 0)
+            .ToList();
+
+        var fields = typeDefinition.Fields
+            .Where(f => f.Name == memberName && f.IsStatic && f.IsPublic)
+            .ToList();
+
+        var totalMatches = properties.Count + fields.Count;
+        if (totalMatches == 0)
+        {
+            error = StaticClrMethodResolutionError.MethodNotFound;
+            errorMessage = $"unknown static member '{memberPath}'";
+            return false;
+        }
+
+        if (totalMatches > 1)
+        {
+            error = StaticClrMethodResolutionError.AmbiguousOverload;
+            errorMessage = $"ambiguous static member access '{memberPath}'";
+            return false;
+        }
+
+        if (properties.Count == 1)
+        {
+            var property = properties[0];
+            if (!TryMapClrFullNameToKongType(NormalizeTypeName(property.PropertyType.FullName), out var propertyType))
+            {
+                error = StaticClrMethodResolutionError.UnsupportedReturnType;
+                errorMessage = $"static member '{memberPath}' has unsupported CLR type '{property.PropertyType.FullName}'";
+                return false;
+            }
+
+            binding = new StaticClrValueBinding(memberPath, propertyType, property.GetMethod!, null);
+            return true;
+        }
+
+        var field = fields[0];
+        if (!TryMapClrFullNameToKongType(NormalizeTypeName(field.FieldType.FullName), out var fieldType))
+        {
+            error = StaticClrMethodResolutionError.UnsupportedReturnType;
+            errorMessage = $"static member '{memberPath}' has unsupported CLR type '{field.FieldType.FullName}'";
+            return false;
+        }
+
+        binding = new StaticClrValueBinding(memberPath, fieldType, null, field);
+        return true;
+    }
+
     private static bool TryGetMethodCandidates(
         string methodPath,
         out string typeFullName,
@@ -136,6 +219,28 @@ public static class StaticClrMethodResolver
             return false;
         }
 
+        return true;
+    }
+
+    private static bool TryGetTypeAndMember(
+        string memberPath,
+        out string typeFullName,
+        out string memberName,
+        out StaticClrMethodResolutionError error)
+    {
+        typeFullName = string.Empty;
+        memberName = string.Empty;
+        error = StaticClrMethodResolutionError.None;
+
+        var lastDot = memberPath.LastIndexOf('.');
+        if (lastDot <= 0 || lastDot == memberPath.Length - 1)
+        {
+            error = StaticClrMethodResolutionError.InvalidMethodPath;
+            return false;
+        }
+
+        typeFullName = memberPath[..lastDot];
+        memberName = memberPath[(lastDot + 1)..];
         return true;
     }
 
