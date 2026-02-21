@@ -142,6 +142,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrEnvironmentCallsViaNamespaceImport()
+    {
+        var result = Execute("import System; Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\"); Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\"); 1;");
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
         var result = Execute("System.Math.Abs(-42);");

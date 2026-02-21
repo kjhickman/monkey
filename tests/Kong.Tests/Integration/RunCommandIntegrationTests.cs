@@ -2,6 +2,7 @@ using Kong.Cli.Commands;
 
 namespace Kong.Tests.Integration;
 
+[Collection("CLI Integration")]
 public class RunCommandIntegrationTests
 {
     [Fact]
@@ -475,6 +476,23 @@ public class RunCommandIntegrationTests
         }
         finally
         {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandSupportsStaticClrEnvironmentCalls()
+    {
+        var filePath = CreateTempProgram("import System; fn Main() { Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\"); if (Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") == \"ok\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }");
+        try
+        {
+            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("KONG_TEST_ENV", null);
             File.Delete(filePath);
         }
     }

@@ -250,6 +250,21 @@ public class TypeCheckerTests
         Assert.Equal("System.IO.Path.Combine", result.ResolvedStaticMethodPaths[call]);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrEnvironmentCallsViaNamespaceImport()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System; Environment.SetEnvironmentVariable(\"KONG_TEST\", \"ok\"); Environment.GetEnvironmentVariable(\"KONG_TEST\");");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var getCallStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var getCall = Assert.IsType<CallExpression>(getCallStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(getCall, out var getCallType));
+        Assert.Equal(TypeSymbols.String, getCallType);
+        Assert.Equal("System.Environment.GetEnvironmentVariable", result.ResolvedStaticMethodPaths[getCall]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = EnsureFileScopedNamespace(input);

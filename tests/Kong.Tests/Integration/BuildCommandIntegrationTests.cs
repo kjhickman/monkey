@@ -3,6 +3,7 @@ using Kong.Cli.Commands;
 
 namespace Kong.Tests.Integration;
 
+[Collection("CLI Integration")]
 public class BuildCommandIntegrationTests
 {
     [Fact]

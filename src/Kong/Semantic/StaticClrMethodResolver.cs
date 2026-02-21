@@ -92,6 +92,16 @@ public static class StaticClrMethodResolver
             [],
             TypeSymbols.String,
             typeof(Directory).GetMethod(nameof(Directory.GetCurrentDirectory), Type.EmptyTypes)!),
+        new StaticClrMethodBinding(
+            "System.Environment.GetEnvironmentVariable",
+            [TypeSymbols.String],
+            TypeSymbols.String,
+            typeof(Environment).GetMethod(nameof(Environment.GetEnvironmentVariable), [typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.Environment.SetEnvironmentVariable",
+            [TypeSymbols.String, TypeSymbols.String],
+            TypeSymbols.Void,
+            typeof(Environment).GetMethod(nameof(Environment.SetEnvironmentVariable), [typeof(string), typeof(string)])!),
     ];
 
     public static bool IsKnownMethodPath(string methodPath)
