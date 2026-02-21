@@ -467,21 +467,15 @@ public class TypeChecker
             return true;
         }
 
-        if (!StaticClrMethodResolver.IsKnownMethodPath(resolvedMethodPath))
+        if (!StaticClrMethodResolver.TryResolve(
+                resolvedMethodPath,
+                argumentTypes,
+                out var binding,
+                out var resolutionError,
+                out var resolutionMessage))
         {
-            _result.Diagnostics.Report(memberAccessExpression.Span,
-                $"unknown static method '{resolvedMethodPath}'",
-                "T122");
-            return true;
-        }
-
-        var binding = StaticClrMethodResolver.Resolve(resolvedMethodPath, argumentTypes);
-        if (binding == null)
-        {
-            _result.Diagnostics.Report(
-                memberAccessExpression.Span,
-                $"no matching overload for static method '{resolvedMethodPath}' with argument types ({string.Join(", ", argumentTypes)})",
-                "T113");
+            var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+            _result.Diagnostics.Report(memberAccessExpression.Span, resolutionMessage, code);
             return true;
         }
 

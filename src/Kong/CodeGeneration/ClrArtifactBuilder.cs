@@ -909,18 +909,14 @@ public class ClrArtifactBuilder
         TypeSymbol returnType,
         DiagnosticBag diagnostics)
     {
-        if (!StaticClrMethodResolver.IsKnownMethodPath(methodPath))
+        if (!StaticClrMethodResolver.TryResolve(
+                methodPath,
+                argumentTypes,
+                out var binding,
+                out _,
+                out var errorMessage))
         {
-            diagnostics.Report(Span.Empty, $"phase-5 CLR backend unknown static method '{methodPath}'", "IL001");
-            return null;
-        }
-
-        var binding = StaticClrMethodResolver.Resolve(methodPath, argumentTypes);
-        if (binding == null)
-        {
-            diagnostics.Report(Span.Empty,
-                $"phase-5 CLR backend could not find overload for '{methodPath}' with argument types ({string.Join(", ", argumentTypes)}) and return type '{returnType}'",
-                "IL001");
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {errorMessage}", "IL001");
             return null;
         }
 
@@ -932,7 +928,7 @@ public class ClrArtifactBuilder
             return null;
         }
 
-        return module.ImportReference(binding.MethodInfo);
+        return module.ImportReference(binding.MethodDefinition);
     }
 
 }
