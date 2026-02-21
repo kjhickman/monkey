@@ -32,7 +32,7 @@ public static class Compilation
         var visiting = new Stack<string>();
         var rootFullPath = Path.GetFullPath(filePath);
 
-        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, orderedUnits, parsedUnits, visiting, out diagnostics))
+        if (!TryLoadWithPathImports(rootFullPath, rootFullPath, expectedNamespaceTail: null, orderedUnits, parsedUnits, visiting, out diagnostics))
         {
             return false;
         }
@@ -98,6 +98,7 @@ public static class Compilation
     private static bool TryLoadWithPathImports(
         string filePath,
         string rootFilePath,
+        string? expectedNamespaceTail,
         List<LoadedUnit> orderedUnits,
         Dictionary<string, CompilationUnit> parsedUnits,
         Stack<string> visiting,
@@ -119,6 +120,14 @@ public static class Compilation
 
         if (!TryParseFile(filePath, string.Equals(filePath, rootFilePath, StringComparison.OrdinalIgnoreCase), out var unit, out diagnostics))
         {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedNamespaceTail) &&
+            !IsNamespaceCompatibleWithImport(unit, expectedNamespaceTail!, out var namespaceMismatchMessage))
+        {
+            diagnostics = new DiagnosticBag();
+            diagnostics.Report(Span.Empty, $"{namespaceMismatchMessage} in '{filePath}'", "CLI019");
             return false;
         }
 
@@ -145,7 +154,8 @@ public static class Compilation
                     return false;
                 }
 
-                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, orderedUnits, parsedUnits, visiting, out diagnostics))
+                var expectedTail = Path.GetFileNameWithoutExtension(resolvedPath);
+                if (!TryLoadWithPathImports(resolvedPath, rootFilePath, expectedTail, orderedUnits, parsedUnits, visiting, out diagnostics))
                 {
                     return false;
                 }
@@ -159,6 +169,31 @@ public static class Compilation
         parsedUnits[filePath] = unit;
         orderedUnits.Add(new LoadedUnit(filePath, unit));
         return true;
+    }
+
+    private static bool IsNamespaceCompatibleWithImport(
+        CompilationUnit unit,
+        string expectedTail,
+        out string message)
+    {
+        message = string.Empty;
+
+        var namespaceStatement = unit.Statements.OfType<NamespaceStatement>().FirstOrDefault();
+        if (namespaceStatement == null)
+        {
+            return true;
+        }
+
+        var actual = namespaceStatement.QualifiedName;
+        var lastDot = actual.LastIndexOf('.');
+        var actualTail = lastDot < 0 ? actual : actual[(lastDot + 1)..];
+        if (string.Equals(actualTail, expectedTail, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        message = $"namespace '{actual}' is incompatible with imported file name; expected namespace to end with '{expectedTail}'";
+        return false;
     }
 
     private static bool TryParseFile(string filePath, bool isRootFile, out CompilationUnit unit, out DiagnosticBag diagnostics)
