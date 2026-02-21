@@ -133,6 +133,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrPathHelpersViaNamespaceImport()
+    {
+        var result = Execute("import System.IO; if (File.Exists(Path.Combine(\"/tmp\", \"kong-path-never-exists\"))) { 1; } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(0, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
         var result = Execute("System.Math.Abs(-42);");

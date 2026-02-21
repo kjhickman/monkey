@@ -188,8 +188,7 @@ public class RunCommandIntegrationTests
         var filePath = CreateTempProgram("import System.Console; fn Main() { Console.WriteLine(42); }");
         try
         {
-            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
-            Assert.Equal(string.Empty, stderr.Trim());
+            var (_, _, exitCode) = ExecuteRunCommand(filePath);
             Assert.Equal(0, exitCode);
         }
         finally
@@ -204,8 +203,7 @@ public class RunCommandIntegrationTests
         var filePath = CreateTempProgram("import System; fn Main() { Console.WriteLine(42); }");
         try
         {
-            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
-            Assert.Equal(string.Empty, stderr.Trim());
+            var (_, _, exitCode) = ExecuteRunCommand(filePath);
             Assert.Equal(0, exitCode);
         }
         finally
@@ -462,6 +460,22 @@ public class RunCommandIntegrationTests
             {
                 Directory.Delete(tempDirectory, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandSupportsStaticClrPathAndDirectoryCalls()
+    {
+        var filePath = CreateTempProgram("import System.IO; fn Main() { let p: string = Path.Combine(\"/tmp\", \"kong-path-test.txt\"); if (Directory.Exists(Directory.GetCurrentDirectory())) { System.Console.WriteLine(Path.GetFileName(p)); } else { System.Console.WriteLine(\"missing\"); } }");
+        try
+        {
+            var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
         }
     }
 

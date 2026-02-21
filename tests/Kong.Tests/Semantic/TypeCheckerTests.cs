@@ -235,6 +235,21 @@ public class TypeCheckerTests
         Assert.Equal("System.IO.File.Exists", result.ResolvedStaticMethodPaths[call]);
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrPathCombineViaNamespaceImport()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("import System.IO; Path.Combine(\"a\", \"b\");");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(TypeSymbols.String, callType);
+        Assert.Equal("System.IO.Path.Combine", result.ResolvedStaticMethodPaths[call]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = EnsureFileScopedNamespace(input);

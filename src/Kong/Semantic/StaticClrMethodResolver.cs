@@ -67,6 +67,31 @@ public static class StaticClrMethodResolver
             [TypeSymbols.String],
             TypeSymbols.Void,
             typeof(File).GetMethod(nameof(File.Delete), [typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.IO.Path.Combine",
+            [TypeSymbols.String, TypeSymbols.String],
+            TypeSymbols.String,
+            typeof(Path).GetMethod(nameof(Path.Combine), [typeof(string), typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.IO.Path.GetFileName",
+            [TypeSymbols.String],
+            TypeSymbols.String,
+            typeof(Path).GetMethod(nameof(Path.GetFileName), [typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.IO.Directory.Exists",
+            [TypeSymbols.String],
+            TypeSymbols.Bool,
+            typeof(Directory).GetMethod(nameof(Directory.Exists), [typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.IO.Directory.Delete",
+            [TypeSymbols.String],
+            TypeSymbols.Void,
+            typeof(Directory).GetMethod(nameof(Directory.Delete), [typeof(string)])!),
+        new StaticClrMethodBinding(
+            "System.IO.Directory.GetCurrentDirectory",
+            [],
+            TypeSymbols.String,
+            typeof(Directory).GetMethod(nameof(Directory.GetCurrentDirectory), Type.EmptyTypes)!),
     ];
 
     public static bool IsKnownMethodPath(string methodPath)
