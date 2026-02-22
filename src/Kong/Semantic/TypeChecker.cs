@@ -306,6 +306,8 @@ public class TypeChecker
         {
             "+" or "-" or "*" or "/" =>
                 RequireNumericOperands(expression, left, right),
+            "&&" or "||" =>
+                RequireBothBool(expression, left, right),
             "<" or ">" =>
                 RequireComparableNumericTypes(expression, left, right),
             "==" or "!=" =>
@@ -722,6 +724,23 @@ public class TypeChecker
         {
             _result.Diagnostics.Report(expression.Span,
                 $"operator '{expression.Operator}' requires compatible operand types, got '{left}' and '{right}'",
+                "T103");
+        }
+
+        return TypeSymbols.Error;
+    }
+
+    private TypeSymbol RequireBothBool(InfixExpression expression, TypeSymbol left, TypeSymbol right)
+    {
+        if (left == TypeSymbols.Bool && right == TypeSymbols.Bool)
+        {
+            return TypeSymbols.Bool;
+        }
+
+        if (left != TypeSymbols.Error && right != TypeSymbols.Error)
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"operator '{expression.Operator}' requires 'bool' operands, got '{left}' and '{right}'",
                 "T103");
         }
 

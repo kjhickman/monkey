@@ -595,6 +595,11 @@ public class IrLowerer
 
             case InfixExpression infixExpression:
             {
+                if (infixExpression.Operator is "&&" or "||")
+                {
+                    return LowerLogicalInfixExpression(infixExpression);
+                }
+
                 if (!TryMapBinaryOperator(infixExpression.Operator, out var op))
                 {
                     _result.Diagnostics.Report(infixExpression.Span,
@@ -683,6 +688,65 @@ public class IrLowerer
                     "IR001");
                 return null;
         }
+    }
+
+    private IrValueId? LowerLogicalInfixExpression(InfixExpression infixExpression)
+    {
+        if (!TryGetExpressionType(infixExpression.Left, out var leftType) ||
+            !TryGetExpressionType(infixExpression.Right, out var rightType) ||
+            !TryGetExpressionType(infixExpression, out var resultType))
+        {
+            return null;
+        }
+
+        if (leftType != TypeSymbols.Bool || rightType != TypeSymbols.Bool || resultType != TypeSymbols.Bool)
+        {
+            _result.Diagnostics.Report(infixExpression.Span,
+                $"phase-6 IR lowerer supports logical operators only for bool operands, got '{leftType}' and '{rightType}'",
+                "IR001");
+            return null;
+        }
+
+        var left = LowerExpression(infixExpression.Left);
+        if (left == null)
+        {
+            return null;
+        }
+
+        var resultLocal = AllocateAnonymousLocal(TypeSymbols.Bool);
+        var evaluateRightBlock = NewBlock();
+        var shortCircuitBlock = NewBlock();
+        var mergeBlock = NewBlock();
+
+        if (infixExpression.Operator == "&&")
+        {
+            _currentBlock.Terminator = new IrBranch(left.Value, evaluateRightBlock.Id, shortCircuitBlock.Id);
+        }
+        else
+        {
+            _currentBlock.Terminator = new IrBranch(left.Value, shortCircuitBlock.Id, evaluateRightBlock.Id);
+        }
+
+        _currentBlock = evaluateRightBlock;
+        var right = LowerExpression(infixExpression.Right);
+        if (right == null)
+        {
+            return null;
+        }
+
+        _currentBlock.Instructions.Add(new IrStoreLocal(resultLocal, right.Value));
+        _currentBlock.Terminator = new IrJump(mergeBlock.Id);
+
+        _currentBlock = shortCircuitBlock;
+        var shortCircuitValue = AllocateValue(TypeSymbols.Bool);
+        _currentBlock.Instructions.Add(new IrConstBool(shortCircuitValue, infixExpression.Operator == "||"));
+        _currentBlock.Instructions.Add(new IrStoreLocal(resultLocal, shortCircuitValue));
+        _currentBlock.Terminator = new IrJump(mergeBlock.Id);
+
+        _currentBlock = mergeBlock;
+        var destination = AllocateValue(TypeSymbols.Bool);
+        _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal));
+        return destination;
     }
 
     private IrValueId? LowerIfExpression(IfExpression ifExpression)

@@ -7,6 +7,8 @@ namespace Kong.Parsing;
 public enum Precedence
 {
     Lowest = 0,
+    LogicalOr,   // ||
+    LogicalAnd,  // &&
     Equality,    // ==
     Comparison,  // > or <
     Sum,         // +
@@ -31,6 +33,8 @@ public class Parser
 
     private static readonly Dictionary<TokenType, Precedence> Precedences = new()
     {
+        { TokenType.Or, Precedence.LogicalOr },
+        { TokenType.And, Precedence.LogicalAnd },
         { TokenType.Equal, Precedence.Equality },
         { TokenType.NotEqual, Precedence.Equality },
         { TokenType.LessThan, Precedence.Comparison },
@@ -75,6 +79,8 @@ public class Parser
             { TokenType.Slash, ParseInfixExpression },
             { TokenType.Equal, ParseInfixExpression },
             { TokenType.NotEqual, ParseInfixExpression },
+            { TokenType.And, ParseInfixExpression },
+            { TokenType.Or, ParseInfixExpression },
             { TokenType.LessThan, ParseInfixExpression },
             { TokenType.GreaterThan, ParseInfixExpression },
             { TokenType.LeftParenthesis, ParseCallExpression },

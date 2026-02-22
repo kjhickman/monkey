@@ -69,6 +69,30 @@ public class Lexer
             case '/':
                 token = NewToken(TokenType.Slash, _ch, start);
                 break;
+            case '&':
+                if (PeekChar() == '&')
+                {
+                    ReadChar();
+                    token = new Token(TokenType.And, "&&",
+                        new Span(start, new Position(_line, _column + 1)));
+                }
+                else
+                {
+                    token = NewToken(TokenType.Illegal, _ch, start);
+                }
+                break;
+            case '|':
+                if (PeekChar() == '|')
+                {
+                    ReadChar();
+                    token = new Token(TokenType.Or, "||",
+                        new Span(start, new Position(_line, _column + 1)));
+                }
+                else
+                {
+                    token = NewToken(TokenType.Illegal, _ch, start);
+                }
+                break;
             case '*':
                 token = NewToken(TokenType.Asterisk, _ch, start);
                 break;

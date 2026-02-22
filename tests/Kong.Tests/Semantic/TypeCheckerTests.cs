@@ -110,6 +110,23 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestLogicalOperatorsTypeCheckAsBool()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && false; let y: bool = true || false;");
+
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestLogicalOperatorTypeMismatchReportsDiagnostic()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && 1;");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T103");
+    }
+
+    [Fact]
     public void TestCallArgumentTypeMismatchReportsDiagnostic()
     {
         var input = "fn(x: int) -> int { return x; }(true);";

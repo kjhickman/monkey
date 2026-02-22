@@ -266,6 +266,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesLogicalOperators()
+    {
+        var result = Execute("let a: bool = false && true; let b: bool = true || false; if (!a) { if (b) { 1; } else { 0; } } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesReturnInsideIfBranches()
     {
         var result = Execute("fn Pick(flag: bool) -> int { if (flag) { return 1; } else { return 2; } } fn Main() { System.Console.WriteLine(Pick(false)); }");

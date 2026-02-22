@@ -196,6 +196,8 @@ public class ParserTests
     [InlineData("true == true", true, "==", true)]
     [InlineData("true != false", true, "!=", false)]
     [InlineData("false == false", false, "==", false)]
+    [InlineData("true && false", true, "&&", false)]
+    [InlineData("true || false", true, "||", false)]
     public void TestParsingInfixExpressions(string input, object leftValue, string op, object rightValue)
     {
         var l = new Lexer(input);
@@ -226,6 +228,8 @@ public class ParserTests
     [InlineData("false", "false")]
     [InlineData("3 > 5 == false", "((3 > 5) == false)")]
     [InlineData("3 < 5 == true", "((3 < 5) == true)")]
+    [InlineData("true || false && true", "(true || (false && true))")]
+    [InlineData("(true || false) && true", "((true || false) && true)")]
     [InlineData("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)")]
     [InlineData("(5 + 5) * 2", "((5 + 5) * 2)")]
     [InlineData("2 / (5 + 5)", "(2 / (5 + 5))")]

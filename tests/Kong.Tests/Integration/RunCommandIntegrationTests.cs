@@ -648,6 +648,25 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsLogicalOperatorsWithShortCircuiting()
+    {
+        var source = "fn Hit() -> bool { System.Console.WriteLine(9); true; } fn Main() { let a: bool = false && Hit(); let b: bool = true || Hit(); if (!a) { if (b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("1", stdout);
+            Assert.DoesNotContain("9", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");

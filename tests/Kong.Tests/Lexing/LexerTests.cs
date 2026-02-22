@@ -27,6 +27,7 @@ public class LexerTests
 
             10 == 10;
             10 != 9;
+            true && false || true;
             "foobar"
             "foo bar"
             [1, 2];
@@ -114,6 +115,12 @@ public class LexerTests
             (TokenType.Integer, "10"),
             (TokenType.NotEqual, "!="),
             (TokenType.Integer, "9"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.True, "true"),
+            (TokenType.And, "&&"),
+            (TokenType.False, "false"),
+            (TokenType.Or, "||"),
+            (TokenType.True, "true"),
             (TokenType.Semicolon, ";"),
             (TokenType.String, "foobar"),
             (TokenType.String, "foo bar"),
@@ -207,7 +214,7 @@ public class LexerTests
     [Fact]
     public void TestTokenSpans_MultiCharOperators()
     {
-        var input = "10 == 9 != 8";
+        var input = "10 == 9 != 8 && true || false";
 
         var l = new Lexer(input);
 
@@ -218,7 +225,11 @@ public class LexerTests
             (TokenType.Integer, "9", 1, 7, 1, 8),
             (TokenType.NotEqual, "!=", 1, 9, 1, 11),
             (TokenType.Integer, "8", 1, 12, 1, 13),
-            (TokenType.EndOfFile, "", 1, 13, 1, 13),
+            (TokenType.And, "&&", 1, 14, 1, 16),
+            (TokenType.True, "true", 1, 17, 1, 21),
+            (TokenType.Or, "||", 1, 22, 1, 24),
+            (TokenType.False, "false", 1, 25, 1, 30),
+            (TokenType.EndOfFile, "", 1, 30, 1, 30),
         };
 
         for (var i = 0; i < tests.Length; i++)

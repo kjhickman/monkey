@@ -18,28 +18,15 @@ fn Main() {
     let fromClr: double = System.Math.Sqrt(9);
     let msg: string = Label(total);
 
-    if (picked == 42) {
-        if (word == "kong") {
-            if (b == 3b) {
-                if (c == 'A') {
-                    if (fromClr == 3.0) {
-                        if (scaled == 3.0) {
-                            System.Console.WriteLine(System.String.Concat(msg, ":ok"));
-                        } else {
-                            System.Console.WriteLine("bad-scale");
-                        }
-                    } else {
-                        System.Console.WriteLine("bad-clr");
-                    }
-                } else {
-                    System.Console.WriteLine("bad-char");
-                }
-            } else {
-                System.Console.WriteLine("bad-byte");
-            }
-        } else {
-            System.Console.WriteLine("bad-word");
-        }
+    let ok: bool = picked == 42 &&
+        word == "kong" &&
+        b == 3b &&
+        c == 'A' &&
+        fromClr == 3.0 &&
+        scaled == 3.0;
+
+    if (ok || false) {
+        System.Console.WriteLine(System.String.Concat(msg, ":ok"));
     } else {
         System.Console.WriteLine("bad-pick");
     }

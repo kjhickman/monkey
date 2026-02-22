@@ -67,6 +67,21 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersLogicalOperatorsWithShortCircuitBranches()
+    {
+        var source = "let a: bool = false && true; let b: bool = true || false; if (a == b) { 1 } else { 0 };";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var branches = lowering.Program!.EntryPoint.Blocks.Count(b => b.Terminator is IrBranch);
+        Assert.True(branches >= 3);
+    }
+
+    [Fact]
     public void TestLowersFunctionLiteralCall()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("fn(x: int) -> int { return x + 1; }(2);");
