@@ -120,6 +120,23 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandExecutesNestedIntArrayProgramWithClrBackend()
+    {
+        var filePath = CreateTempProgram("fn Main() { let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; System.Console.WriteLine(ys[0]); }");
+        try
+        {
+            var (stdout, stderr, _) = ExecuteRunCommand(filePath);
+            Assert.Contains("3", stdout);
+            Assert.DoesNotContain("[IR001]", stderr);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandExecutesClosureProgramWithClrBackend()
     {
         var filePath = CreateTempProgram("fn Main() { let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10); }");

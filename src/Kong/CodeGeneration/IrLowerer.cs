@@ -1248,6 +1248,11 @@ public class IrLowerer
 
     private static bool IsSupportedArrayElementType(TypeSymbol elementType)
     {
+        if (elementType is ArrayTypeSymbol nestedArray)
+        {
+            return IsSupportedArrayElementType(nestedArray.ElementType);
+        }
+
         return elementType == TypeSymbols.Int ||
                elementType == TypeSymbols.Long ||
                elementType == TypeSymbols.Double ||

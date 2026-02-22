@@ -155,6 +155,20 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestIndexExpressionTypeForNestedIntArray()
+    {
+        var source = "let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];";
+        var (unit, _, result) = ParseResolveAndCheck(source);
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var indexExpression = Assert.IsType<IndexExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(indexExpression, out var type));
+        Assert.Equal(TypeSymbols.Int, type);
+    }
+
+    [Fact]
     public void TestIncludesNameResolutionDiagnostics()
     {
         var (_, _, result) = ParseResolveAndCheck("let x: int = y;");

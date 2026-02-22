@@ -111,6 +111,23 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersNestedIntArrayLiteralAndIndexExpression()
+    {
+        var source = "let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrNewArray { ElementType: ArrayTypeSymbol { ElementType: IntTypeSymbol } });
+        Assert.Contains(instructions, i => i is IrArrayIndex { ElementType: ArrayTypeSymbol { ElementType: IntTypeSymbol } });
+        Assert.Contains(instructions, i => i is IrArrayIndex { ElementType: IntTypeSymbol });
+    }
+
+    [Fact]
     public void TestLowersStaticClrCallVoid()
     {
         var (unit, typeCheck) = ParseAndTypeCheck("System.Console.WriteLine(1);");

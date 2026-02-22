@@ -107,6 +107,15 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesNestedIntArrayIndexExpression()
+    {
+        var result = Execute("let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];");
+
+        Assert.True(result.Executed);
+        Assert.Equal(3, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrConsoleWriteLine()
     {
         var result = Execute("System.Console.WriteLine(42); 1;");
