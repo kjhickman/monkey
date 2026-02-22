@@ -141,6 +141,22 @@ public class TypeMapperTests
     }
 
     [Fact]
+    public void TryMapKongType_StringArray_MapsToStringArray()
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+        var stringArrayType = new ArrayTypeSymbol(TypeSymbols.String);
+
+        var mapped = mapper.TryMapKongType(stringArrayType, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.IsType<CecilArrayType>(mapped);
+        var arrayType = (CecilArrayType)mapped;
+        Assert.Equal(module.TypeSystem.String, arrayType.ElementType);
+    }
+
+    [Fact]
     public void IsTypeSupported_Int_ReturnsTrue()
     {
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
@@ -206,12 +222,12 @@ public class TypeMapperTests
     }
 
     [Fact]
-    public void IsTypeSupported_StringArray_ReturnsFalse()
+    public void IsTypeSupported_StringArray_ReturnsTrue()
     {
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
         var stringArrayType = new ArrayTypeSymbol(TypeSymbols.String);
 
-        Assert.False(mapper.IsTypeSupported(stringArrayType));
+        Assert.True(mapper.IsTypeSupported(stringArrayType));
     }
 
     [Fact]

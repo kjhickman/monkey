@@ -142,6 +142,19 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestIndexExpressionTypeForStringArray()
+    {
+        var (unit, _, result) = ParseResolveAndCheck("let xs: string[] = [\"a\", \"b\"]; xs[1];");
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var indexExpression = Assert.IsType<IndexExpression>(expressionStatement.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(indexExpression, out var type));
+        Assert.Equal(TypeSymbols.String, type);
+    }
+
+    [Fact]
     public void TestIncludesNameResolutionDiagnostics()
     {
         var (_, _, result) = ParseResolveAndCheck("let x: int = y;");

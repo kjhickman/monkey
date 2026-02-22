@@ -103,6 +103,23 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandExecutesStringAndByteArrayProgramWithClrBackend()
+    {
+        var filePath = CreateTempProgram("fn Main() { let ss: string[] = [\"kong\", \"lang\"]; let bs: byte[] = [1b, 2b, 3b]; if (ss[1] == \"lang\") { if (bs[2] == 3b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }");
+        try
+        {
+            var (stdout, stderr, _) = ExecuteRunCommand(filePath);
+            Assert.Contains("1", stdout);
+            Assert.DoesNotContain("[IR001]", stderr);
+            Assert.Equal(string.Empty, stderr.Trim());
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandExecutesClosureProgramWithClrBackend()
     {
         var filePath = CreateTempProgram("fn Main() { let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10); }");

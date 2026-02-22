@@ -89,6 +89,24 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStringArrayIndexExpression()
+    {
+        var result = Execute("let xs: string[] = [\"a\", \"b\"]; if (xs[1] == \"b\") { 1; } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
+    [Fact]
+    public void TestExecutesByteArrayIndexExpression()
+    {
+        var result = Execute("let xs: byte[] = [1b, 2b, 3b]; let value: byte = xs[2]; if (value == 3b) { 1; } else { 0; }");
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+    }
+
+    [Fact]
     public void TestExecutesStaticClrConsoleWriteLine()
     {
         var result = Execute("System.Console.WriteLine(42); 1;");

@@ -58,9 +58,15 @@ public class DefaultTypeMapper : ITypeMapper
             return module.TypeSystem.Void;
         }
 
-        if (kongType is ArrayTypeSymbol { ElementType: IntTypeSymbol })
+        if (kongType is ArrayTypeSymbol arrayType)
         {
-            return new ArrayType(module.TypeSystem.Int32);
+            var mappedElement = TryMapKongType(arrayType.ElementType, module, diagnostics);
+            if (mappedElement == null)
+            {
+                return null;
+            }
+
+            return new ArrayType(mappedElement);
         }
 
         if (kongType is FunctionTypeSymbol functionType)
@@ -96,9 +102,9 @@ public class DefaultTypeMapper : ITypeMapper
             return true;
         }
 
-        if (type is ArrayTypeSymbol { ElementType: IntTypeSymbol })
+        if (type is ArrayTypeSymbol arrayType)
         {
-            return true;
+            return IsTypeSupported(arrayType.ElementType);
         }
 
         if (type is FunctionTypeSymbol functionType)

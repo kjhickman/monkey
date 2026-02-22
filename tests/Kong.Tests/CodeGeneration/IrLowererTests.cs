@@ -91,8 +91,23 @@ public class IrLowererTests
         Assert.NotNull(lowering.Program);
         Assert.False(lowering.Diagnostics.HasErrors);
         var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
-        Assert.Contains(instructions, i => i is IrNewIntArray);
-        Assert.Contains(instructions, i => i is IrIntArrayIndex);
+        Assert.Contains(instructions, i => i is IrNewArray { ElementType: IntTypeSymbol });
+        Assert.Contains(instructions, i => i is IrArrayIndex { ElementType: IntTypeSymbol });
+    }
+
+    [Fact]
+    public void TestLowersStringArrayLiteralAndIndexExpression()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("let xs: string[] = [\"a\", \"b\"]; let second: string = xs[1]; 1;");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrNewArray { ElementType: StringTypeSymbol });
+        Assert.Contains(instructions, i => i is IrArrayIndex { ElementType: StringTypeSymbol });
     }
 
     [Fact]

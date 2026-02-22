@@ -1104,10 +1104,10 @@ public class IrLowerer
             return null;
         }
 
-        if (elementType != TypeSymbols.Int)
+        if (!IsSupportedArrayElementType(elementType))
         {
             _result.Diagnostics.Report(arrayLiteral.Span,
-                $"phase-5 IR lowerer supports only int[] literals, got '{arrayType}'",
+                $"phase-5 IR lowerer does not support array literal element type '{elementType}'",
                 "IR001");
             return null;
         }
@@ -1125,7 +1125,7 @@ public class IrLowerer
         }
 
         var destination = AllocateValue(arrayType);
-        _currentBlock.Instructions.Add(new IrNewIntArray(destination, elements));
+        _currentBlock.Instructions.Add(new IrNewArray(destination, elementType, elements));
         return destination;
     }
 
@@ -1134,15 +1134,15 @@ public class IrLowerer
         if (!TryGetExpressionType(indexExpression.Left, out var leftType) || leftType is not ArrayTypeSymbol { ElementType: var elementType })
         {
             _result.Diagnostics.Report(indexExpression.Left.Span,
-                "phase-5 IR lowerer supports indexing only on int[]",
+                "phase-5 IR lowerer requires array index target to be an array type",
                 "IR001");
             return null;
         }
 
-        if (elementType != TypeSymbols.Int)
+        if (!IsSupportedArrayElementType(elementType))
         {
             _result.Diagnostics.Report(indexExpression.Left.Span,
-                $"phase-5 IR lowerer supports indexing only on int[]; got '{leftType}'",
+                $"phase-5 IR lowerer does not support indexing arrays with element type '{elementType}'",
                 "IR001");
             return null;
         }
@@ -1162,8 +1162,8 @@ public class IrLowerer
             return null;
         }
 
-        var destination = AllocateValue(TypeSymbols.Int);
-        _currentBlock.Instructions.Add(new IrIntArrayIndex(destination, left.Value, index.Value));
+        var destination = AllocateValue(elementType);
+        _currentBlock.Instructions.Add(new IrArrayIndex(destination, left.Value, index.Value, elementType));
         return destination;
     }
 
@@ -1240,10 +1240,21 @@ public class IrLowerer
                type == TypeSymbols.Byte ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
-               type is ArrayTypeSymbol { ElementType: IntTypeSymbol } ||
+               type is ArrayTypeSymbol arrayType && IsSupportedArrayElementType(arrayType.ElementType) ||
                type is FunctionTypeSymbol functionType &&
                functionType.ParameterTypes.All(IsSupportedRuntimeType) &&
                IsSupportedRuntimeType(functionType.ReturnType);
+    }
+
+    private static bool IsSupportedArrayElementType(TypeSymbol elementType)
+    {
+        return elementType == TypeSymbols.Int ||
+               elementType == TypeSymbols.Long ||
+               elementType == TypeSymbols.Double ||
+               elementType == TypeSymbols.Char ||
+               elementType == TypeSymbols.Byte ||
+               elementType == TypeSymbols.Bool ||
+               elementType == TypeSymbols.String;
     }
 
     private static bool TypeEquals(TypeSymbol left, TypeSymbol right)

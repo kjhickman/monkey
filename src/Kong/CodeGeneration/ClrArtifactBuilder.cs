@@ -790,26 +790,34 @@ public class ClrArtifactBuilder
                         il.Emit(OpCodes.Callvirt, invokeVoidMethod);
                         break;
 
-                    case IrNewIntArray newArray:
+                    case IrNewArray newArray:
+                    {
+                        var arrayElementClrType = MapType(newArray.ElementType, module, diagnostics, delegateTypeMap);
+                        if (arrayElementClrType == null)
+                        {
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Ldc_I4, newArray.Elements.Count);
-                        il.Emit(OpCodes.Newarr, module.TypeSystem.Int32);
+                        il.Emit(OpCodes.Newarr, arrayElementClrType);
                         for (var i = 0; i < newArray.Elements.Count; i++)
                         {
                             il.Emit(OpCodes.Dup);
                             il.Emit(OpCodes.Ldc_I4, i);
                             il.Emit(OpCodes.Ldloc, valueLocals[newArray.Elements[i]]);
-                            il.Emit(OpCodes.Stelem_I4);
+                            EmitStoreElement(il, newArray.ElementType);
                         }
 
                         il.Emit(OpCodes.Stloc, valueLocals[newArray.Destination]);
                         break;
+                    }
 
-                    case IrIntArrayIndex intArrayIndex:
-                        il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Array]);
-                        il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Index]);
+                    case IrArrayIndex arrayIndex:
+                        il.Emit(OpCodes.Ldloc, valueLocals[arrayIndex.Array]);
+                        il.Emit(OpCodes.Ldloc, valueLocals[arrayIndex.Index]);
                         il.Emit(OpCodes.Conv_I4);
-                        il.Emit(OpCodes.Ldelem_I4);
-                        il.Emit(OpCodes.Stloc, valueLocals[intArrayIndex.Destination]);
+                        EmitLoadElement(il, arrayIndex.ElementType);
+                        il.Emit(OpCodes.Stloc, valueLocals[arrayIndex.Destination]);
                         break;
 
                     default:
@@ -906,9 +914,10 @@ public class ClrArtifactBuilder
             return module.TypeSystem.Void;
         }
 
-        if (type is ArrayTypeSymbol { ElementType: IntTypeSymbol })
+        if (type is ArrayTypeSymbol arrayType)
         {
-            return new Mono.Cecil.ArrayType(module.TypeSystem.Int32);
+            var mappedElement = MapType(arrayType.ElementType, module, diagnostics, delegateTypeMap);
+            return mappedElement == null ? null : new Mono.Cecil.ArrayType(mappedElement);
         }
 
         if (type is FunctionTypeSymbol functionType)
@@ -1476,6 +1485,41 @@ public class ClrArtifactBuilder
         }
 
         il.Emit(OpCodes.Stelem_Ref);
+    }
+
+    private static void EmitLoadElement(ILProcessor il, TypeSymbol elementType)
+    {
+        if (elementType == TypeSymbols.Int)
+        {
+            il.Emit(OpCodes.Ldelem_I4);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Long)
+        {
+            il.Emit(OpCodes.Ldelem_I8);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Double)
+        {
+            il.Emit(OpCodes.Ldelem_R8);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Bool || elementType == TypeSymbols.Byte)
+        {
+            il.Emit(OpCodes.Ldelem_U1);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Char)
+        {
+            il.Emit(OpCodes.Ldelem_U2);
+            return;
+        }
+
+        il.Emit(OpCodes.Ldelem_Ref);
     }
 
     private static bool TryMapParameterType(ParameterDefinition parameter, out TypeSymbol parameterType)

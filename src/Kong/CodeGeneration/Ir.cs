@@ -104,9 +104,9 @@ public sealed record IrInvokeClosureVoid(
     IrValueId Closure,
     IReadOnlyList<IrValueId> Arguments) : IrInstruction;
 
-public sealed record IrNewIntArray(IrValueId Destination, IReadOnlyList<IrValueId> Elements) : IrInstruction;
+public sealed record IrNewArray(IrValueId Destination, TypeSymbol ElementType, IReadOnlyList<IrValueId> Elements) : IrInstruction;
 
-public sealed record IrIntArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index) : IrInstruction;
+public sealed record IrArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index, TypeSymbol ElementType) : IrInstruction;
 
 public abstract record IrTerminator;
 
