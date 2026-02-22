@@ -346,6 +346,21 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksStaticClrParamsOverloadResolution()
+    {
+        var source = "System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\");";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(statement.Expression);
+        Assert.Equal(TypeSymbols.String, result.ExpressionTypes[call]);
+        Assert.Equal("System.String.Concat", result.ResolvedStaticMethodPaths[call]);
+    }
+
+    [Fact]
     public void TestTypeChecksDoubleCharAndByteLiterals()
     {
         var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b;";

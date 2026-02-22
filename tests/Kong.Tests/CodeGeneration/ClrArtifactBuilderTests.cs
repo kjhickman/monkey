@@ -192,6 +192,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrParamsAndWideningCalls()
+    {
+        var source = "let root: double = System.Math.Sqrt(9); let s: string = System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\"); if (root == 3.0) { if (s == \"abcde\") { 1; } else { 0; } } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

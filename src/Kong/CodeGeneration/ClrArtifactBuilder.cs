@@ -560,23 +560,37 @@ public class ClrArtifactBuilder
 
                     case IrStaticCall staticCall:
                     {
-                        foreach (var argument in staticCall.Arguments)
-                        {
-                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
-                        }
-
                         if (!function.ValueTypes.TryGetValue(staticCall.Destination, out var staticReturnType))
                         {
                             diagnostics.Report(Span.Empty, $"phase-5 CLR backend missing return type for static call '{staticCall.MethodPath}'", "IL001");
                             return false;
                         }
 
-                        var staticMethod = ImportStaticMethod(module, staticCall.MethodPath, staticCall.ArgumentTypes, staticReturnType, diagnostics);
-                        if (staticMethod == null)
+                        if (!StaticClrMethodResolver.TryResolve(
+                                staticCall.MethodPath,
+                                staticCall.ArgumentTypes,
+                                out var binding,
+                                out _,
+                                out var resolveError))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveError}", "IL001");
+                            return false;
+                        }
+
+                        if (binding.ReturnType != staticReturnType)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend expected static call '{staticCall.MethodPath}' to return '{staticReturnType}', but resolver returned '{binding.ReturnType}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, staticCall.Arguments, staticCall.ArgumentTypes, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
 
+                        var staticMethod = module.ImportReference(binding.MethodDefinition);
                         il.Emit(OpCodes.Call, staticMethod);
                         il.Emit(OpCodes.Stloc, valueLocals[staticCall.Destination]);
                         break;
@@ -599,17 +613,31 @@ public class ClrArtifactBuilder
 
                     case IrStaticCallVoid staticCallVoid:
                     {
-                        foreach (var argument in staticCallVoid.Arguments)
+                        if (!StaticClrMethodResolver.TryResolve(
+                                staticCallVoid.MethodPath,
+                                staticCallVoid.ArgumentTypes,
+                                out var binding,
+                                out _,
+                                out var resolveError))
                         {
-                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveError}", "IL001");
+                            return false;
                         }
 
-                        var staticVoidMethod = ImportStaticMethod(module, staticCallVoid.MethodPath, staticCallVoid.ArgumentTypes, TypeSymbols.Void, diagnostics);
-                        if (staticVoidMethod == null)
+                        if (binding.ReturnType != TypeSymbols.Void)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend expected static call '{staticCallVoid.MethodPath}' to return 'void', but resolver returned '{binding.ReturnType}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, staticCallVoid.Arguments, staticCallVoid.ArgumentTypes, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
 
+                        var staticVoidMethod = module.ImportReference(binding.MethodDefinition);
                         il.Emit(OpCodes.Call, staticVoidMethod);
                         break;
                     }
@@ -1174,6 +1202,335 @@ public class ClrArtifactBuilder
         }
 
         return module.ImportReference(binding.MethodDefinition);
+    }
+
+    private static bool EmitResolvedStaticCallArguments(
+        ModuleDefinition module,
+        ILProcessor il,
+        IReadOnlyDictionary<IrValueId, VariableDefinition> valueLocals,
+        IReadOnlyList<IrValueId> arguments,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        MethodDefinition method,
+        DiagnosticBag diagnostics)
+    {
+        var parameters = method.Parameters;
+        var hasParamsArray = parameters.Count > 0 &&
+            parameters[^1].CustomAttributes.Any(a => a.AttributeType.FullName == "System.ParamArrayAttribute") &&
+            parameters[^1].ParameterType is Mono.Cecil.ArrayType;
+
+        if (!hasParamsArray)
+        {
+            if (arguments.Count > parameters.Count)
+            {
+                diagnostics.Report(Span.Empty, $"phase-5 CLR backend too many arguments for '{method.FullName}'", "IL001");
+                return false;
+            }
+
+            for (var i = 0; i < arguments.Count; i++)
+            {
+                if (!TryMapParameterType(parameters[i], out var parameterType))
+                {
+                    diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported parameter type '{parameters[i].ParameterType.FullName}'", "IL001");
+                    return false;
+                }
+
+                EmitArgumentWithConversion(il, valueLocals[arguments[i]], argumentTypes[i], parameterType);
+            }
+
+            for (var i = arguments.Count; i < parameters.Count; i++)
+            {
+                if (!EmitDefaultArgument(il, parameters[i], diagnostics))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        var fixedCount = parameters.Count - 1;
+        if (arguments.Count < fixedCount)
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend too few arguments for '{method.FullName}'", "IL001");
+            return false;
+        }
+
+        for (var i = 0; i < fixedCount; i++)
+        {
+            if (!TryMapParameterType(parameters[i], out var parameterType))
+            {
+                diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported parameter type '{parameters[i].ParameterType.FullName}'", "IL001");
+                return false;
+            }
+
+            EmitArgumentWithConversion(il, valueLocals[arguments[i]], argumentTypes[i], parameterType);
+        }
+
+        if (parameters[^1].ParameterType is not Mono.Cecil.ArrayType paramsArrayType)
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend invalid params array for '{method.FullName}'", "IL001");
+            return false;
+        }
+
+        if (!TryMapType(paramsArrayType.ElementType, out var paramsElementType))
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported params element type '{paramsArrayType.ElementType.FullName}'", "IL001");
+            return false;
+        }
+
+        var hasExplicitArrayArgument = arguments.Count == parameters.Count && argumentTypes[^1] is ArrayTypeSymbol providedArray && TypeEquals(providedArray.ElementType, paramsElementType);
+        if (hasExplicitArrayArgument)
+        {
+            EmitArgumentWithConversion(il, valueLocals[arguments[^1]], argumentTypes[^1], new ArrayTypeSymbol(paramsElementType));
+            return true;
+        }
+
+        var paramsCount = arguments.Count - fixedCount;
+        il.Emit(OpCodes.Ldc_I4, paramsCount);
+        il.Emit(OpCodes.Newarr, module.ImportReference(paramsArrayType.ElementType));
+
+        for (var i = 0; i < paramsCount; i++)
+        {
+            il.Emit(OpCodes.Dup);
+            il.Emit(OpCodes.Ldc_I4, i);
+            EmitArgumentWithConversion(il, valueLocals[arguments[fixedCount + i]], argumentTypes[fixedCount + i], paramsElementType);
+            EmitStoreElement(il, paramsElementType);
+        }
+
+        return true;
+    }
+
+    private static void EmitArgumentWithConversion(ILProcessor il, VariableDefinition local, TypeSymbol sourceType, TypeSymbol targetType)
+    {
+        il.Emit(OpCodes.Ldloc, local);
+
+        if (TypeEquals(sourceType, targetType))
+        {
+            return;
+        }
+
+        if (sourceType == TypeSymbols.Byte)
+        {
+            il.Emit(OpCodes.Conv_U1);
+        }
+        else if (sourceType == TypeSymbols.Char)
+        {
+            il.Emit(OpCodes.Conv_U2);
+        }
+
+        if (targetType == TypeSymbols.Int)
+        {
+            il.Emit(OpCodes.Conv_I4);
+            return;
+        }
+
+        if (targetType == TypeSymbols.Long)
+        {
+            il.Emit(OpCodes.Conv_I8);
+            return;
+        }
+
+        if (targetType == TypeSymbols.Double)
+        {
+            il.Emit(OpCodes.Conv_R8);
+            return;
+        }
+
+        if (targetType == TypeSymbols.Byte)
+        {
+            il.Emit(OpCodes.Conv_U1);
+            return;
+        }
+
+        if (targetType == TypeSymbols.Char)
+        {
+            il.Emit(OpCodes.Conv_U2);
+        }
+    }
+
+    private static bool EmitDefaultArgument(ILProcessor il, ParameterDefinition parameter, DiagnosticBag diagnostics)
+    {
+        if (!TryMapParameterType(parameter, out var parameterType))
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported optional parameter type '{parameter.ParameterType.FullName}'", "IL001");
+            return false;
+        }
+
+        if (!parameter.IsOptional && !parameter.HasDefault)
+        {
+            diagnostics.Report(Span.Empty, $"phase-5 CLR backend missing required argument for '{parameter.Name}'", "IL001");
+            return false;
+        }
+
+        var constant = parameter.Constant;
+        if (constant == null || constant is DBNull)
+        {
+            EmitDefaultValue(il, parameterType);
+            return true;
+        }
+
+        if (parameterType == TypeSymbols.String && constant is string stringValue)
+        {
+            il.Emit(OpCodes.Ldstr, stringValue);
+            return true;
+        }
+
+        if (parameterType == TypeSymbols.Bool && constant is bool boolValue)
+        {
+            il.Emit(boolValue ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+            return true;
+        }
+
+        if (parameterType == TypeSymbols.Double && constant is double doubleValue)
+        {
+            il.Emit(OpCodes.Ldc_R8, doubleValue);
+            return true;
+        }
+
+        if ((parameterType == TypeSymbols.Int || parameterType == TypeSymbols.Byte || parameterType == TypeSymbols.Char) && constant is IConvertible)
+        {
+            il.Emit(OpCodes.Ldc_I4, Convert.ToInt32(constant));
+            if (parameterType == TypeSymbols.Byte)
+            {
+                il.Emit(OpCodes.Conv_U1);
+            }
+            else if (parameterType == TypeSymbols.Char)
+            {
+                il.Emit(OpCodes.Conv_U2);
+            }
+
+            return true;
+        }
+
+        if (parameterType == TypeSymbols.Long && constant is IConvertible)
+        {
+            il.Emit(OpCodes.Ldc_I8, Convert.ToInt64(constant));
+            return true;
+        }
+
+        EmitDefaultValue(il, parameterType);
+        return true;
+    }
+
+    private static void EmitDefaultValue(ILProcessor il, TypeSymbol parameterType)
+    {
+        if (parameterType == TypeSymbols.String)
+        {
+            il.Emit(OpCodes.Ldnull);
+            return;
+        }
+
+        if (parameterType == TypeSymbols.Double)
+        {
+            il.Emit(OpCodes.Ldc_R8, 0d);
+            return;
+        }
+
+        if (parameterType == TypeSymbols.Long)
+        {
+            il.Emit(OpCodes.Ldc_I8, 0L);
+            return;
+        }
+
+        il.Emit(OpCodes.Ldc_I4_0);
+        if (parameterType == TypeSymbols.Byte)
+        {
+            il.Emit(OpCodes.Conv_U1);
+        }
+        else if (parameterType == TypeSymbols.Char)
+        {
+            il.Emit(OpCodes.Conv_U2);
+        }
+    }
+
+    private static void EmitStoreElement(ILProcessor il, TypeSymbol elementType)
+    {
+        if (elementType == TypeSymbols.Int)
+        {
+            il.Emit(OpCodes.Stelem_I4);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Long)
+        {
+            il.Emit(OpCodes.Stelem_I8);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Double)
+        {
+            il.Emit(OpCodes.Stelem_R8);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Bool || elementType == TypeSymbols.Byte)
+        {
+            il.Emit(OpCodes.Stelem_I1);
+            return;
+        }
+
+        if (elementType == TypeSymbols.Char)
+        {
+            il.Emit(OpCodes.Stelem_I2);
+            return;
+        }
+
+        il.Emit(OpCodes.Stelem_Ref);
+    }
+
+    private static bool TryMapParameterType(ParameterDefinition parameter, out TypeSymbol parameterType)
+    {
+        return TryMapType(parameter.ParameterType, out parameterType);
+    }
+
+    private static bool TryMapType(TypeReference typeReference, out TypeSymbol type)
+    {
+        if (typeReference is Mono.Cecil.ArrayType arrayType)
+        {
+            if (!TryMapType(arrayType.ElementType, out var elementType))
+            {
+                type = TypeSymbols.Error;
+                return false;
+            }
+
+            type = new ArrayTypeSymbol(elementType);
+            return true;
+        }
+
+        var normalized = typeReference.FullName.Replace("/", ".");
+        return normalized switch
+        {
+            "System.Int32" => SetType(TypeSymbols.Int, out type),
+            "System.Int64" => SetType(TypeSymbols.Long, out type),
+            "System.Double" => SetType(TypeSymbols.Double, out type),
+            "System.Boolean" => SetType(TypeSymbols.Bool, out type),
+            "System.String" => SetType(TypeSymbols.String, out type),
+            "System.Char" => SetType(TypeSymbols.Char, out type),
+            "System.Byte" => SetType(TypeSymbols.Byte, out type),
+            "System.Void" => SetType(TypeSymbols.Void, out type),
+            _ => SetType(TypeSymbols.Error, out type, false),
+        };
+    }
+
+    private static bool SetType(TypeSymbol value, out TypeSymbol output, bool result = true)
+    {
+        output = value;
+        return result;
+    }
+
+    private static bool TypeEquals(TypeSymbol left, TypeSymbol right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is ArrayTypeSymbol leftArray && right is ArrayTypeSymbol rightArray)
+        {
+            return TypeEquals(leftArray.ElementType, rightArray.ElementType);
+        }
+
+        return left == right;
     }
 
     private static (MethodReference? GetterMethod, FieldReference? Field)? ImportStaticValueMember(

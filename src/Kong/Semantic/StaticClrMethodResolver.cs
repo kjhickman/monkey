@@ -86,7 +86,7 @@ public static class StaticClrMethodResolver
         var scoredMatches = new List<(MethodDefinition Method, int Score)>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (TryGetParameterMatchScore(candidate.Parameters, parameterTypes, out var score))
+            if (TryGetParameterMatchScore(candidate, parameterTypes, out var score))
             {
                 scoredMatches.Add((candidate, score));
             }
@@ -264,18 +264,75 @@ public static class StaticClrMethodResolver
         return true;
     }
 
-    private static bool TryGetParameterMatchScore(IList<ParameterDefinition> parameters, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
+    private static bool TryGetParameterMatchScore(MethodDefinition method, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
     {
         score = 0;
 
-        if (parameters.Count != argumentTypes.Count)
+        var parameters = method.Parameters;
+        var hasParamsArray = HasParamsArray(method, out var paramsElementType);
+        var fixedParameterCount = hasParamsArray ? parameters.Count - 1 : parameters.Count;
+
+        var requiredFixedCount = 0;
+        for (var i = 0; i < fixedParameterCount; i++)
+        {
+            if (!IsOptionalParameter(parameters[i]))
+            {
+                requiredFixedCount++;
+            }
+        }
+
+        if (argumentTypes.Count < requiredFixedCount)
         {
             return false;
         }
 
-        for (var i = 0; i < parameters.Count; i++)
+        if (!hasParamsArray && argumentTypes.Count > parameters.Count)
         {
-            if (!TryMapClrFullNameToKongType(NormalizeTypeName(parameters[i].ParameterType.FullName), out var parameterType) ||
+            return false;
+        }
+
+        var bestScore = int.MaxValue;
+
+        if (argumentTypes.Count <= parameters.Count &&
+            TryScoreDirectOrOptionalCall(parameters, argumentTypes, out var directScore))
+        {
+            bestScore = directScore;
+        }
+
+        if (hasParamsArray && paramsElementType != TypeSymbols.Error &&
+            argumentTypes.Count >= fixedParameterCount &&
+            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, argumentTypes, out var expandedScore))
+        {
+            if (expandedScore < bestScore)
+            {
+                bestScore = expandedScore;
+            }
+        }
+
+        if (bestScore == int.MaxValue)
+        {
+            return false;
+        }
+
+        score = bestScore;
+        return true;
+    }
+
+    private static bool TryScoreDirectOrOptionalCall(
+        IList<ParameterDefinition> parameters,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out int score)
+    {
+        score = 0;
+
+        if (argumentTypes.Count > parameters.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < argumentTypes.Count; i++)
+        {
+            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
                 parameterType == TypeSymbols.Void)
             {
                 return false;
@@ -288,6 +345,67 @@ public static class StaticClrMethodResolver
 
             score += conversionScore;
         }
+
+        for (var i = argumentTypes.Count; i < parameters.Count; i++)
+        {
+            if (!IsOptionalParameter(parameters[i]))
+            {
+                return false;
+            }
+
+            score += 100;
+        }
+
+        return true;
+    }
+
+    private static bool TryScoreExpandedParamsCall(
+        IList<ParameterDefinition> parameters,
+        int fixedParameterCount,
+        TypeSymbol paramsElementType,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out int score)
+    {
+        score = 0;
+
+        for (var i = 0; i < fixedParameterCount; i++)
+        {
+            if (i >= argumentTypes.Count)
+            {
+                if (!IsOptionalParameter(parameters[i]))
+                {
+                    return false;
+                }
+
+                score += 100;
+                continue;
+            }
+
+            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
+                parameterType == TypeSymbols.Void)
+            {
+                return false;
+            }
+
+            if (!TryGetConversionScore(argumentTypes[i], parameterType, out var conversionScore))
+            {
+                return false;
+            }
+
+            score += conversionScore;
+        }
+
+        for (var i = fixedParameterCount; i < argumentTypes.Count; i++)
+        {
+            if (!TryGetConversionScore(argumentTypes[i], paramsElementType, out var conversionScore))
+            {
+                return false;
+            }
+
+            score += conversionScore;
+        }
+
+        score += 25;
 
         return true;
     }
@@ -351,14 +469,14 @@ public static class StaticClrMethodResolver
 
     private static bool IsSupportedMethodSignature(MethodDefinition method)
     {
-        if (!TryMapClrFullNameToKongType(NormalizeTypeName(method.ReturnType.FullName), out _))
+        if (!TryMapClrTypeReferenceToKongType(method.ReturnType, out _))
         {
             return false;
         }
 
         foreach (var parameter in method.Parameters)
         {
-            if (!TryMapClrFullNameToKongType(NormalizeTypeName(parameter.ParameterType.FullName), out var parameterType))
+            if (!TryMapClrTypeReferenceToKongType(parameter.ParameterType, out var parameterType))
             {
                 return false;
             }
@@ -424,7 +542,62 @@ public static class StaticClrMethodResolver
             return true;
         }
 
+        if (type is ArrayTypeSymbol array)
+        {
+            if (!TryMapKongTypeToClrFullName(array.ElementType, out var elementClrName))
+            {
+                return false;
+            }
+
+            clrTypeName = elementClrName + "[]";
+            return true;
+        }
+
         return false;
+    }
+
+    private static bool TryMapClrTypeReferenceToKongType(TypeReference clrType, out TypeSymbol type)
+    {
+        if (clrType is ArrayType arrayType)
+        {
+            if (!TryMapClrTypeReferenceToKongType(arrayType.ElementType, out var elementType))
+            {
+                type = TypeSymbols.Error;
+                return false;
+            }
+
+            type = new ArrayTypeSymbol(elementType);
+            return true;
+        }
+
+        return TryMapClrFullNameToKongType(NormalizeTypeName(clrType.FullName), out type);
+    }
+
+    private static bool HasParamsArray(MethodDefinition method, out TypeSymbol elementType)
+    {
+        elementType = TypeSymbols.Error;
+        if (method.Parameters.Count == 0)
+        {
+            return false;
+        }
+
+        var lastParameter = method.Parameters[^1];
+        if (!lastParameter.CustomAttributes.Any(a => a.AttributeType.FullName == "System.ParamArrayAttribute"))
+        {
+            return false;
+        }
+
+        if (lastParameter.ParameterType is not ArrayType paramsArrayType)
+        {
+            return false;
+        }
+
+        return TryMapClrTypeReferenceToKongType(paramsArrayType.ElementType, out elementType);
+    }
+
+    private static bool IsOptionalParameter(ParameterDefinition parameter)
+    {
+        return parameter.IsOptional || parameter.HasDefault;
     }
 
     private static bool TryMapClrFullNameToKongType(string clrTypeName, out TypeSymbol type)
