@@ -445,4 +445,35 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestSkipsLineComments()
+    {
+        var input = "let x = 1; // this is a comment\nlet y = x + 1;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Let, "let"),
+            (TokenType.Identifier, "x"),
+            (TokenType.Assign, "="),
+            (TokenType.Integer, "1"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.Let, "let"),
+            (TokenType.Identifier, "y"),
+            (TokenType.Assign, "="),
+            (TokenType.Identifier, "x"),
+            (TokenType.Plus, "+"),
+            (TokenType.Integer, "1"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

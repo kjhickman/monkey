@@ -6,6 +6,7 @@ import System;
 namespace Demo.App;
 
 fn Main() {
+    // Core feature smoke checks in one multi-file app.
     let total: int = Add(40, 2);
     let scaled: double = Scale(1.5);
     let matrix: int[][] = [[1, 2], [42, 99]];
@@ -18,6 +19,7 @@ fn Main() {
     let fromClr: double = System.Math.Sqrt(9);
     let msg: string = Label(total);
 
+    // Exercise logical operators with short-circuit-friendly shape.
     let ok: bool = picked == 42 &&
         word == "kong" &&
         b == 3b &&

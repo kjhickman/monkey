@@ -30,6 +30,8 @@ dotnet run --project src/Kong.Cli/Kong.Cli.csproj -- run <file>  # Execute a .kg
 
 Always run `dotnet build` and `dotnet test` after making changes. All tests must pass. Treat test failures as blocking.
 
+When implementing or changing a language feature, also update the integration scenario suite under `tests/Kong.IntegrationPrograms/` (or add a new scenario) so real multi-file programs exercise the new behavior.
+
 ## Architecture Notes
 
 - Nullable reference types are enabled project-wide. Do not suppress nullable warnings without justification.

@@ -22,7 +22,7 @@ public class Lexer
     {
         Token token;
 
-        SkipWhitespace();
+        SkipIgnored();
         var start = new Position(_line, _column);
 
         switch (_ch)
@@ -178,11 +178,31 @@ public class Lexer
         return token;
     }
 
-    private void SkipWhitespace()
+    private void SkipIgnored()
     {
-        while (_ch is ' ' or '\t' or '\n' or '\r')
+        while (true)
         {
-            ReadChar();
+            var skipped = false;
+
+            while (_ch is ' ' or '\t' or '\n' or '\r')
+            {
+                skipped = true;
+                ReadChar();
+            }
+
+            if (_ch == '/' && PeekChar() == '/')
+            {
+                skipped = true;
+                while (_ch is not '\n' and not '\0')
+                {
+                    ReadChar();
+                }
+            }
+
+            if (!skipped)
+            {
+                return;
+            }
         }
     }
 

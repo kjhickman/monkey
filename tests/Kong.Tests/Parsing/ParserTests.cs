@@ -321,6 +321,24 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesProgramWithLineComments()
+    {
+        var input = "let x: int = 1; // keep this around\nlet y: int = x + 1;";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Equal(2, unit.Statements.Count);
+        var yLet = Assert.IsType<LetStatement>(unit.Statements[1]);
+        TestIdentifier(yLet.Name, "y");
+        var infix = Assert.IsType<InfixExpression>(yLet.Value);
+        TestIdentifier(infix.Left, "x");
+        TestIntegerLiteral(infix.Right, 1);
+    }
+
+    [Fact]
     public void TestFunctionLiteralParsing()
     {
         var input = "fn(x, y) { x + y; }";
