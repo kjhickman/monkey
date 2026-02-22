@@ -8,6 +8,7 @@ namespace Demo.App;
 
 fn Main() {
     // Core feature smoke checks in one multi-file app.
+    var checks: int = 0;
     let total: int = Add(40, 2);
     let scaled: double = Scale(1.5);
     let matrix: int[][] = [[1, 2], [42, 99]];
@@ -24,6 +25,7 @@ fn Main() {
     builder.Append("n=");
     builder.Append(System.Convert.ToString(total));
     let built: string = builder.ToString();
+    checks = checks + 1;
 
     // Exercise logical operators with short-circuit-friendly shape.
     let ok: bool = picked == 42 &&
@@ -33,7 +35,8 @@ fn Main() {
         b == 3b &&
         c == 'A' &&
         fromClr == 3.0 &&
-        scaled == 3.0;
+        scaled == 3.0 &&
+        checks == 1;
 
     if (ok || false) {
         System.Console.WriteLine(System.String.Concat(msg, ":", built, ":ok"));

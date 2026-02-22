@@ -95,6 +95,9 @@ public class TypeChecker
             case LetStatement letStatement:
                 CheckLetStatement(letStatement);
                 break;
+            case AssignmentStatement assignmentStatement:
+                CheckAssignmentStatement(assignmentStatement);
+                break;
             case FunctionDeclaration functionDeclaration:
                 CheckFunctionDeclaration(functionDeclaration);
                 break;
@@ -191,6 +194,37 @@ public class TypeChecker
         }
 
         return initializerType;
+    }
+
+    private void CheckAssignmentStatement(AssignmentStatement statement)
+    {
+        if (!_names.IdentifierSymbols.TryGetValue(statement.Name, out var symbol))
+        {
+            return;
+        }
+
+        if (!_names.MutableSymbols.Contains(symbol))
+        {
+            _result.Diagnostics.Report(statement.Span,
+                $"cannot assign to immutable variable '{statement.Name.Value}'; declare with 'var' to allow reassignment",
+                "T123");
+        }
+
+        if (!_symbolTypes.TryGetValue(symbol, out var targetType))
+        {
+            _result.Diagnostics.Report(statement.Span,
+                $"cannot resolve type for assignment target '{statement.Name.Value}'",
+                "T124");
+            return;
+        }
+
+        var valueType = CheckExpression(statement.Value);
+        if (!IsAssignable(valueType, targetType))
+        {
+            _result.Diagnostics.Report(statement.Value.Span,
+                $"cannot assign expression of type '{valueType}' to variable '{statement.Name.Value}' of type '{targetType}'",
+                "T102");
+        }
     }
 
     private void CheckReturnStatement(ReturnStatement statement)

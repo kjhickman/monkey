@@ -32,6 +32,7 @@ public class LetStatement : IStatement
     public Identifier Name { get; set; } = null!;
     public ITypeNode? TypeAnnotation { get; set; }
     public IExpression? Value { get; set; }
+    public bool IsMutable { get; set; }
 
     public string TokenLiteral() => Token.Literal;
 
@@ -52,6 +53,21 @@ public class LetStatement : IStatement
         }
         sb.Append(';');
         return sb.ToString();
+    }
+}
+
+public class AssignmentStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the identifier token on the LHS
+    public Identifier Name { get; set; } = null!;
+    public IExpression Value { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"{Name.String()} = {Value.String()};";
     }
 }
 

@@ -181,9 +181,22 @@ public class Parser
             TokenType.Import => ParseImportStatement(),
             TokenType.Namespace => ParseNamespaceStatement(),
             TokenType.Let => ParseLetStatement(),
+            TokenType.Var => ParseVarStatement(),
             TokenType.Return => ParseReturnStatement(),
+            TokenType.Identifier when PeekTokenIs(TokenType.Assign) => ParseAssignmentStatement(),
             _ => ParseExpressionStatement(),
         };
+    }
+
+    private LetStatement? ParseVarStatement()
+    {
+        var statement = ParseLetStatement();
+        if (statement != null)
+        {
+            statement.IsMutable = true;
+        }
+
+        return statement;
     }
 
     private ImportStatement? ParseImportStatement()
@@ -358,6 +371,37 @@ public class Parser
         {
             fl.Name = statement.Name.Value;
         }
+
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+        }
+
+        statement.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return statement;
+    }
+
+    private AssignmentStatement? ParseAssignmentStatement()
+    {
+        var startSpan = _curToken.Span;
+        var statement = new AssignmentStatement
+        {
+            Token = _curToken,
+            Name = new Identifier
+            {
+                Token = _curToken,
+                Value = _curToken.Literal,
+                Span = _curToken.Span,
+            },
+        };
+
+        if (!ExpectPeek(TokenType.Assign))
+        {
+            return null;
+        }
+
+        NextToken();
+        statement.Value = ParseExpression(Precedence.Lowest)!;
 
         if (PeekTokenIs(TokenType.Semicolon))
         {

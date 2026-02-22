@@ -559,8 +559,26 @@ public class TypeCheckerTests
         var (_, _, result) = ParseResolveAndCheck("new System.WeakReference(\"x\");");
 
         Assert.True(result.Diagnostics.HasErrors);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
-        Assert.Contains(result.Diagnostics.All, d => d.Message.Contains("constructors on CLR type 'System.WeakReference'", StringComparison.Ordinal));
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
+        Assert.Contains(result.Diagnostics.All, d => d.Message.Contains("no matching constructor overload", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TestAllowsAssignmentToVar()
+    {
+        var (_, names, result) = ParseResolveAndCheck("var x: int = 1; x = x + 1;");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestRejectsAssignmentToLet()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let x: int = 1; x = 2;");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
     }
 
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)

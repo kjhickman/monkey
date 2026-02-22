@@ -48,6 +48,7 @@ public enum TokenType
     // Keywords
     Function,
     Let,
+    Var,
     True,
     False,
     If,
@@ -64,6 +65,7 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
     {
         { "fn", TokenType.Function },
         { "let", TokenType.Let },
+        { "var", TokenType.Var },
         { "true", TokenType.True },
         { "false", TokenType.False },
         { "if", TokenType.If },

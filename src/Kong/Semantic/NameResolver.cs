@@ -20,6 +20,7 @@ public class NameResolution
     public HashSet<string> GlobalFunctionNames { get; } = [];
     public Dictionary<string, string> ImportedTypeAliases { get; } = [];
     public HashSet<string> ImportedNamespaces { get; } = [];
+    public HashSet<NameSymbol> MutableSymbols { get; } = [];
     public string? FileNamespace { get; set; }
     public DiagnosticBag Diagnostics { get; } = new();
 
@@ -170,6 +171,9 @@ public class NameResolver
             case LetStatement letStatement:
                 ResolveLetStatement(letStatement);
                 break;
+            case AssignmentStatement assignmentStatement:
+                ResolveAssignmentStatement(assignmentStatement);
+                break;
             case FunctionDeclaration functionDeclaration:
                 ResolveFunctionDeclaration(functionDeclaration);
                 break;
@@ -282,12 +286,22 @@ public class NameResolver
             var symbol = new NameSymbol(statement.Name.Value, kind, statement.Name.Span, _scope.FunctionDepth);
             _scope.Symbols[statement.Name.Value] = symbol;
             _result.IdentifierSymbols[statement.Name] = symbol;
+            if (statement.IsMutable)
+            {
+                _result.MutableSymbols.Add(symbol);
+            }
         }
 
         if (statement.Value != null)
         {
             ResolveExpression(statement.Value);
         }
+    }
+
+    private void ResolveAssignmentStatement(AssignmentStatement statement)
+    {
+        ResolveIdentifier(statement.Name);
+        ResolveExpression(statement.Value);
     }
 
     private void ResolveBlockStatement(BlockStatement block)

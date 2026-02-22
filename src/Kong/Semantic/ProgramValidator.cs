@@ -78,6 +78,9 @@ public static class ProgramValidator
                 case LetStatement { Value: { } value }:
                     ReportUnsupportedIfWithoutElse(value, diagnostics);
                     break;
+                case AssignmentStatement { Value: { } assignedValue }:
+                    ReportUnsupportedIfWithoutElse(assignedValue, diagnostics);
+                    break;
                 case ReturnStatement { ReturnValue: { } returnValue }:
                     ReportUnsupportedIfWithoutElse(returnValue, diagnostics);
                     break;

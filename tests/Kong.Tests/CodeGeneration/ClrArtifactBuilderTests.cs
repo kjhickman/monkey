@@ -252,6 +252,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesVarReassignment()
+    {
+        var source = "var x: int = 1; x = x + 41; x;";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

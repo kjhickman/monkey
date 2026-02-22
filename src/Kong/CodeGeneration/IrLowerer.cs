@@ -149,6 +149,14 @@ public class IrLowerer
                     }
                     break;
 
+                case AssignmentStatement assignmentStatement:
+                    if (!LowerAssignmentStatement(assignmentStatement))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case FunctionDeclaration functionDeclaration:
                     if (!LowerFunctionDeclaration(functionDeclaration, isTopLevel))
                     {
@@ -210,7 +218,7 @@ public class IrLowerer
 
                 default:
                     _result.Diagnostics.Report(statement.Span,
-                        "phase-4 IR lowerer supports let, return, and expression statements only",
+                        "phase-4 IR lowerer supports let/var, assignment, return, and expression statements only",
                         "IR001");
                     Restore();
                     return false;
@@ -339,6 +347,26 @@ public class IrLowerer
         }
 
         var local = AllocateNamedLocal(statement.Name.Value, variableType);
+
+        var value = LowerExpression(statement.Value);
+        if (value == null)
+        {
+            return false;
+        }
+
+        _currentBlock.Instructions.Add(new IrStoreLocal(local, value.Value));
+        return true;
+    }
+
+    private bool LowerAssignmentStatement(AssignmentStatement statement)
+    {
+        if (!_localsByName.TryGetValue(statement.Name.Value, out var local))
+        {
+            _result.Diagnostics.Report(statement.Span,
+                $"phase-4 IR lowerer could not resolve assignment target '{statement.Name.Value}'",
+                "IR002");
+            return false;
+        }
 
         var value = LowerExpression(statement.Value);
         if (value == null)
@@ -881,6 +909,13 @@ public class IrLowerer
                     }
                     break;
 
+                case AssignmentStatement assignmentStatement:
+                    if (!LowerAssignmentStatement(assignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ImportStatement:
                 case NamespaceStatement:
                     break;
@@ -949,6 +984,13 @@ public class IrLowerer
             {
                 case LetStatement letStatement:
                     if (!LowerLetStatement(letStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
+                case AssignmentStatement assignmentStatement:
+                    if (!LowerAssignmentStatement(assignmentStatement))
                     {
                         return null;
                     }

@@ -87,6 +87,7 @@ public class ControlFlowAnalyzer
             ReturnStatement => new FlowState(AlwaysReturns: true),
             BlockStatement blockStatement => AnalyzeBlock(blockStatement, diagnostics),
             LetStatement letStatement => AnalyzeExpression(letStatement.Value, diagnostics),
+            AssignmentStatement assignmentStatement => AnalyzeExpression(assignmentStatement.Value, diagnostics),
             ExpressionStatement expressionStatement => AnalyzeExpression(expressionStatement.Expression, diagnostics),
             _ => new FlowState(AlwaysReturns: false),
         };

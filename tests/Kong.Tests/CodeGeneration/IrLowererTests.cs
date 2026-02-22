@@ -279,6 +279,21 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersVarAssignment()
+    {
+        var source = "var x: int = 1; x = x + 1; x;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var stores = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).Count(i => i is IrStoreLocal);
+        Assert.True(stores >= 2);
+    }
+
+    [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
         var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";

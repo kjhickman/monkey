@@ -1030,6 +1030,37 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesVarStatement()
+    {
+        var input = "var x: int = 1;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<LetStatement>(unit.Statements[0]);
+        Assert.True(statement.IsMutable);
+        Assert.Equal("x", statement.Name.Value);
+    }
+
+    [Fact]
+    public void TestParsesAssignmentStatement()
+    {
+        var input = "var x = 1; x = x + 1;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Equal(2, unit.Statements.Count);
+        var assignment = Assert.IsType<AssignmentStatement>(unit.Statements[1]);
+        Assert.Equal("x", assignment.Name.Value);
+        var infix = Assert.IsType<InfixExpression>(assignment.Value);
+        TestIdentifier(infix.Left, "x");
+        TestIntegerLiteral(infix.Right, 1);
+    }
+
+    [Fact]
     public void TestParsesImportStatement()
     {
         var input = "import System.Console;";
