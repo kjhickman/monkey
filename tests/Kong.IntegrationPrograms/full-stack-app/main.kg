@@ -2,6 +2,7 @@ import Demo.MathKit;
 import Demo.TextKit;
 import Demo.Arrays;
 import System;
+import System.Text;
 
 namespace Demo.App;
 
@@ -19,6 +20,10 @@ fn Main() {
     let fromClr: double = System.Math.Sqrt(9);
     let msg: string = Label(total);
     let cleaned: string = "  kong  ".Trim();
+    let builder = new StringBuilder();
+    builder.Append("n=");
+    builder.Append(System.Convert.ToString(total));
+    let built: string = builder.ToString();
 
     // Exercise logical operators with short-circuit-friendly shape.
     let ok: bool = picked == 42 &&
@@ -31,7 +36,7 @@ fn Main() {
         scaled == 3.0;
 
     if (ok || false) {
-        System.Console.WriteLine(System.String.Concat(msg, ":ok"));
+        System.Console.WriteLine(System.String.Concat(msg, ":", built, ":ok"));
     } else {
         System.Console.WriteLine("bad-pick");
     }

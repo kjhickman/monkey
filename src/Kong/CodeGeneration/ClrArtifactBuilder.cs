@@ -927,6 +927,30 @@ public class ClrArtifactBuilder
                         il.Emit(OpCodes.Stloc, valueLocals[arrayIndex.Destination]);
                         break;
 
+                    case IrNewObject newObject:
+                    {
+                        if (!ConstructorClrResolver.TryResolve(
+                                newObject.ObjectType is ClrNominalTypeSymbol nominal ? nominal.ClrTypeFullName : newObject.ObjectType == TypeSymbols.String ? "System.String" : string.Empty,
+                                newObject.ArgumentTypes,
+                                out var binding,
+                                out _,
+                                out var resolveError))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveError}", "IL001");
+                            return false;
+                        }
+
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, newObject.Arguments, newObject.ArgumentTypes, binding.Constructor, diagnostics))
+                        {
+                            return false;
+                        }
+
+                        var importedConstructor = module.ImportReference(binding.Constructor);
+                        il.Emit(OpCodes.Newobj, importedConstructor);
+                        il.Emit(OpCodes.Stloc, valueLocals[newObject.Destination]);
+                        break;
+                    }
+
                     default:
                         diagnostics.Report(Span.Empty, "phase-4 CLR backend encountered unsupported IR instruction", "IL001");
                         return false;
@@ -1036,6 +1060,17 @@ public class ClrArtifactBuilder
 
             diagnostics.Report(Span.Empty, $"phase-6 CLR backend is missing delegate type for '{functionType}'", "IL001");
             return null;
+        }
+
+        if (type is ClrNominalTypeSymbol nominalType)
+        {
+            if (!ConstructorClrResolver.TryResolveTypeDefinition(nominalType.ClrTypeFullName, out var typeDefinition))
+            {
+                diagnostics.Report(Span.Empty, $"phase-4 CLR backend could not load runtime type '{nominalType.ClrTypeFullName}'", "IL001");
+                return null;
+            }
+
+            return module.ImportReference(typeDefinition);
         }
 
         diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");

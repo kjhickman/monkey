@@ -476,4 +476,32 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesNewKeyword()
+    {
+        var input = "new System.Text.StringBuilder();";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.New, "new"),
+            (TokenType.Identifier, "System"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "Text"),
+            (TokenType.Dot, "."),
+            (TokenType.Identifier, "StringBuilder"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

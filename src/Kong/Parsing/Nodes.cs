@@ -461,3 +461,19 @@ public class IndexExpression : IExpression
         return $"({Left.String()}[{Index.String()}])";
     }
 }
+
+public class NewExpression : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'new' token
+    public string TypePath { get; set; } = "";
+    public List<IExpression> Arguments { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var args = Arguments.Select(a => a.String());
+        return $"new {TypePath}({string.Join(", ", args)})";
+    }
+}

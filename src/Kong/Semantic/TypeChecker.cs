@@ -10,6 +10,7 @@ public class TypeCheckResult
     public Dictionary<MemberAccessExpression, string> ResolvedStaticValuePaths { get; } = [];
     public Dictionary<CallExpression, string> ResolvedInstanceMethodMembers { get; } = [];
     public Dictionary<MemberAccessExpression, string> ResolvedInstanceValueMembers { get; } = [];
+    public Dictionary<NewExpression, string> ResolvedConstructorTypePaths { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
@@ -238,6 +239,7 @@ public class TypeChecker
             FunctionLiteral functionLiteral => CheckFunctionLiteral(functionLiteral),
             CallExpression callExpression => CheckCallExpression(callExpression),
             MemberAccessExpression memberAccessExpression => CheckMemberAccessExpression(memberAccessExpression),
+            NewExpression newExpression => CheckNewExpression(newExpression),
             ArrayLiteral arrayLiteral => CheckArrayLiteral(arrayLiteral),
             IndexExpression indexExpression => CheckIndexExpression(indexExpression),
             _ => TypeSymbols.Error,
@@ -480,6 +482,31 @@ public class TypeChecker
         return fn.ReturnType;
     }
 
+    private TypeSymbol CheckNewExpression(NewExpression expression)
+    {
+        var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
+        if (!TryResolveImportedTypePath(expression.TypePath, out var resolvedTypePath, out var diagnostic))
+        {
+            _result.Diagnostics.Report(expression.Span, diagnostic, "T122");
+            return TypeSymbols.Error;
+        }
+
+        if (!ConstructorClrResolver.TryResolve(
+                resolvedTypePath,
+                argumentTypes,
+                out var binding,
+                out var resolutionError,
+                out var resolutionMessage))
+        {
+            var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+            _result.Diagnostics.Report(expression.Span, resolutionMessage, code);
+            return TypeSymbols.Error;
+        }
+
+        _result.ResolvedConstructorTypePaths[expression] = resolvedTypePath;
+        return binding.ConstructedType;
+    }
+
     private TypeSymbol CheckMemberAccessExpression(MemberAccessExpression expression)
     {
         if (TryCheckInstanceValueAccess(expression, out var instanceType))
@@ -709,6 +736,62 @@ public class TypeChecker
         }
 
         diagnostic = $"ambiguous static member reference '{memberPath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
+        return false;
+    }
+
+    private bool TryResolveImportedTypePath(string typePath, out string resolvedPath, out string diagnostic)
+    {
+        diagnostic = string.Empty;
+        resolvedPath = typePath;
+
+        if (ConstructorClrResolver.IsKnownTypePath(typePath))
+        {
+            return true;
+        }
+
+        var candidates = new HashSet<string>(StringComparer.Ordinal);
+        var firstDot = typePath.IndexOf('.');
+
+        if (firstDot > 0)
+        {
+            var root = typePath[..firstDot];
+            var suffix = typePath[firstDot..];
+            if (_names.ImportedTypeAliases.TryGetValue(root, out var qualifiedTypeName))
+            {
+                candidates.Add(qualifiedTypeName + suffix);
+            }
+
+            foreach (var importedNamespace in _names.ImportedNamespaces)
+            {
+                candidates.Add(importedNamespace + "." + typePath);
+            }
+        }
+        else
+        {
+            if (_names.ImportedTypeAliases.TryGetValue(typePath, out var qualifiedTypeName))
+            {
+                candidates.Add(qualifiedTypeName);
+            }
+
+            foreach (var importedNamespace in _names.ImportedNamespaces)
+            {
+                candidates.Add(importedNamespace + "." + typePath);
+            }
+        }
+
+        var knownCandidates = candidates.Where(ConstructorClrResolver.IsKnownTypePath).ToList();
+        if (knownCandidates.Count == 0)
+        {
+            return true;
+        }
+
+        if (knownCandidates.Count == 1)
+        {
+            resolvedPath = knownCandidates[0];
+            return true;
+        }
+
+        diagnostic = $"ambiguous type reference '{typePath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
         return false;
     }
 

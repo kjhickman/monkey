@@ -263,6 +263,22 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersConstructorInterop()
+    {
+        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"a\"); 1;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrNewObject);
+        Assert.Contains(instructions, i => i is IrInstanceCall { MemberName: "Append" });
+    }
+
+    [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
         var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";

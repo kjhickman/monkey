@@ -241,6 +241,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesConstructorInteropWithInstanceMethods()
+    {
+        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"ab\"); sb.Append(\"c\"); let s: string = sb.ToString(); if (s == \"abc\") { 1; } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

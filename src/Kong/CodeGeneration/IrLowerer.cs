@@ -696,6 +696,9 @@ public class IrLowerer
             case IndexExpression indexExpression:
                 return LowerIndexExpression(indexExpression);
 
+            case NewExpression newExpression:
+                return LowerNewExpression(newExpression);
+
             default:
                 _result.Diagnostics.Report(expression.Span,
                     $"phase-4 IR lowerer does not support expression '{expression.TokenLiteral()}'",
@@ -1335,6 +1338,40 @@ public class IrLowerer
         return destination;
     }
 
+    private IrValueId? LowerNewExpression(NewExpression newExpression)
+    {
+        if (!TryGetExpressionType(newExpression, out var objectType) || !IsSupportedRuntimeType(objectType))
+        {
+            _result.Diagnostics.Report(newExpression.Span,
+                "phase-4 IR lowerer requires supported constructor result type",
+                "IR001");
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(newExpression.Arguments.Count);
+        var argumentTypes = new List<TypeSymbol>(newExpression.Arguments.Count);
+        foreach (var argument in newExpression.Arguments)
+        {
+            var value = LowerExpression(argument);
+            if (value == null)
+            {
+                return null;
+            }
+
+            if (!TryGetExpressionType(argument, out var argumentType))
+            {
+                return null;
+            }
+
+            arguments.Add(value.Value);
+            argumentTypes.Add(argumentType);
+        }
+
+        var destination = AllocateValue(objectType);
+        _currentBlock.Instructions.Add(new IrNewObject(destination, objectType, arguments, argumentTypes));
+        return destination;
+    }
+
     private IrBlock NewBlock()
     {
         var block = new IrBlock { Id = _nextBlockId++ };
@@ -1408,6 +1445,7 @@ public class IrLowerer
                type == TypeSymbols.Byte ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
+               type is ClrNominalTypeSymbol ||
                type is ArrayTypeSymbol arrayType && IsSupportedArrayElementType(arrayType.ElementType) ||
                type is FunctionTypeSymbol functionType &&
                functionType.ParameterTypes.All(IsSupportedRuntimeType) &&

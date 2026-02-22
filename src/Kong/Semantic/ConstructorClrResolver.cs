@@ -2,29 +2,30 @@ using Mono.Cecil;
 
 namespace Kong.Semantic;
 
-public sealed record InstanceClrMethodBinding(
-    TypeSymbol ReceiverType,
-    string MemberName,
+public sealed record ConstructorClrBinding(
+    string TypePath,
+    TypeSymbol ConstructedType,
     IReadOnlyList<TypeSymbol> ParameterTypes,
-    TypeSymbol ReturnType,
-    MethodDefinition MethodDefinition);
+    MethodDefinition Constructor);
 
-public sealed record InstanceClrValueBinding(
-    TypeSymbol ReceiverType,
-    string MemberName,
-    TypeSymbol Type,
-    MethodDefinition? PropertyGetter,
-    FieldDefinition? Field);
-
-public static class InstanceClrMemberResolver
+public static class ConstructorClrResolver
 {
     private static readonly Lazy<IReadOnlyList<AssemblyDefinition>> Assemblies = new(LoadTrustedAssemblies);
 
-    public static bool TryResolveMethod(
-        TypeSymbol receiverType,
-        string memberName,
-        IReadOnlyList<TypeSymbol> parameterTypes,
-        out InstanceClrMethodBinding binding,
+    public static bool IsKnownTypePath(string typePath)
+    {
+        return TryFindType(typePath, out _);
+    }
+
+    public static bool TryResolveTypeDefinition(string typePath, out TypeDefinition typeDefinition)
+    {
+        return TryFindType(typePath, out typeDefinition);
+    }
+
+    public static bool TryResolve(
+        string typePath,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out ConstructorClrBinding binding,
         out StaticClrMethodResolutionError error,
         out string errorMessage)
     {
@@ -32,180 +33,63 @@ public static class InstanceClrMemberResolver
         error = StaticClrMethodResolutionError.None;
         errorMessage = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(memberName))
-        {
-            error = StaticClrMethodResolutionError.InvalidMethodPath;
-            errorMessage = "invalid instance method name";
-            return false;
-        }
-
-        if (!TryMapReceiverTypeToClrFullName(receiverType, out var receiverClrTypeName))
-        {
-            error = StaticClrMethodResolutionError.UnsupportedParameterType;
-            errorMessage = $"instance calls do not support Kong receiver type '{receiverType}'";
-            return false;
-        }
-
-        if (!TryFindType(receiverClrTypeName, out var typeDefinition))
+        if (!TryFindType(typePath, out var typeDefinition))
         {
             error = StaticClrMethodResolutionError.TypeNotFound;
-            errorMessage = $"unknown CLR type '{receiverClrTypeName}'";
+            errorMessage = $"unknown CLR type '{typePath}'";
             return false;
         }
 
-        foreach (var parameterType in parameterTypes)
-        {
-            if (!TryMapKongTypeToClrFullName(parameterType, out _))
-            {
-                error = StaticClrMethodResolutionError.UnsupportedParameterType;
-                errorMessage = $"instance calls do not support Kong type '{parameterType}' in parameter list";
-                return false;
-            }
-        }
-
-        var candidates = typeDefinition.Methods
-            .Where(m => m.IsPublic && !m.IsStatic && m.Name == memberName && !m.HasGenericParameters)
+        var constructors = typeDefinition.Methods
+            .Where(m => m.IsConstructor && m.IsPublic && !m.IsStatic)
             .ToList();
 
-        if (candidates.Count == 0)
+        if (constructors.Count == 0)
         {
             error = StaticClrMethodResolutionError.MethodNotFound;
-            errorMessage = $"unknown instance method '{memberName}' on '{receiverType}'";
+            errorMessage = $"type '{typePath}' does not expose a supported public constructor";
             return false;
         }
 
-        var scoredMatches = new List<(MethodDefinition Method, int Score)>(candidates.Count);
-        foreach (var candidate in candidates)
+        var scoredMatches = new List<(MethodDefinition Ctor, int Score)>();
+        foreach (var ctor in constructors)
         {
-            if (TryGetParameterMatchScore(candidate, parameterTypes, out var score))
+            if (TryGetParameterMatchScore(ctor, argumentTypes, out var score))
             {
-                scoredMatches.Add((candidate, score));
+                scoredMatches.Add((ctor, score));
             }
         }
 
         if (scoredMatches.Count == 0)
         {
             error = StaticClrMethodResolutionError.NoMatchingOverload;
-            errorMessage = $"no matching overload for instance method '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", parameterTypes)})";
+            errorMessage = $"no matching constructor overload for '{typePath}' with argument types ({string.Join(", ", argumentTypes)})";
             return false;
         }
 
-        var bestScore = scoredMatches.Min(m => m.Score);
-        var matches = scoredMatches
-            .Where(m => m.Score == bestScore)
-            .Select(m => m.Method)
-            .ToList();
-
-        var compatibleMatches = matches
-            .Where(m => TryMapClrTypeReferenceToKongType(m.ReturnType, out _))
-            .ToList();
-
-        if (compatibleMatches.Count == 0)
-        {
-            error = StaticClrMethodResolutionError.UnsupportedReturnType;
-            errorMessage = $"instance method '{memberName}' on '{receiverType}' returns unsupported CLR type '{matches[0].ReturnType.FullName}'";
-            return false;
-        }
-
-        if (compatibleMatches.Count > 1)
+        var bestScore = scoredMatches.Min(s => s.Score);
+        var matches = scoredMatches.Where(s => s.Score == bestScore).Select(s => s.Ctor).ToList();
+        if (matches.Count > 1)
         {
             error = StaticClrMethodResolutionError.AmbiguousOverload;
-            errorMessage = $"ambiguous instance method call '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", parameterTypes)})";
+            errorMessage = $"ambiguous constructor overload for '{typePath}' with argument types ({string.Join(", ", argumentTypes)})";
             return false;
         }
 
-        var selected = compatibleMatches[0];
-        _ = TryMapClrTypeReferenceToKongType(selected.ReturnType, out var returnType);
-
-        binding = new InstanceClrMethodBinding(receiverType, memberName, parameterTypes.ToArray(), returnType, selected);
-        return true;
-    }
-
-    public static bool TryResolveValue(
-        TypeSymbol receiverType,
-        string memberName,
-        out InstanceClrValueBinding binding,
-        out StaticClrMethodResolutionError error,
-        out string errorMessage)
-    {
-        binding = null!;
-        error = StaticClrMethodResolutionError.None;
-        errorMessage = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(memberName))
-        {
-            error = StaticClrMethodResolutionError.InvalidMethodPath;
-            errorMessage = "invalid instance member name";
-            return false;
-        }
-
-        if (!TryMapReceiverTypeToClrFullName(receiverType, out var receiverClrTypeName))
-        {
-            error = StaticClrMethodResolutionError.UnsupportedParameterType;
-            errorMessage = $"instance member access does not support Kong receiver type '{receiverType}'";
-            return false;
-        }
-
-        if (!TryFindType(receiverClrTypeName, out var typeDefinition))
-        {
-            error = StaticClrMethodResolutionError.TypeNotFound;
-            errorMessage = $"unknown CLR type '{receiverClrTypeName}'";
-            return false;
-        }
-
-        var properties = typeDefinition.Properties
-            .Where(p => p.Name == memberName && p.GetMethod is { IsPublic: true, IsStatic: false } getter && getter.Parameters.Count == 0)
-            .ToList();
-
-        var fields = typeDefinition.Fields
-            .Where(f => f.Name == memberName && f.IsPublic && !f.IsStatic)
-            .ToList();
-
-        var totalMatches = properties.Count + fields.Count;
-        if (totalMatches == 0)
-        {
-            error = StaticClrMethodResolutionError.MethodNotFound;
-            errorMessage = $"unknown instance member '{memberName}' on '{receiverType}'";
-            return false;
-        }
-
-        if (totalMatches > 1)
-        {
-            error = StaticClrMethodResolutionError.AmbiguousOverload;
-            errorMessage = $"ambiguous instance member access '{memberName}' on '{receiverType}'";
-            return false;
-        }
-
-        if (properties.Count == 1)
-        {
-            var property = properties[0];
-            if (!TryMapClrTypeReferenceToKongType(property.PropertyType, out var propertyType))
-            {
-                error = StaticClrMethodResolutionError.UnsupportedReturnType;
-                errorMessage = $"instance member '{memberName}' on '{receiverType}' has unsupported CLR type '{property.PropertyType.FullName}'";
-                return false;
-            }
-
-            binding = new InstanceClrValueBinding(receiverType, memberName, propertyType, property.GetMethod!, null);
-            return true;
-        }
-
-        var field = fields[0];
-        if (!TryMapClrTypeReferenceToKongType(field.FieldType, out var fieldType))
+        if (!TryMapClrTypeReferenceToKongType(typeDefinition, out var constructedType))
         {
             error = StaticClrMethodResolutionError.UnsupportedReturnType;
-            errorMessage = $"instance member '{memberName}' on '{receiverType}' has unsupported CLR type '{field.FieldType.FullName}'";
+            errorMessage = $"constructor type '{typePath}' is not supported";
             return false;
         }
 
-        binding = new InstanceClrValueBinding(receiverType, memberName, fieldType, null, field);
+        binding = new ConstructorClrBinding(typePath, constructedType, argumentTypes.ToArray(), matches[0]);
         return true;
     }
 
     private static bool TryGetParameterMatchScore(MethodDefinition method, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
     {
         score = 0;
-
         var parameters = method.Parameters;
         var hasParamsArray = HasParamsArray(method, out var paramsElementType);
         var fixedParameterCount = hasParamsArray ? parameters.Count - 1 : parameters.Count;
@@ -230,21 +114,17 @@ public static class InstanceClrMemberResolver
         }
 
         var bestScore = int.MaxValue;
-
-        if (argumentTypes.Count <= parameters.Count &&
-            TryScoreDirectOrOptionalCall(parameters, argumentTypes, out var directScore))
+        if (argumentTypes.Count <= parameters.Count && TryScoreDirectOrOptionalCall(parameters, argumentTypes, out var directScore))
         {
             bestScore = directScore;
         }
 
         if (hasParamsArray && paramsElementType != TypeSymbols.Error &&
             argumentTypes.Count >= fixedParameterCount &&
-            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, argumentTypes, out var expandedScore))
+            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, argumentTypes, out var expandedScore) &&
+            expandedScore < bestScore)
         {
-            if (expandedScore < bestScore)
-            {
-                bestScore = expandedScore;
-            }
+            bestScore = expandedScore;
         }
 
         if (bestScore == int.MaxValue)
@@ -259,7 +139,6 @@ public static class InstanceClrMemberResolver
     private static bool TryScoreDirectOrOptionalCall(IList<ParameterDefinition> parameters, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
     {
         score = 0;
-
         if (argumentTypes.Count > parameters.Count)
         {
             return false;
@@ -267,8 +146,7 @@ public static class InstanceClrMemberResolver
 
         for (var i = 0; i < argumentTypes.Count; i++)
         {
-            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
-                parameterType == TypeSymbols.Void)
+            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) || parameterType == TypeSymbols.Void)
             {
                 return false;
             }
@@ -302,7 +180,6 @@ public static class InstanceClrMemberResolver
         out int score)
     {
         score = 0;
-
         for (var i = 0; i < fixedParameterCount; i++)
         {
             if (i >= argumentTypes.Count)
@@ -316,8 +193,7 @@ public static class InstanceClrMemberResolver
                 continue;
             }
 
-            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
-                parameterType == TypeSymbols.Void)
+            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) || parameterType == TypeSymbols.Void)
             {
                 return false;
             }
@@ -347,11 +223,16 @@ public static class InstanceClrMemberResolver
     private static bool TryGetConversionScore(TypeSymbol source, TypeSymbol target, out int score)
     {
         score = int.MaxValue;
-
         if (source == target)
         {
             score = 0;
             return true;
+        }
+
+        if (source is ClrNominalTypeSymbol sourceNominal && target is ClrNominalTypeSymbol targetNominal)
+        {
+            score = sourceNominal.ClrTypeFullName == targetNominal.ClrTypeFullName ? 0 : int.MaxValue;
+            return score == 0;
         }
 
         if (source == TypeSymbols.Char)
@@ -363,7 +244,6 @@ public static class InstanceClrMemberResolver
                 _ when target == TypeSymbols.Double => 3,
                 _ => int.MaxValue,
             };
-
             return score != int.MaxValue;
         }
 
@@ -376,7 +256,6 @@ public static class InstanceClrMemberResolver
                 _ when target == TypeSymbols.Double => 3,
                 _ => int.MaxValue,
             };
-
             return score != int.MaxValue;
         }
 
@@ -388,7 +267,6 @@ public static class InstanceClrMemberResolver
                 _ when target == TypeSymbols.Double => 2,
                 _ => int.MaxValue,
             };
-
             return score != int.MaxValue;
         }
 
@@ -396,102 +274,6 @@ public static class InstanceClrMemberResolver
         {
             score = target == TypeSymbols.Double ? 1 : int.MaxValue;
             return score != int.MaxValue;
-        }
-
-        return false;
-    }
-
-    private static bool TryMapReceiverTypeToClrFullName(TypeSymbol type, out string clrTypeName)
-    {
-        if (type is ClrNominalTypeSymbol nominalType)
-        {
-            clrTypeName = nominalType.ClrTypeFullName;
-            return true;
-        }
-
-        if (type == TypeSymbols.String)
-        {
-            clrTypeName = "System.String";
-            return true;
-        }
-
-        if (type is ArrayTypeSymbol)
-        {
-            clrTypeName = "System.Array";
-            return true;
-        }
-
-        clrTypeName = string.Empty;
-        return false;
-    }
-
-    private static bool TryMapKongTypeToClrFullName(TypeSymbol type, out string clrTypeName)
-    {
-        clrTypeName = string.Empty;
-
-        if (type is ClrNominalTypeSymbol nominalType)
-        {
-            clrTypeName = nominalType.ClrTypeFullName;
-            return true;
-        }
-
-        if (type == TypeSymbols.Int)
-        {
-            clrTypeName = "System.Int32";
-            return true;
-        }
-
-        if (type == TypeSymbols.Long)
-        {
-            clrTypeName = "System.Int64";
-            return true;
-        }
-
-        if (type == TypeSymbols.Double)
-        {
-            clrTypeName = "System.Double";
-            return true;
-        }
-
-        if (type == TypeSymbols.Char)
-        {
-            clrTypeName = "System.Char";
-            return true;
-        }
-
-        if (type == TypeSymbols.Byte)
-        {
-            clrTypeName = "System.Byte";
-            return true;
-        }
-
-        if (type == TypeSymbols.Bool)
-        {
-            clrTypeName = "System.Boolean";
-            return true;
-        }
-
-        if (type == TypeSymbols.String)
-        {
-            clrTypeName = "System.String";
-            return true;
-        }
-
-        if (type == TypeSymbols.Void)
-        {
-            clrTypeName = "System.Void";
-            return true;
-        }
-
-        if (type is ArrayTypeSymbol array)
-        {
-            if (!TryMapKongTypeToClrFullName(array.ElementType, out var elementClrName))
-            {
-                return false;
-            }
-
-            clrTypeName = elementClrName + "[]";
-            return true;
         }
 
         return false;
@@ -516,13 +298,7 @@ public static class InstanceClrMemberResolver
             return true;
         }
 
-        if (TryMapClrFullNameToKongType(NormalizeTypeName(clrType.FullName), out type))
-        {
-            return true;
-        }
-
-        type = new ClrNominalTypeSymbol(NormalizeTypeName(clrType.FullName));
-        return true;
+        return TryMapClrFullNameToKongType(NormalizeTypeName(clrType.FullName), out type);
     }
 
     private static bool TryMapClrTypeDefinitionToKongType(TypeDefinition typeDefinition, out TypeSymbol type)
@@ -567,7 +343,6 @@ public static class InstanceClrMemberResolver
     private static bool TryMapClrFullNameToKongType(string clrTypeName, out TypeSymbol type)
     {
         type = TypeSymbols.Error;
-
         switch (clrTypeName)
         {
             case "System.Int64":

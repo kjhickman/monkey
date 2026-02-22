@@ -538,6 +538,21 @@ public class TypeCheckerTests
         Assert.Equal("Length", result.ResolvedInstanceValueMembers[lengthAccess]);
     }
 
+    [Fact]
+    public void TestTypeChecksConstructorInteropForClrTypes()
+    {
+        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"x\"); sb.ToString();";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var toStringStatement = Assert.IsType<ExpressionStatement>(unit.Statements[4]);
+        var toStringCall = Assert.IsType<CallExpression>(toStringStatement.Expression);
+        Assert.Equal(TypeSymbols.String, result.ExpressionTypes[toStringCall]);
+        Assert.Equal("ToString", result.ResolvedInstanceMethodMembers[toStringCall]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

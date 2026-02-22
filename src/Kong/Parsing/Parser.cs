@@ -69,6 +69,7 @@ public class Parser
             { TokenType.LeftParenthesis, ParseGroupedExpression },
             { TokenType.If, ParseIfExpression },
             { TokenType.LeftBracket, ParseArrayLiteral },
+            { TokenType.New, ParseNewExpression },
         };
 
         _infixParseFns = new Dictionary<TokenType, Func<IExpression, IExpression>>
@@ -906,6 +907,43 @@ public class Parser
             Span = new Span(startSpan.Start, _curToken.Span.End)
         };
         return array;
+    }
+
+    private IExpression ParseNewExpression()
+    {
+        var startSpan = _curToken.Span;
+        var expression = new NewExpression
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null!;
+        }
+
+        var segments = new List<string> { _curToken.Literal };
+        while (PeekTokenIs(TokenType.Dot))
+        {
+            NextToken();
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return null!;
+            }
+
+            segments.Add(_curToken.Literal);
+        }
+
+        expression.TypePath = string.Join('.', segments);
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null!;
+        }
+
+        expression.Arguments = ParseExpressionList(TokenType.RightParenthesis);
+        expression.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return expression;
     }
 
     private List<IExpression> ParseExpressionList(TokenType end)

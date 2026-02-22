@@ -345,6 +345,12 @@ public class NameResolver
                 ResolveExpression(indexExpression.Left);
                 ResolveExpression(indexExpression.Index);
                 break;
+            case NewExpression newExpression:
+                foreach (var argument in newExpression.Arguments)
+                {
+                    ResolveExpression(argument);
+                }
+                break;
         }
     }
 

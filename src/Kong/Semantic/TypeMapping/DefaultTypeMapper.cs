@@ -80,6 +80,17 @@ public class DefaultTypeMapper : ITypeMapper
             return null;
         }
 
+        if (kongType is ClrNominalTypeSymbol nominalType)
+        {
+            if (!ConstructorClrResolver.TryResolveTypeDefinition(nominalType.ClrTypeFullName, out var typeDefinition))
+            {
+                diagnostics.Report(Span.Empty, $"CLR backend could not load runtime type '{nominalType.ClrTypeFullName}'", "IL001");
+                return null;
+            }
+
+            return module.ImportReference(typeDefinition);
+        }
+
         diagnostics.Report(Span.Empty, $"CLR backend does not support type '{kongType}'", "IL001");
         return null;
     }
@@ -111,6 +122,11 @@ public class DefaultTypeMapper : ITypeMapper
         {
             return functionType.ParameterTypes.All(IsTypeSupported) &&
                    IsTypeSupported(functionType.ReturnType);
+        }
+
+        if (type is ClrNominalTypeSymbol)
+        {
+            return true;
         }
 
         return false;

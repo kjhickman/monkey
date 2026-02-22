@@ -130,6 +130,11 @@ public sealed record FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes
     public override string Name => $"fn({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
 }
 
+public sealed record ClrNominalTypeSymbol(string ClrTypeFullName) : TypeSymbol
+{
+    public override string Name => ClrTypeFullName;
+}
+
 public static class TypeSymbols
 {
     public static IntTypeSymbol Int { get; } = IntTypeSymbol.Instance;

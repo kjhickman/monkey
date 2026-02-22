@@ -1014,6 +1014,22 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesNewExpression()
+    {
+        var input = "new System.Text.StringBuilder(16);";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var newExpression = Assert.IsType<NewExpression>(statement.Expression);
+        Assert.Equal("System.Text.StringBuilder", newExpression.TypePath);
+        Assert.Single(newExpression.Arguments);
+        TestIntegerLiteral(newExpression.Arguments[0], 16);
+    }
+
+    [Fact]
     public void TestParsesImportStatement()
     {
         var input = "import System.Console;";

@@ -55,6 +55,7 @@ public enum TokenType
     Return,
     Import,
     Namespace,
+    New,
 }
 
 public record struct Token(TokenType Type, string Literal, Span Span = default)
@@ -70,6 +71,7 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "return", TokenType.Return },
         { "import", TokenType.Import },
         { "namespace", TokenType.Namespace },
+        { "new", TokenType.New },
     };
 
     public static TokenType LookupIdentifier(string keyword)
