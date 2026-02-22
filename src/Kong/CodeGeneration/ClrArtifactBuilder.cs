@@ -1030,6 +1030,51 @@ public class ClrArtifactBuilder
             return module.TypeSystem.Byte;
         }
 
+        if (type == TypeSymbols.SByte)
+        {
+            return module.TypeSystem.SByte;
+        }
+
+        if (type == TypeSymbols.Short)
+        {
+            return module.TypeSystem.Int16;
+        }
+
+        if (type == TypeSymbols.UShort)
+        {
+            return module.TypeSystem.UInt16;
+        }
+
+        if (type == TypeSymbols.UInt)
+        {
+            return module.TypeSystem.UInt32;
+        }
+
+        if (type == TypeSymbols.ULong)
+        {
+            return module.TypeSystem.UInt64;
+        }
+
+        if (type == TypeSymbols.NInt)
+        {
+            return module.TypeSystem.IntPtr;
+        }
+
+        if (type == TypeSymbols.NUInt)
+        {
+            return module.TypeSystem.UIntPtr;
+        }
+
+        if (type == TypeSymbols.Float)
+        {
+            return module.TypeSystem.Single;
+        }
+
+        if (type == TypeSymbols.Decimal)
+        {
+            return module.ImportReference(typeof(decimal));
+        }
+
         if (type == TypeSymbols.Bool)
         {
             return module.TypeSystem.Boolean;
@@ -1796,10 +1841,19 @@ public class ClrArtifactBuilder
             "System.Int32" => SetType(TypeSymbols.Int, out type),
             "System.Int64" => SetType(TypeSymbols.Long, out type),
             "System.Double" => SetType(TypeSymbols.Double, out type),
+            "System.Single" => SetType(TypeSymbols.Float, out type),
             "System.Boolean" => SetType(TypeSymbols.Bool, out type),
             "System.String" => SetType(TypeSymbols.String, out type),
             "System.Char" => SetType(TypeSymbols.Char, out type),
             "System.Byte" => SetType(TypeSymbols.Byte, out type),
+            "System.SByte" => SetType(TypeSymbols.SByte, out type),
+            "System.Int16" => SetType(TypeSymbols.Short, out type),
+            "System.UInt16" => SetType(TypeSymbols.UShort, out type),
+            "System.UInt32" => SetType(TypeSymbols.UInt, out type),
+            "System.UInt64" => SetType(TypeSymbols.ULong, out type),
+            "System.IntPtr" => SetType(TypeSymbols.NInt, out type),
+            "System.UIntPtr" => SetType(TypeSymbols.NUInt, out type),
+            "System.Decimal" => SetType(TypeSymbols.Decimal, out type),
             "System.Void" => SetType(TypeSymbols.Void, out type),
             _ => SetType(TypeSymbols.Error, out type, false),
         };

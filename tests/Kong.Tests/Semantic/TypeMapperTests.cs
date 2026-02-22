@@ -85,6 +85,29 @@ public class TypeMapperTests
         Assert.Equal(module.TypeSystem.Byte, mapped);
     }
 
+    [Theory]
+    [InlineData("sbyte", "System.SByte")]
+    [InlineData("short", "System.Int16")]
+    [InlineData("ushort", "System.UInt16")]
+    [InlineData("uint", "System.UInt32")]
+    [InlineData("ulong", "System.UInt64")]
+    [InlineData("nint", "System.IntPtr")]
+    [InlineData("nuint", "System.UIntPtr")]
+    [InlineData("float", "System.Single")]
+    [InlineData("decimal", "System.Decimal")]
+    public void TryMapKongType_NewPrimitives_MapToExpectedClrTypes(string kongTypeName, string clrFullName)
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+
+        var kongType = TypeSymbols.TryGetPrimitive(kongTypeName)!;
+        var mapped = mapper.TryMapKongType(kongType, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.Equal(clrFullName, mapped.FullName.Replace("/", "."));
+    }
+
     [Fact]
     public void TryMapKongType_Bool_MapsToBoolean()
     {
@@ -202,6 +225,24 @@ public class TypeMapperTests
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
 
         Assert.True(mapper.IsTypeSupported(TypeSymbols.Byte));
+    }
+
+    [Theory]
+    [InlineData("sbyte")]
+    [InlineData("short")]
+    [InlineData("ushort")]
+    [InlineData("uint")]
+    [InlineData("ulong")]
+    [InlineData("nint")]
+    [InlineData("nuint")]
+    [InlineData("float")]
+    [InlineData("decimal")]
+    public void IsTypeSupported_NewPrimitives_ReturnTrue(string typeName)
+    {
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var type = TypeSymbols.TryGetPrimitive(typeName)!;
+
+        Assert.True(mapper.IsTypeSupported(type));
     }
 
     [Fact]

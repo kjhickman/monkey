@@ -233,7 +233,7 @@ public class Lexer
     private string ReadIdentifier()
     {
         var position = _position;
-        while (IsLetter(_ch))
+        while (IsLetter(_ch) || IsDigit(_ch))
         {
             ReadChar();
         }

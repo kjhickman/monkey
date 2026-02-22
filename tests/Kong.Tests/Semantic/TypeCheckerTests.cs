@@ -600,6 +600,26 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
     }
 
+    [Fact]
+    public void TestTypeChecksAdditionalPrimitiveClrTypes()
+    {
+        var source = "System.SByte.Parse(\"1\"); System.Int16.Parse(\"2\"); System.UInt16.Parse(\"3\"); System.UInt32.Parse(\"4\"); System.UInt64.Parse(\"5\"); System.IntPtr.Zero; System.UIntPtr.Zero; System.Convert.ToSingle(\"6\"); System.Decimal.Parse(\"7\");";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        Assert.Equal(TypeSymbols.SByte, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[1]).Expression)]);
+        Assert.Equal(TypeSymbols.Short, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[2]).Expression)]);
+        Assert.Equal(TypeSymbols.UShort, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[3]).Expression)]);
+        Assert.Equal(TypeSymbols.UInt, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[4]).Expression)]);
+        Assert.Equal(TypeSymbols.ULong, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[5]).Expression)]);
+        Assert.Equal(TypeSymbols.NInt, result.ExpressionTypes[Assert.IsType<MemberAccessExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[6]).Expression)]);
+        Assert.Equal(TypeSymbols.NUInt, result.ExpressionTypes[Assert.IsType<MemberAccessExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[7]).Expression)]);
+        Assert.Equal(TypeSymbols.Float, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[8]).Expression)]);
+        Assert.Equal(TypeSymbols.Decimal, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[9]).Expression)]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

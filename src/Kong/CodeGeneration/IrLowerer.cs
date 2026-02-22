@@ -1525,8 +1525,17 @@ public class IrLowerer
         return type == TypeSymbols.Int ||
                type == TypeSymbols.Long ||
                type == TypeSymbols.Double ||
+               type == TypeSymbols.Float ||
                type == TypeSymbols.Char ||
                type == TypeSymbols.Byte ||
+               type == TypeSymbols.SByte ||
+               type == TypeSymbols.Short ||
+               type == TypeSymbols.UShort ||
+               type == TypeSymbols.UInt ||
+               type == TypeSymbols.ULong ||
+               type == TypeSymbols.NInt ||
+               type == TypeSymbols.NUInt ||
+               type == TypeSymbols.Decimal ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
                type is ClrNominalTypeSymbol ||
@@ -1588,7 +1597,7 @@ public class IrLowerer
 
     private static bool IsNumericType(TypeSymbol type)
     {
-        return type == TypeSymbols.Int || type == TypeSymbols.Long || type == TypeSymbols.Double;
+        return type == TypeSymbols.Int || type == TypeSymbols.Long || type == TypeSymbols.Double || type == TypeSymbols.Float;
     }
 
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)

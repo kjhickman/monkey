@@ -1095,13 +1095,14 @@ public class TypeChecker
     {
         return type == TypeSymbols.Int ||
                type == TypeSymbols.Long ||
+               type == TypeSymbols.Float ||
                type == TypeSymbols.Double;
     }
 
     private static bool TryGetUnaryNegationResultType(TypeSymbol operandType, out TypeSymbol resultType)
     {
         resultType = TypeSymbols.Error;
-        if (operandType != TypeSymbols.Int && operandType != TypeSymbols.Long && operandType != TypeSymbols.Double)
+        if (operandType != TypeSymbols.Int && operandType != TypeSymbols.Long && operandType != TypeSymbols.Float && operandType != TypeSymbols.Double)
         {
             return false;
         }
@@ -1136,12 +1137,12 @@ public class TypeChecker
 
         if (source == TypeSymbols.Char)
         {
-            return target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Double;
+            return target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Float || target == TypeSymbols.Double;
         }
 
         if (source == TypeSymbols.Byte)
         {
-            return target == TypeSymbols.Byte || target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Double;
+            return target == TypeSymbols.Byte || target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Float || target == TypeSymbols.Double;
         }
 
         if (!IsNumericType(source) || !IsNumericType(target))
@@ -1169,9 +1170,14 @@ public class TypeChecker
             return 3;
         }
 
-        if (type == TypeSymbols.Double)
+        if (type == TypeSymbols.Float)
         {
             return 4;
+        }
+
+        if (type == TypeSymbols.Double)
+        {
+            return 5;
         }
 
         return int.MaxValue;

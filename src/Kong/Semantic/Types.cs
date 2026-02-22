@@ -65,6 +65,105 @@ public sealed record ByteTypeSymbol : TypeSymbol
     public override string Name => "byte";
 }
 
+public sealed record SByteTypeSymbol : TypeSymbol
+{
+    public static SByteTypeSymbol Instance { get; } = new();
+
+    private SByteTypeSymbol()
+    {
+    }
+
+    public override string Name => "sbyte";
+}
+
+public sealed record ShortTypeSymbol : TypeSymbol
+{
+    public static ShortTypeSymbol Instance { get; } = new();
+
+    private ShortTypeSymbol()
+    {
+    }
+
+    public override string Name => "short";
+}
+
+public sealed record UShortTypeSymbol : TypeSymbol
+{
+    public static UShortTypeSymbol Instance { get; } = new();
+
+    private UShortTypeSymbol()
+    {
+    }
+
+    public override string Name => "ushort";
+}
+
+public sealed record UIntTypeSymbol : TypeSymbol
+{
+    public static UIntTypeSymbol Instance { get; } = new();
+
+    private UIntTypeSymbol()
+    {
+    }
+
+    public override string Name => "uint";
+}
+
+public sealed record ULongTypeSymbol : TypeSymbol
+{
+    public static ULongTypeSymbol Instance { get; } = new();
+
+    private ULongTypeSymbol()
+    {
+    }
+
+    public override string Name => "ulong";
+}
+
+public sealed record NIntTypeSymbol : TypeSymbol
+{
+    public static NIntTypeSymbol Instance { get; } = new();
+
+    private NIntTypeSymbol()
+    {
+    }
+
+    public override string Name => "nint";
+}
+
+public sealed record NUIntTypeSymbol : TypeSymbol
+{
+    public static NUIntTypeSymbol Instance { get; } = new();
+
+    private NUIntTypeSymbol()
+    {
+    }
+
+    public override string Name => "nuint";
+}
+
+public sealed record FloatTypeSymbol : TypeSymbol
+{
+    public static FloatTypeSymbol Instance { get; } = new();
+
+    private FloatTypeSymbol()
+    {
+    }
+
+    public override string Name => "float";
+}
+
+public sealed record DecimalTypeSymbol : TypeSymbol
+{
+    public static DecimalTypeSymbol Instance { get; } = new();
+
+    private DecimalTypeSymbol()
+    {
+    }
+
+    public override string Name => "decimal";
+}
+
 public sealed record StringTypeSymbol : TypeSymbol
 {
     public static StringTypeSymbol Instance { get; } = new();
@@ -142,6 +241,15 @@ public static class TypeSymbols
     public static DoubleTypeSymbol Double { get; } = DoubleTypeSymbol.Instance;
     public static CharTypeSymbol Char { get; } = CharTypeSymbol.Instance;
     public static ByteTypeSymbol Byte { get; } = ByteTypeSymbol.Instance;
+    public static SByteTypeSymbol SByte { get; } = SByteTypeSymbol.Instance;
+    public static ShortTypeSymbol Short { get; } = ShortTypeSymbol.Instance;
+    public static UShortTypeSymbol UShort { get; } = UShortTypeSymbol.Instance;
+    public static UIntTypeSymbol UInt { get; } = UIntTypeSymbol.Instance;
+    public static ULongTypeSymbol ULong { get; } = ULongTypeSymbol.Instance;
+    public static NIntTypeSymbol NInt { get; } = NIntTypeSymbol.Instance;
+    public static NUIntTypeSymbol NUInt { get; } = NUIntTypeSymbol.Instance;
+    public static FloatTypeSymbol Float { get; } = FloatTypeSymbol.Instance;
+    public static DecimalTypeSymbol Decimal { get; } = DecimalTypeSymbol.Instance;
     public static StringTypeSymbol String { get; } = StringTypeSymbol.Instance;
     public static BoolTypeSymbol Bool { get; } = BoolTypeSymbol.Instance;
     public static VoidTypeSymbol Void { get; } = VoidTypeSymbol.Instance;
@@ -157,6 +265,15 @@ public static class TypeSymbols
             "double" => Double,
             "char" => Char,
             "byte" => Byte,
+            "sbyte" => SByte,
+            "short" => Short,
+            "ushort" => UShort,
+            "uint" => UInt,
+            "ulong" => ULong,
+            "nint" => NInt,
+            "nuint" => NUInt,
+            "float" => Float,
+            "decimal" => Decimal,
             "string" => String,
             "bool" => Bool,
             "void" => Void,

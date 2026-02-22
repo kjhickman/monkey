@@ -554,6 +554,60 @@ public static class StaticClrMethodResolver
             return true;
         }
 
+        if (type == TypeSymbols.SByte)
+        {
+            clrTypeName = "System.SByte";
+            return true;
+        }
+
+        if (type == TypeSymbols.Short)
+        {
+            clrTypeName = "System.Int16";
+            return true;
+        }
+
+        if (type == TypeSymbols.UShort)
+        {
+            clrTypeName = "System.UInt16";
+            return true;
+        }
+
+        if (type == TypeSymbols.UInt)
+        {
+            clrTypeName = "System.UInt32";
+            return true;
+        }
+
+        if (type == TypeSymbols.ULong)
+        {
+            clrTypeName = "System.UInt64";
+            return true;
+        }
+
+        if (type == TypeSymbols.NInt)
+        {
+            clrTypeName = "System.IntPtr";
+            return true;
+        }
+
+        if (type == TypeSymbols.NUInt)
+        {
+            clrTypeName = "System.UIntPtr";
+            return true;
+        }
+
+        if (type == TypeSymbols.Float)
+        {
+            clrTypeName = "System.Single";
+            return true;
+        }
+
+        if (type == TypeSymbols.Decimal)
+        {
+            clrTypeName = "System.Decimal";
+            return true;
+        }
+
         if (type == TypeSymbols.Bool)
         {
             clrTypeName = "System.Boolean";
@@ -675,6 +729,33 @@ public static class StaticClrMethodResolver
                 return true;
             case "System.Byte":
                 type = TypeSymbols.Byte;
+                return true;
+            case "System.SByte":
+                type = TypeSymbols.SByte;
+                return true;
+            case "System.Int16":
+                type = TypeSymbols.Short;
+                return true;
+            case "System.UInt16":
+                type = TypeSymbols.UShort;
+                return true;
+            case "System.UInt32":
+                type = TypeSymbols.UInt;
+                return true;
+            case "System.UInt64":
+                type = TypeSymbols.ULong;
+                return true;
+            case "System.IntPtr":
+                type = TypeSymbols.NInt;
+                return true;
+            case "System.UIntPtr":
+                type = TypeSymbols.NUInt;
+                return true;
+            case "System.Single":
+                type = TypeSymbols.Float;
+                return true;
+            case "System.Decimal":
+                type = TypeSymbols.Decimal;
                 return true;
             case "System.Boolean":
                 type = TypeSymbols.Bool;

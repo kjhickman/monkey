@@ -381,6 +381,33 @@ public static class ConstructorClrResolver
             case "System.Byte":
                 type = TypeSymbols.Byte;
                 return true;
+            case "System.SByte":
+                type = TypeSymbols.SByte;
+                return true;
+            case "System.Int16":
+                type = TypeSymbols.Short;
+                return true;
+            case "System.UInt16":
+                type = TypeSymbols.UShort;
+                return true;
+            case "System.UInt32":
+                type = TypeSymbols.UInt;
+                return true;
+            case "System.UInt64":
+                type = TypeSymbols.ULong;
+                return true;
+            case "System.IntPtr":
+                type = TypeSymbols.NInt;
+                return true;
+            case "System.UIntPtr":
+                type = TypeSymbols.NUInt;
+                return true;
+            case "System.Single":
+                type = TypeSymbols.Float;
+                return true;
+            case "System.Decimal":
+                type = TypeSymbols.Decimal;
+                return true;
             case "System.Boolean":
                 type = TypeSymbols.Bool;
                 return true;

@@ -43,6 +43,51 @@ public class DefaultTypeMapper : ITypeMapper
             return module.TypeSystem.Byte;
         }
 
+        if (kongType == TypeSymbols.SByte)
+        {
+            return module.TypeSystem.SByte;
+        }
+
+        if (kongType == TypeSymbols.Short)
+        {
+            return module.TypeSystem.Int16;
+        }
+
+        if (kongType == TypeSymbols.UShort)
+        {
+            return module.TypeSystem.UInt16;
+        }
+
+        if (kongType == TypeSymbols.UInt)
+        {
+            return module.TypeSystem.UInt32;
+        }
+
+        if (kongType == TypeSymbols.ULong)
+        {
+            return module.TypeSystem.UInt64;
+        }
+
+        if (kongType == TypeSymbols.NInt)
+        {
+            return module.TypeSystem.IntPtr;
+        }
+
+        if (kongType == TypeSymbols.NUInt)
+        {
+            return module.TypeSystem.UIntPtr;
+        }
+
+        if (kongType == TypeSymbols.Float)
+        {
+            return module.TypeSystem.Single;
+        }
+
+        if (kongType == TypeSymbols.Decimal)
+        {
+            return module.ImportReference(typeof(decimal));
+        }
+
         if (kongType == TypeSymbols.Bool)
         {
             return module.TypeSystem.Boolean;
@@ -107,6 +152,15 @@ public class DefaultTypeMapper : ITypeMapper
             type == TypeSymbols.Double ||
             type == TypeSymbols.Char ||
             type == TypeSymbols.Byte ||
+            type == TypeSymbols.SByte ||
+            type == TypeSymbols.Short ||
+            type == TypeSymbols.UShort ||
+            type == TypeSymbols.UInt ||
+            type == TypeSymbols.ULong ||
+            type == TypeSymbols.NInt ||
+            type == TypeSymbols.NUInt ||
+            type == TypeSymbols.Float ||
+            type == TypeSymbols.Decimal ||
             type == TypeSymbols.Bool ||
             type == TypeSymbols.String)
         {
