@@ -1,0 +1,9 @@
+namespace Demo.MathKit;
+
+fn Add(x: int, y: int) -> int {
+    x + y;
+}
+
+fn Scale(x: double) -> double {
+    x * 2.0;
+}

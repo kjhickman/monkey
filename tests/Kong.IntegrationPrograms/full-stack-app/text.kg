@@ -1,0 +1,7 @@
+import System;
+
+namespace Demo.TextKit;
+
+fn Label(n: int) -> string {
+    System.String.Concat("n=", System.Convert.ToString(n));
+}

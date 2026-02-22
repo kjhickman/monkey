@@ -1,0 +1,10 @@
+namespace Demo.Arrays;
+
+fn Pick(matrix: int[][]) -> int {
+    let row: int[] = matrix[1];
+    row[0];
+}
+
+fn Word(words: string[]) -> string {
+    words[1];
+}

@@ -1,0 +1,46 @@
+import Demo.MathKit;
+import Demo.TextKit;
+import Demo.Arrays;
+import System;
+
+namespace Demo.App;
+
+fn Main() {
+    let total: int = Add(40, 2);
+    let scaled: double = Scale(1.5);
+    let matrix: int[][] = [[1, 2], [42, 99]];
+    let picked: int = Pick(matrix);
+    let words: string[] = ["hi", "kong"];
+    let word: string = Word(words);
+    let bytes: byte[] = [1b, 2b, 3b];
+    let b: byte = bytes[2];
+    let c: char = 'A';
+    let fromClr: double = System.Math.Sqrt(9);
+    let msg: string = Label(total);
+
+    if (picked == 42) {
+        if (word == "kong") {
+            if (b == 3b) {
+                if (c == 'A') {
+                    if (fromClr == 3.0) {
+                        if (scaled == 3.0) {
+                            System.Console.WriteLine(System.String.Concat(msg, ":ok"));
+                        } else {
+                            System.Console.WriteLine("bad-scale");
+                        }
+                    } else {
+                        System.Console.WriteLine("bad-clr");
+                    }
+                } else {
+                    System.Console.WriteLine("bad-char");
+                }
+            } else {
+                System.Console.WriteLine("bad-byte");
+            }
+        } else {
+            System.Console.WriteLine("bad-word");
+        }
+    } else {
+        System.Console.WriteLine("bad-pick");
+    }
+}
