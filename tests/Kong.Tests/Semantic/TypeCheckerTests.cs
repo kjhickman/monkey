@@ -22,6 +22,22 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestAllowsAssigningIntExpressionToLongVariable()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("let x: long = 6; x;");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var xLet = Assert.IsType<LetStatement>(unit.Statements[1]);
+        Assert.Equal(TypeSymbols.Long, result.VariableTypes[xLet]);
+
+        var xUse = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var xIdentifier = Assert.IsType<Identifier>(xUse.Expression);
+        Assert.Equal(TypeSymbols.Long, result.ExpressionTypes[xIdentifier]);
+    }
+
+    [Fact]
     public void TestTypedFunctionCall()
     {
         var input = "fn(x: int, y: int) -> int { return x + y; }(1, 2);";
@@ -279,6 +295,89 @@ public class TypeCheckerTests
         Assert.True(result.ExpressionTypes.TryGetValue(memberAccess, out var memberType));
         Assert.Equal(TypeSymbols.String, memberType);
         Assert.Equal("System.Environment.NewLine", result.ResolvedStaticValuePaths[memberAccess]);
+    }
+
+    [Fact]
+    public void TestTypeChecksStaticClrLongReturnType()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.BigMul(30000, 30000);");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.Equal(TypeSymbols.Long, result.ExpressionTypes[call]);
+        Assert.Equal("System.Math.BigMul", result.ResolvedStaticMethodPaths[call]);
+    }
+
+    [Fact]
+    public void TestTypeChecksStaticClrStringMethods()
+    {
+        var source = "import System; String.IsNullOrEmpty(\"\"); String.Concat(\"a\", \"b\"); String.Equals(\"x\", \"x\");";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var isNullOrEmptyStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var isNullOrEmptyCall = Assert.IsType<CallExpression>(isNullOrEmptyStatement.Expression);
+        Assert.Equal(TypeSymbols.Bool, result.ExpressionTypes[isNullOrEmptyCall]);
+        Assert.Equal("System.String.IsNullOrEmpty", result.ResolvedStaticMethodPaths[isNullOrEmptyCall]);
+
+        var concatStatement = Assert.IsType<ExpressionStatement>(unit.Statements[3]);
+        var concatCall = Assert.IsType<CallExpression>(concatStatement.Expression);
+        Assert.Equal(TypeSymbols.String, result.ExpressionTypes[concatCall]);
+        Assert.Equal("System.String.Concat", result.ResolvedStaticMethodPaths[concatCall]);
+
+        var equalsStatement = Assert.IsType<ExpressionStatement>(unit.Statements[4]);
+        var equalsCall = Assert.IsType<CallExpression>(equalsStatement.Expression);
+        Assert.Equal(TypeSymbols.Bool, result.ExpressionTypes[equalsCall]);
+        Assert.Equal("System.String.Equals", result.ResolvedStaticMethodPaths[equalsCall]);
+    }
+
+    [Fact]
+    public void TestTypeChecksAdditionalStaticClrMathMethods()
+    {
+        var source = "System.Math.Min(10, 3); System.Math.Max(10, 3);";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var minStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var minCall = Assert.IsType<CallExpression>(minStatement.Expression);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[minCall]);
+        Assert.Equal("System.Math.Min", result.ResolvedStaticMethodPaths[minCall]);
+
+        var maxStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var maxCall = Assert.IsType<CallExpression>(maxStatement.Expression);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[maxCall]);
+        Assert.Equal("System.Math.Max", result.ResolvedStaticMethodPaths[maxCall]);
+    }
+
+    [Fact]
+    public void TestTypeChecksStaticClrMathClampMethod()
+    {
+        var source = "System.Math.Clamp(-4, 0, 10);";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(statement.Expression);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[call]);
+        Assert.Equal("System.Math.Clamp", result.ResolvedStaticMethodPaths[call]);
+    }
+
+    [Fact]
+    public void TestReportsUnsupportedStaticClrMethodOverloadsWhenNoCompatibleSignatureExists()
+    {
+        var (_, _, result) = ParseResolveAndCheck("System.Math.DivRem(10, 3);");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
     }
 
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)

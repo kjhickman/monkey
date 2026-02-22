@@ -20,6 +20,11 @@ public class DefaultTypeMapper : ITypeMapper
     {
         if (kongType == TypeSymbols.Int)
         {
+            return module.TypeSystem.Int32;
+        }
+
+        if (kongType == TypeSymbols.Long)
+        {
             return module.TypeSystem.Int64;
         }
 
@@ -40,7 +45,7 @@ public class DefaultTypeMapper : ITypeMapper
 
         if (kongType is ArrayTypeSymbol { ElementType: IntTypeSymbol })
         {
-            return new ArrayType(module.TypeSystem.Int64);
+            return new ArrayType(module.TypeSystem.Int32);
         }
 
         if (kongType is FunctionTypeSymbol functionType)
@@ -66,6 +71,7 @@ public class DefaultTypeMapper : ITypeMapper
         }
 
         if (type == TypeSymbols.Int ||
+            type == TypeSymbols.Long ||
             type == TypeSymbols.Bool ||
             type == TypeSymbols.String)
         {

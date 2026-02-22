@@ -9,6 +9,7 @@ public class TypeAnnotationBinderTests
 {
     [Theory]
     [InlineData("int")]
+    [InlineData("long")]
     [InlineData("string")]
     [InlineData("bool")]
     [InlineData("void")]

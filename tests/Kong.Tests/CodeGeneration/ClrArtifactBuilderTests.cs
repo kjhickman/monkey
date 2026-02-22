@@ -292,6 +292,11 @@ public class ClrArtifactBuilderTests
             }
 
             var value = method.Invoke(null, null);
+            if (value is int int32)
+            {
+                return int32;
+            }
+
             if (value is long int64)
             {
                 return int64;

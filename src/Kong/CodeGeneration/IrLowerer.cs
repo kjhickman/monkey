@@ -519,15 +519,15 @@ public class IrLowerer
 
             case PrefixExpression { Operator: "-" } prefixExpression:
             {
-                if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || rightType != TypeSymbols.Int)
+                if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || !IsNumericType(rightType))
                 {
                     _result.Diagnostics.Report(prefixExpression.Span,
-                        "phase-4 IR lowerer supports unary '-' only for int",
+                        "phase-4 IR lowerer supports unary '-' only for int/long",
                         "IR001");
                     return null;
                 }
 
-                var zero = AllocateValue(TypeSymbols.Int);
+                var zero = AllocateValue(rightType);
                 _currentBlock.Instructions.Add(new IrConstInt(zero, 0));
 
                 var right = LowerExpression(prefixExpression.Right);
@@ -536,7 +536,7 @@ public class IrLowerer
                     return null;
                 }
 
-                var destination = AllocateValue(TypeSymbols.Int);
+                var destination = AllocateValue(rightType);
                 _currentBlock.Instructions.Add(new IrBinary(destination, IrBinaryOperator.Subtract, zero, right.Value));
                 return destination;
             }
@@ -581,26 +581,26 @@ public class IrLowerer
                     return null;
                 }
 
-                var areBothInt = leftType == TypeSymbols.Int && rightType == TypeSymbols.Int;
+                var areBothNumeric = IsNumericType(leftType) && TypeEquals(leftType, rightType);
                 var areSameType = TypeEquals(leftType, rightType);
-                var supportsEqualityType = leftType == TypeSymbols.Int || leftType == TypeSymbols.Bool || leftType == TypeSymbols.String;
+                var supportsEqualityType = IsNumericType(leftType) || leftType == TypeSymbols.Bool || leftType == TypeSymbols.String;
 
                 if (op is IrBinaryOperator.Add or IrBinaryOperator.Subtract or IrBinaryOperator.Multiply or IrBinaryOperator.Divide)
                 {
-                    if (!areBothInt)
+                    if (!areBothNumeric)
                     {
                         _result.Diagnostics.Report(infixExpression.Span,
-                            $"phase-6 IR lowerer supports arithmetic operators only for int, got '{leftType}' and '{rightType}'",
+                            $"phase-6 IR lowerer supports arithmetic operators only for matching int/long types, got '{leftType}' and '{rightType}'",
                             "IR001");
                         return null;
                     }
                 }
                 else if (op is IrBinaryOperator.LessThan or IrBinaryOperator.GreaterThan)
                 {
-                    if (!areBothInt)
+                    if (!areBothNumeric)
                     {
                         _result.Diagnostics.Report(infixExpression.Span,
-                            $"phase-6 IR lowerer supports comparison operators only for int, got '{leftType}' and '{rightType}'",
+                            $"phase-6 IR lowerer supports comparison operators only for matching int/long types, got '{leftType}' and '{rightType}'",
                             "IR001");
                         return null;
                     }
@@ -1205,6 +1205,7 @@ public class IrLowerer
         }
 
         return type == TypeSymbols.Int ||
+               type == TypeSymbols.Long ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
                type is ArrayTypeSymbol { ElementType: IntTypeSymbol } ||
@@ -1245,6 +1246,11 @@ public class IrLowerer
         }
 
         return left == right;
+    }
+
+    private static bool IsNumericType(TypeSymbol type)
+    {
+        return type == TypeSymbols.Int || type == TypeSymbols.Long;
     }
 
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)

@@ -21,13 +21,26 @@ public class TypeMapperTests
     }
 
     [Fact]
-    public void TryMapKongType_Int_MapsToInt64()
+    public void TryMapKongType_Int_MapsToInt32()
     {
         var module = CreateTestModule();
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
         var diagnostics = new DiagnosticBag();
 
         var mapped = mapper.TryMapKongType(TypeSymbols.Int, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.Equal(module.TypeSystem.Int32, mapped);
+    }
+
+    [Fact]
+    public void TryMapKongType_Long_MapsToInt64()
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+
+        var mapped = mapper.TryMapKongType(TypeSymbols.Long, module, diagnostics);
 
         Assert.NotNull(mapped);
         Assert.Equal(module.TypeSystem.Int64, mapped);
@@ -73,7 +86,7 @@ public class TypeMapperTests
     }
 
     [Fact]
-    public void TryMapKongType_IntArray_MapsToInt64Array()
+    public void TryMapKongType_IntArray_MapsToInt32Array()
     {
         var module = CreateTestModule();
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
@@ -85,7 +98,7 @@ public class TypeMapperTests
         Assert.NotNull(mapped);
         Assert.IsType<CecilArrayType>(mapped);
         var arrayType = (CecilArrayType)mapped;
-        Assert.Equal(module.TypeSystem.Int64, arrayType.ElementType);
+        Assert.Equal(module.TypeSystem.Int32, arrayType.ElementType);
     }
 
     [Fact]
@@ -102,6 +115,14 @@ public class TypeMapperTests
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
 
         Assert.True(mapper.IsTypeSupported(TypeSymbols.Bool));
+    }
+
+    [Fact]
+    public void IsTypeSupported_Long_ReturnsTrue()
+    {
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+
+        Assert.True(mapper.IsTypeSupported(TypeSymbols.Long));
     }
 
     [Fact]

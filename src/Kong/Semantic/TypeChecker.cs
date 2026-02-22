@@ -223,7 +223,7 @@ public class TypeChecker
     {
         var type = expression switch
         {
-            IntegerLiteral => TypeSymbols.Int,
+            IntegerLiteral integerLiteral => CheckIntegerLiteral(integerLiteral),
             StringLiteral => TypeSymbols.String,
             BooleanLiteral => TypeSymbols.Bool,
             Identifier identifier => CheckIdentifier(identifier),
@@ -267,6 +267,19 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
+    private TypeSymbol CheckIntegerLiteral(IntegerLiteral literal)
+    {
+        if (literal.Value is < int.MinValue or > int.MaxValue)
+        {
+            _result.Diagnostics.Report(literal.Span,
+                $"integer literal '{literal.Value}' is out of range for type 'int'",
+                "T121");
+            return TypeSymbols.Error;
+        }
+
+        return TypeSymbols.Int;
+    }
+
     private TypeSymbol CheckPrefixExpression(PrefixExpression expression)
     {
         var right = CheckExpression(expression.Right);
@@ -274,9 +287,9 @@ public class TypeChecker
         return expression.Operator switch
         {
             "!" when right == TypeSymbols.Bool => TypeSymbols.Bool,
-            "-" when right == TypeSymbols.Int => TypeSymbols.Int,
+            "-" when IsNumericType(right) => right,
             "!" => ReportPrefixTypeError(expression, right, "bool"),
-            "-" => ReportPrefixTypeError(expression, right, "int"),
+            "-" => ReportPrefixTypeError(expression, right, "numeric type"),
             _ => ReportUnknownOperator(expression, expression.Operator),
         };
     }
@@ -289,9 +302,9 @@ public class TypeChecker
         return expression.Operator switch
         {
             "+" or "-" or "*" or "/" =>
-                RequireBothInt(expression, left, right, returnType: TypeSymbols.Int),
+                RequireSameNumericType(expression, left, right),
             "<" or ">" =>
-                RequireBothInt(expression, left, right, returnType: TypeSymbols.Bool),
+                RequireComparableNumericTypes(expression, left, right),
             "==" or "!=" =>
                 RequireComparable(expression, left, right),
             _ => ReportUnknownOperator(expression, expression.Operator),
@@ -661,17 +674,34 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
-    private TypeSymbol RequireBothInt(InfixExpression expression, TypeSymbol left, TypeSymbol right, TypeSymbol returnType)
+    private TypeSymbol RequireSameNumericType(InfixExpression expression, TypeSymbol left, TypeSymbol right)
     {
-        if (left == TypeSymbols.Int && right == TypeSymbols.Int)
+        if (IsNumericType(left) && TypeEquals(left, right))
         {
-            return returnType;
+            return left;
         }
 
         if (left != TypeSymbols.Error && right != TypeSymbols.Error)
         {
             _result.Diagnostics.Report(expression.Span,
-                $"operator '{expression.Operator}' requires 'int' operands, got '{left}' and '{right}'",
+                $"operator '{expression.Operator}' requires matching numeric operands, got '{left}' and '{right}'",
+                "T103");
+        }
+
+        return TypeSymbols.Error;
+    }
+
+    private TypeSymbol RequireComparableNumericTypes(InfixExpression expression, TypeSymbol left, TypeSymbol right)
+    {
+        if (IsNumericType(left) && TypeEquals(left, right))
+        {
+            return TypeSymbols.Bool;
+        }
+
+        if (left != TypeSymbols.Error && right != TypeSymbols.Error)
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"operator '{expression.Operator}' requires matching numeric operands, got '{left}' and '{right}'",
                 "T103");
         }
 
@@ -715,6 +745,11 @@ public class TypeChecker
     private static bool IsAssignable(TypeSymbol source, TypeSymbol target)
     {
         if (source == TypeSymbols.Error || target == TypeSymbols.Error)
+        {
+            return true;
+        }
+
+        if (source == TypeSymbols.Int && target == TypeSymbols.Long)
         {
             return true;
         }
@@ -768,5 +803,10 @@ public class TypeChecker
         }
 
         return left == right;
+    }
+
+    private static bool IsNumericType(TypeSymbol type)
+    {
+        return type == TypeSymbols.Int || type == TypeSymbols.Long;
     }
 }

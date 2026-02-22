@@ -21,6 +21,17 @@ public sealed record IntTypeSymbol : TypeSymbol
     public override string Name => "int";
 }
 
+public sealed record LongTypeSymbol : TypeSymbol
+{
+    public static LongTypeSymbol Instance { get; } = new();
+
+    private LongTypeSymbol()
+    {
+    }
+
+    public override string Name => "long";
+}
+
 public sealed record StringTypeSymbol : TypeSymbol
 {
     public static StringTypeSymbol Instance { get; } = new();
@@ -89,6 +100,7 @@ public sealed record FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes
 public static class TypeSymbols
 {
     public static IntTypeSymbol Int { get; } = IntTypeSymbol.Instance;
+    public static LongTypeSymbol Long { get; } = LongTypeSymbol.Instance;
     public static StringTypeSymbol String { get; } = StringTypeSymbol.Instance;
     public static BoolTypeSymbol Bool { get; } = BoolTypeSymbol.Instance;
     public static VoidTypeSymbol Void { get; } = VoidTypeSymbol.Instance;
@@ -100,6 +112,7 @@ public static class TypeSymbols
         return name switch
         {
             "int" => Int,
+            "long" => Long,
             "string" => String,
             "bool" => Bool,
             "void" => Void,

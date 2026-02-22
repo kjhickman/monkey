@@ -8,6 +8,7 @@ public class TypeSymbolTests
     public void TestPrimitiveTypeSymbols()
     {
         Assert.Equal("int", TypeSymbols.Int.Name);
+        Assert.Equal("long", TypeSymbols.Long.Name);
         Assert.Equal("string", TypeSymbols.String.Name);
         Assert.Equal("bool", TypeSymbols.Bool.Name);
         Assert.Equal("void", TypeSymbols.Void.Name);
@@ -18,6 +19,7 @@ public class TypeSymbolTests
     public void TestPrimitiveTypeSymbolsAreSingletons()
     {
         Assert.Same(TypeSymbols.Int, TypeSymbols.TryGetPrimitive("int"));
+        Assert.Same(TypeSymbols.Long, TypeSymbols.TryGetPrimitive("long"));
         Assert.Same(TypeSymbols.String, TypeSymbols.TryGetPrimitive("string"));
         Assert.Same(TypeSymbols.Bool, TypeSymbols.TryGetPrimitive("bool"));
         Assert.Same(TypeSymbols.Void, TypeSymbols.TryGetPrimitive("void"));

@@ -542,6 +542,24 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsAdditionalStaticClrBclCalls()
+    {
+        var source = "fn Main() { let low: int = System.Math.Min(10, 3); let high: int = System.Math.Max(10, 3); let clamped: int = System.Math.Clamp(high, 0, 100); let label: string = System.String.Concat(\"v\", \"13\"); if (low == 3) { if (clamped == 10) { if (System.String.Equals(label, \"v13\")) { if (!System.String.IsNullOrEmpty(label)) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("1", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");

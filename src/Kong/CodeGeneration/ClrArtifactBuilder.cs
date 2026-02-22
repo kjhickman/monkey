@@ -302,9 +302,9 @@ public class ClrArtifactBuilder
         }
         else
         {
-            var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
+            var writeLineInt = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(int)])!);
             mainIl.Emit(OpCodes.Call, methodMap[program.EntryPoint.Name]);
-            mainIl.Emit(OpCodes.Call, writeLineLong);
+            mainIl.Emit(OpCodes.Call, writeLineInt);
             mainIl.Emit(OpCodes.Ldc_I4_0);
         }
 
@@ -410,7 +410,26 @@ public class ClrArtifactBuilder
                 switch (instruction)
                 {
                     case IrConstInt constInt:
-                        il.Emit(OpCodes.Ldc_I8, constInt.Value);
+                        if (!function.ValueTypes.TryGetValue(constInt.Destination, out var constType))
+                        {
+                            diagnostics.Report(Span.Empty, "phase-5 CLR backend missing type for integer constant", "IL001");
+                            return false;
+                        }
+
+                        if (constType == TypeSymbols.Int)
+                        {
+                            il.Emit(OpCodes.Ldc_I4, checked((int)constInt.Value));
+                        }
+                        else if (constType == TypeSymbols.Long)
+                        {
+                            il.Emit(OpCodes.Ldc_I8, constInt.Value);
+                        }
+                        else
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend invalid integer constant type '{constType}'", "IL001");
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Stloc, valueLocals[constInt.Destination]);
                         break;
 
@@ -730,13 +749,13 @@ public class ClrArtifactBuilder
 
                     case IrNewIntArray newArray:
                         il.Emit(OpCodes.Ldc_I4, newArray.Elements.Count);
-                        il.Emit(OpCodes.Newarr, module.TypeSystem.Int64);
+                        il.Emit(OpCodes.Newarr, module.TypeSystem.Int32);
                         for (var i = 0; i < newArray.Elements.Count; i++)
                         {
                             il.Emit(OpCodes.Dup);
                             il.Emit(OpCodes.Ldc_I4, i);
                             il.Emit(OpCodes.Ldloc, valueLocals[newArray.Elements[i]]);
-                            il.Emit(OpCodes.Stelem_I8);
+                            il.Emit(OpCodes.Stelem_I4);
                         }
 
                         il.Emit(OpCodes.Stloc, valueLocals[newArray.Destination]);
@@ -746,7 +765,7 @@ public class ClrArtifactBuilder
                         il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Array]);
                         il.Emit(OpCodes.Ldloc, valueLocals[intArrayIndex.Index]);
                         il.Emit(OpCodes.Conv_I4);
-                        il.Emit(OpCodes.Ldelem_I8);
+                        il.Emit(OpCodes.Ldelem_I4);
                         il.Emit(OpCodes.Stloc, valueLocals[intArrayIndex.Destination]);
                         break;
 
@@ -806,6 +825,11 @@ public class ClrArtifactBuilder
     {
         if (type == TypeSymbols.Int)
         {
+            return module.TypeSystem.Int32;
+        }
+
+        if (type == TypeSymbols.Long)
+        {
             return module.TypeSystem.Int64;
         }
 
@@ -826,7 +850,7 @@ public class ClrArtifactBuilder
 
         if (type is ArrayTypeSymbol { ElementType: IntTypeSymbol })
         {
-            return new Mono.Cecil.ArrayType(module.TypeSystem.Int64);
+            return new Mono.Cecil.ArrayType(module.TypeSystem.Int32);
         }
 
         if (type is FunctionTypeSymbol functionType)

@@ -32,7 +32,12 @@ public static class StaticClrMethodResolver
 
     public static bool IsKnownMethodPath(string methodPath)
     {
-        return TryGetMethodCandidates(methodPath, out var _, out var methods, out _) && methods.Count > 0;
+        if (!TryGetMethodCandidates(methodPath, out var _, out var methods, out _))
+        {
+            return false;
+        }
+
+        return methods.Any(IsSupportedMethodSignature);
     }
 
     public static bool IsKnownValuePath(string memberPath)
@@ -92,20 +97,27 @@ public static class StaticClrMethodResolver
             return false;
         }
 
-        if (matches.Count > 1)
+        var compatibleMatches = matches
+            .Where(m => TryMapClrFullNameToKongType(NormalizeTypeName(m.ReturnType.FullName), out _))
+            .ToList();
+
+        if (compatibleMatches.Count == 0)
+        {
+            var unsupportedReturn = matches[0].ReturnType.FullName;
+            error = StaticClrMethodResolutionError.UnsupportedReturnType;
+            errorMessage = $"static method '{methodPath}' returns unsupported CLR type '{unsupportedReturn}'";
+            return false;
+        }
+
+        if (compatibleMatches.Count > 1)
         {
             error = StaticClrMethodResolutionError.AmbiguousOverload;
             errorMessage = $"ambiguous static method call '{methodPath}' with argument types ({string.Join(", ", parameterTypes)})";
             return false;
         }
 
-        var selected = matches[0];
-        if (!TryMapClrFullNameToKongType(NormalizeTypeName(selected.ReturnType.FullName), out var returnType))
-        {
-            error = StaticClrMethodResolutionError.UnsupportedReturnType;
-            errorMessage = $"static method '{methodPath}' returns unsupported CLR type '{selected.ReturnType.FullName}'";
-            return false;
-        }
+        var selected = compatibleMatches[0];
+        _ = TryMapClrFullNameToKongType(NormalizeTypeName(selected.ReturnType.FullName), out var returnType);
 
         binding = new StaticClrMethodBinding(methodPath, parameterTypes.ToArray(), returnType, selected);
         return true;
@@ -262,11 +274,40 @@ public static class StaticClrMethodResolver
         return true;
     }
 
+    private static bool IsSupportedMethodSignature(MethodDefinition method)
+    {
+        if (!TryMapClrFullNameToKongType(NormalizeTypeName(method.ReturnType.FullName), out _))
+        {
+            return false;
+        }
+
+        foreach (var parameter in method.Parameters)
+        {
+            if (!TryMapClrFullNameToKongType(NormalizeTypeName(parameter.ParameterType.FullName), out var parameterType))
+            {
+                return false;
+            }
+
+            if (parameterType == TypeSymbols.Void)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool TryMapKongTypeToClrFullName(TypeSymbol type, out string clrTypeName)
     {
         clrTypeName = string.Empty;
 
         if (type == TypeSymbols.Int)
+        {
+            clrTypeName = "System.Int32";
+            return true;
+        }
+
+        if (type == TypeSymbols.Long)
         {
             clrTypeName = "System.Int64";
             return true;
@@ -300,6 +341,9 @@ public static class StaticClrMethodResolver
         switch (clrTypeName)
         {
             case "System.Int64":
+                type = TypeSymbols.Long;
+                return true;
+            case "System.Int32":
                 type = TypeSymbols.Int;
                 return true;
             case "System.Boolean":
