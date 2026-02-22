@@ -25,6 +25,8 @@ fn Main() {
     builder.Append("n=");
     builder.Append(System.Convert.ToString(total));
     let built: string = builder.ToString();
+    var parsed: bool = false;
+    let parseOk: bool = Boolean.TryParse("true", out parsed);
     checks = checks + 1;
 
     // Exercise logical operators with short-circuit-friendly shape.
@@ -36,6 +38,7 @@ fn Main() {
         c == 'A' &&
         fromClr == 3.0 &&
         scaled == 3.0 &&
+        parseOk && parsed &&
         checks == 1;
 
     if (ok || false) {

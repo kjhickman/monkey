@@ -843,7 +843,7 @@ public class Parser
         {
             Token = _curToken,
             Function = function,
-            Arguments = ParseExpressionList(TokenType.RightParenthesis),
+            Arguments = ParseCallArguments(),
             // Span from start of function expression to closing ')'
             Span = new Span(function.Span.Start, _curToken.Span.End)
         };
@@ -1016,6 +1016,76 @@ public class Parser
         }
 
         return list;
+    }
+
+    private List<CallArgument> ParseCallArguments()
+    {
+        var arguments = new List<CallArgument>();
+
+        if (PeekTokenIs(TokenType.RightParenthesis))
+        {
+            NextToken();
+            return arguments;
+        }
+
+        NextToken();
+        var first = ParseCallArgument();
+        if (first == null)
+        {
+            return null!;
+        }
+
+        arguments.Add(first);
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            NextToken();
+            var argument = ParseCallArgument();
+            if (argument == null)
+            {
+                return null!;
+            }
+
+            arguments.Add(argument);
+        }
+
+        if (!ExpectPeek(TokenType.RightParenthesis))
+        {
+            return null!;
+        }
+
+        return arguments;
+    }
+
+    private CallArgument? ParseCallArgument()
+    {
+        var modifier = CallArgumentModifier.None;
+        var token = _curToken;
+        if (CurTokenIs(TokenType.Out))
+        {
+            modifier = CallArgumentModifier.Out;
+            NextToken();
+        }
+        else if (CurTokenIs(TokenType.Ref))
+        {
+            modifier = CallArgumentModifier.Ref;
+            NextToken();
+        }
+
+        var expression = ParseExpression(Precedence.Lowest);
+        if (expression == null)
+        {
+            return null;
+        }
+
+        return new CallArgument
+        {
+            Token = token,
+            Modifier = modifier,
+            Expression = expression,
+            Span = expression.Span,
+        };
     }
 
     private IExpression ParseIndexExpression(IExpression left)

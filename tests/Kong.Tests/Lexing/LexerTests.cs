@@ -534,4 +534,32 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesOutAndRefKeywords()
+    {
+        var input = "Foo(out x, ref y);";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Identifier, "Foo"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.Out, "out"),
+            (TokenType.Identifier, "x"),
+            (TokenType.Comma, ","),
+            (TokenType.Ref, "ref"),
+            (TokenType.Identifier, "y"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

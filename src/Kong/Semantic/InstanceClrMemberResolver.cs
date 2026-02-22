@@ -28,6 +28,18 @@ public static class InstanceClrMemberResolver
         out StaticClrMethodResolutionError error,
         out string errorMessage)
     {
+        var arguments = parameterTypes.Select(t => new ClrCallArgument(t, Kong.Parsing.CallArgumentModifier.None)).ToArray();
+        return TryResolveMethod(receiverType, memberName, arguments, out binding, out error, out errorMessage);
+    }
+
+    public static bool TryResolveMethod(
+        TypeSymbol receiverType,
+        string memberName,
+        IReadOnlyList<ClrCallArgument> arguments,
+        out InstanceClrMethodBinding binding,
+        out StaticClrMethodResolutionError error,
+        out string errorMessage)
+    {
         binding = null!;
         error = StaticClrMethodResolutionError.None;
         errorMessage = string.Empty;
@@ -53,12 +65,12 @@ public static class InstanceClrMemberResolver
             return false;
         }
 
-        foreach (var parameterType in parameterTypes)
+        foreach (var argument in arguments)
         {
-            if (!TryMapKongTypeToClrFullName(parameterType, out _))
+            if (!TryMapKongTypeToClrFullName(argument.Type, out _))
             {
                 error = StaticClrMethodResolutionError.UnsupportedParameterType;
-                errorMessage = $"instance calls do not support Kong type '{parameterType}' in parameter list";
+                errorMessage = $"instance calls do not support Kong type '{argument.Type}' in parameter list";
                 return false;
             }
         }
@@ -77,7 +89,7 @@ public static class InstanceClrMemberResolver
         var scoredMatches = new List<(MethodDefinition Method, int Score)>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (TryGetParameterMatchScore(candidate, parameterTypes, out var score))
+            if (TryGetParameterMatchScore(candidate, arguments, out var score))
             {
                 scoredMatches.Add((candidate, score));
             }
@@ -86,7 +98,7 @@ public static class InstanceClrMemberResolver
         if (scoredMatches.Count == 0)
         {
             error = StaticClrMethodResolutionError.NoMatchingOverload;
-            errorMessage = $"no matching overload for instance method '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", parameterTypes)})";
+            errorMessage = $"no matching overload for instance method '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", arguments.Select(a => a.Type))})";
             return false;
         }
 
@@ -110,14 +122,14 @@ public static class InstanceClrMemberResolver
         if (compatibleMatches.Count > 1)
         {
             error = StaticClrMethodResolutionError.AmbiguousOverload;
-            errorMessage = $"ambiguous instance method call '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", parameterTypes)})";
+            errorMessage = $"ambiguous instance method call '{memberName}' on '{receiverType}' with argument types ({string.Join(", ", arguments.Select(a => a.Type))})";
             return false;
         }
 
         var selected = compatibleMatches[0];
         _ = TryMapClrTypeReferenceToKongType(selected.ReturnType, out var returnType);
 
-        binding = new InstanceClrMethodBinding(receiverType, memberName, parameterTypes.ToArray(), returnType, selected);
+        binding = new InstanceClrMethodBinding(receiverType, memberName, arguments.Select(a => a.Type).ToArray(), returnType, selected);
         return true;
     }
 
@@ -202,7 +214,7 @@ public static class InstanceClrMemberResolver
         return true;
     }
 
-    private static bool TryGetParameterMatchScore(MethodDefinition method, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
+    private static bool TryGetParameterMatchScore(MethodDefinition method, IReadOnlyList<ClrCallArgument> arguments, out int score)
     {
         score = 0;
 
@@ -219,27 +231,27 @@ public static class InstanceClrMemberResolver
             }
         }
 
-        if (argumentTypes.Count < requiredFixedCount)
+        if (arguments.Count < requiredFixedCount)
         {
             return false;
         }
 
-        if (!hasParamsArray && argumentTypes.Count > parameters.Count)
+        if (!hasParamsArray && arguments.Count > parameters.Count)
         {
             return false;
         }
 
         var bestScore = int.MaxValue;
 
-        if (argumentTypes.Count <= parameters.Count &&
-            TryScoreDirectOrOptionalCall(parameters, argumentTypes, out var directScore))
+        if (arguments.Count <= parameters.Count &&
+            TryScoreDirectOrOptionalCall(parameters, arguments, out var directScore))
         {
             bestScore = directScore;
         }
 
         if (hasParamsArray && paramsElementType != TypeSymbols.Error &&
-            argumentTypes.Count >= fixedParameterCount &&
-            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, argumentTypes, out var expandedScore))
+            arguments.Count >= fixedParameterCount &&
+            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, arguments, out var expandedScore))
         {
             if (expandedScore < bestScore)
             {
@@ -256,24 +268,29 @@ public static class InstanceClrMemberResolver
         return true;
     }
 
-    private static bool TryScoreDirectOrOptionalCall(IList<ParameterDefinition> parameters, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
+    private static bool TryScoreDirectOrOptionalCall(IList<ParameterDefinition> parameters, IReadOnlyList<ClrCallArgument> arguments, out int score)
     {
         score = 0;
 
-        if (argumentTypes.Count > parameters.Count)
+        if (arguments.Count > parameters.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < argumentTypes.Count; i++)
+        for (var i = 0; i < arguments.Count; i++)
         {
-            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
+            if (!TryGetParameterTypeAndModifier(parameters[i], out var parameterType, out var expectedModifier) ||
                 parameterType == TypeSymbols.Void)
             {
                 return false;
             }
 
-            if (!TryGetConversionScore(argumentTypes[i], parameterType, out var conversionScore))
+            if (expectedModifier != arguments[i].Modifier)
+            {
+                return false;
+            }
+
+            if (!TryGetConversionScore(arguments[i].Type, parameterType, out var conversionScore))
             {
                 return false;
             }
@@ -281,7 +298,7 @@ public static class InstanceClrMemberResolver
             score += conversionScore;
         }
 
-        for (var i = argumentTypes.Count; i < parameters.Count; i++)
+        for (var i = arguments.Count; i < parameters.Count; i++)
         {
             if (!IsOptionalParameter(parameters[i]))
             {
@@ -298,14 +315,14 @@ public static class InstanceClrMemberResolver
         IList<ParameterDefinition> parameters,
         int fixedParameterCount,
         TypeSymbol paramsElementType,
-        IReadOnlyList<TypeSymbol> argumentTypes,
+        IReadOnlyList<ClrCallArgument> arguments,
         out int score)
     {
         score = 0;
 
         for (var i = 0; i < fixedParameterCount; i++)
         {
-            if (i >= argumentTypes.Count)
+            if (i >= arguments.Count)
             {
                 if (!IsOptionalParameter(parameters[i]))
                 {
@@ -316,13 +333,18 @@ public static class InstanceClrMemberResolver
                 continue;
             }
 
-            if (!TryMapClrTypeReferenceToKongType(parameters[i].ParameterType, out var parameterType) ||
+            if (!TryGetParameterTypeAndModifier(parameters[i], out var parameterType, out var expectedModifier) ||
                 parameterType == TypeSymbols.Void)
             {
                 return false;
             }
 
-            if (!TryGetConversionScore(argumentTypes[i], parameterType, out var conversionScore))
+            if (expectedModifier != arguments[i].Modifier)
+            {
+                return false;
+            }
+
+            if (!TryGetConversionScore(arguments[i].Type, parameterType, out var conversionScore))
             {
                 return false;
             }
@@ -330,9 +352,14 @@ public static class InstanceClrMemberResolver
             score += conversionScore;
         }
 
-        for (var i = fixedParameterCount; i < argumentTypes.Count; i++)
+        for (var i = fixedParameterCount; i < arguments.Count; i++)
         {
-            if (!TryGetConversionScore(argumentTypes[i], paramsElementType, out var conversionScore))
+            if (arguments[i].Modifier != Kong.Parsing.CallArgumentModifier.None)
+            {
+                return false;
+            }
+
+            if (!TryGetConversionScore(arguments[i].Type, paramsElementType, out var conversionScore))
             {
                 return false;
             }
@@ -504,6 +531,11 @@ public static class InstanceClrMemberResolver
             return TryMapClrTypeDefinitionToKongType(typeDefinition, out type);
         }
 
+        if (clrType is ByReferenceType byReferenceType)
+        {
+            return TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, out type);
+        }
+
         if (clrType is ArrayType arrayType)
         {
             if (!TryMapClrTypeReferenceToKongType(arrayType.ElementType, out var elementType))
@@ -562,6 +594,26 @@ public static class InstanceClrMemberResolver
     private static bool IsOptionalParameter(ParameterDefinition parameter)
     {
         return parameter.IsOptional || parameter.HasDefault;
+    }
+
+    private static bool TryGetParameterTypeAndModifier(
+        ParameterDefinition parameter,
+        out TypeSymbol parameterType,
+        out Kong.Parsing.CallArgumentModifier modifier)
+    {
+        modifier = Kong.Parsing.CallArgumentModifier.None;
+        if (parameter.ParameterType is ByReferenceType byReferenceType)
+        {
+            if (!TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, out parameterType))
+            {
+                return false;
+            }
+
+            modifier = parameter.IsOut ? Kong.Parsing.CallArgumentModifier.Out : Kong.Parsing.CallArgumentModifier.Ref;
+            return true;
+        }
+
+        return TryMapClrTypeReferenceToKongType(parameter.ParameterType, out parameterType);
     }
 
     private static bool TryMapClrFullNameToKongType(string clrTypeName, out TypeSymbol type)

@@ -127,7 +127,7 @@ public static class ProgramValidator
                 ReportUnsupportedIfWithoutElse(callExpression.Function, diagnostics);
                 foreach (var argument in callExpression.Arguments)
                 {
-                    ReportUnsupportedIfWithoutElse(argument, diagnostics);
+                    ReportUnsupportedIfWithoutElse(argument.Expression, diagnostics);
                 }
                 break;
             case ArrayLiteral arrayLiteral:

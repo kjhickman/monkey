@@ -471,18 +471,26 @@ public class TypeChecker
 
     private TypeSymbol CheckCallExpression(CallExpression expression)
     {
-        var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
+        var clrArguments = BuildClrCallArguments(expression);
+        var argumentTypes = clrArguments.Select(a => a.Type).ToList();
 
         if (expression.Function is MemberAccessExpression memberAccessExpression &&
-            TryCheckInstanceMethodCall(expression, memberAccessExpression, argumentTypes, out var instanceReturnType))
+            TryCheckInstanceMethodCall(expression, memberAccessExpression, clrArguments, out var instanceReturnType))
         {
             return instanceReturnType;
         }
 
         if (expression.Function is MemberAccessExpression memberAccessExpression2 &&
-            TryCheckStaticMethodCall(expression, memberAccessExpression2, argumentTypes, out var staticReturnType))
+            TryCheckStaticMethodCall(expression, memberAccessExpression2, clrArguments, out var staticReturnType))
         {
             return staticReturnType;
+        }
+
+        if (expression.Arguments.Any(a => a.Modifier != CallArgumentModifier.None))
+        {
+            _result.Diagnostics.Report(expression.Span,
+                "out/ref modifiers are supported only for CLR interop method calls",
+                "T122");
         }
 
         var functionType = CheckExpression(expression.Function);
@@ -610,7 +618,7 @@ public class TypeChecker
     private bool TryCheckInstanceMethodCall(
         CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
-        IReadOnlyList<TypeSymbol> argumentTypes,
+        IReadOnlyList<ClrCallArgument> arguments,
         out TypeSymbol returnType)
     {
         returnType = TypeSymbols.Error;
@@ -629,7 +637,7 @@ public class TypeChecker
         if (!InstanceClrMemberResolver.TryResolveMethod(
                 receiverType,
                 memberAccessExpression.Member,
-                argumentTypes,
+                arguments,
                 out var binding,
                 out var resolutionError,
                 out var resolutionMessage))
@@ -647,7 +655,7 @@ public class TypeChecker
     private bool TryCheckStaticMethodCall(
         CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
-        IReadOnlyList<TypeSymbol> argumentTypes,
+        IReadOnlyList<ClrCallArgument> arguments,
         out TypeSymbol returnType)
     {
         returnType = TypeSymbols.Error;
@@ -669,7 +677,7 @@ public class TypeChecker
 
         if (!StaticClrMethodResolver.TryResolve(
                 resolvedMethodPath,
-                argumentTypes,
+                arguments,
                 out var binding,
                 out var resolutionError,
                 out var resolutionMessage))
@@ -683,6 +691,47 @@ public class TypeChecker
         returnType = binding.ReturnType;
 
         return true;
+    }
+
+    private List<ClrCallArgument> BuildClrCallArguments(CallExpression expression)
+    {
+        var arguments = new List<ClrCallArgument>(expression.Arguments.Count);
+        foreach (var argument in expression.Arguments)
+        {
+            var type = CheckExpression(argument.Expression);
+
+            if (argument.Modifier is CallArgumentModifier.Out or CallArgumentModifier.Ref)
+            {
+                ValidateByRefArgument(argument);
+            }
+
+            arguments.Add(new ClrCallArgument(type, argument.Modifier));
+        }
+
+        return arguments;
+    }
+
+    private void ValidateByRefArgument(CallArgument argument)
+    {
+        if (argument.Expression is not Identifier identifier)
+        {
+            _result.Diagnostics.Report(argument.Span,
+                "out/ref arguments must be identifier variables",
+                "T122");
+            return;
+        }
+
+        if (!_names.IdentifierSymbols.TryGetValue(identifier, out var symbol))
+        {
+            return;
+        }
+
+        if (!_names.MutableSymbols.Contains(symbol))
+        {
+            _result.Diagnostics.Report(argument.Span,
+                $"out/ref argument '{identifier.Value}' must be declared with 'var'",
+                "T123");
+        }
     }
 
     private static bool TryGetQualifiedMemberPath(MemberAccessExpression expression, out string methodPath)

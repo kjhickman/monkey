@@ -581,6 +581,25 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
     }
 
+    [Fact]
+    public void TestTypeChecksStaticClrOutArgumentCall()
+    {
+        var source = "import System; var value: bool = false; let ok: bool = Boolean.TryParse(\"true\", out value);";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestRejectsOutArgumentOnImmutableLet()
+    {
+        var (_, _, result) = ParseResolveAndCheck("import System; let value: bool = false; Boolean.TryParse(\"true\", out value);");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

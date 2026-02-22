@@ -347,7 +347,7 @@ public static class Compilation
                 ValidateExpression(callExpression.Function, filePath, diagnostics);
                 foreach (var argument in callExpression.Arguments)
                 {
-                    ValidateExpression(argument, filePath, diagnostics);
+                    ValidateExpression(argument.Expression, filePath, diagnostics);
                 }
 
                 break;
@@ -364,6 +364,12 @@ public static class Compilation
             case IndexExpression indexExpression:
                 ValidateExpression(indexExpression.Left, filePath, diagnostics);
                 ValidateExpression(indexExpression.Index, filePath, diagnostics);
+                break;
+            case NewExpression newExpression:
+                foreach (var argument in newExpression.Arguments)
+                {
+                    ValidateExpression(argument, filePath, diagnostics);
+                }
                 break;
         }
     }

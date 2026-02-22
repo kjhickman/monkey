@@ -1,4 +1,5 @@
 using Kong.Common;
+using Kong.Parsing;
 using Kong.Semantic;
 
 namespace Kong.CodeGeneration;
@@ -78,28 +79,36 @@ public sealed record IrCallVoid(string FunctionName, IReadOnlyList<IrValueId> Ar
 public sealed record IrStaticCall(
     IrValueId Destination,
     string MethodPath,
-    IReadOnlyList<IrValueId> Arguments,
-    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+    IReadOnlyList<IrValueId?> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes,
+    IReadOnlyList<CallArgumentModifier> ArgumentModifiers,
+    IReadOnlyList<IrLocalId?> ByRefLocals) : IrInstruction;
 
 public sealed record IrStaticCallVoid(
     string MethodPath,
-    IReadOnlyList<IrValueId> Arguments,
-    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+    IReadOnlyList<IrValueId?> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes,
+    IReadOnlyList<CallArgumentModifier> ArgumentModifiers,
+    IReadOnlyList<IrLocalId?> ByRefLocals) : IrInstruction;
 
 public sealed record IrInstanceCall(
     IrValueId Destination,
     IrValueId Receiver,
     TypeSymbol ReceiverType,
     string MemberName,
-    IReadOnlyList<IrValueId> Arguments,
-    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+    IReadOnlyList<IrValueId?> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes,
+    IReadOnlyList<CallArgumentModifier> ArgumentModifiers,
+    IReadOnlyList<IrLocalId?> ByRefLocals) : IrInstruction;
 
 public sealed record IrInstanceCallVoid(
     IrValueId Receiver,
     TypeSymbol ReceiverType,
     string MemberName,
-    IReadOnlyList<IrValueId> Arguments,
-    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+    IReadOnlyList<IrValueId?> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes,
+    IReadOnlyList<CallArgumentModifier> ArgumentModifiers,
+    IReadOnlyList<IrLocalId?> ByRefLocals) : IrInstruction;
 
 public sealed record IrStaticValueGet(
     IrValueId Destination,

@@ -407,12 +407,39 @@ public class FunctionType : ITypeNode
     }
 }
 
+public enum CallArgumentModifier
+{
+    None,
+    Out,
+    Ref,
+}
+
+public class CallArgument : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+    public CallArgumentModifier Modifier { get; set; }
+    public IExpression Expression { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return Modifier switch
+        {
+            CallArgumentModifier.Out => $"out {Expression.String()}",
+            CallArgumentModifier.Ref => $"ref {Expression.String()}",
+            _ => Expression.String(),
+        };
+    }
+}
+
 public class CallExpression : IExpression
 {
     public Span Span { get; set; }
     public Token Token { get; set; } // The '(' token
     public IExpression Function { get; set; } = null!; // Identifier or FunctionLiteral
-    public List<IExpression> Arguments { get; set; } = [];
+    public List<CallArgument> Arguments { get; set; } = [];
 
     public string TokenLiteral() => Token.Literal;
 

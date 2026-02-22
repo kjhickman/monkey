@@ -294,6 +294,22 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersStaticClrOutArgumentCall()
+    {
+        var source = "import System; var value: bool = false; Boolean.TryParse(\"true\", out value); 1;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var call = Assert.IsType<IrStaticCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrStaticCall));
+        Assert.Equal(CallArgumentModifier.Out, call.ArgumentModifiers[1]);
+        Assert.NotNull(call.ByRefLocals[1]);
+    }
+
+    [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
         var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";

@@ -263,6 +263,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrOutArgumentCall()
+    {
+        var source = "import System; var value: bool = false; let ok: bool = Boolean.TryParse(\"true\", out value); if (ok && value) { 1; } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

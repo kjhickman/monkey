@@ -464,9 +464,9 @@ public class ParserTests
 
         Assert.Equal(3, exp.Arguments.Count);
 
-        TestLiteralExpression(exp.Arguments[0], 1L);
-        TestInfixExpression(exp.Arguments[1], 2L, "*", 3L);
-        TestInfixExpression(exp.Arguments[2], 4L, "+", 5L);
+        TestLiteralExpression(exp.Arguments[0].Expression, 1L);
+        TestInfixExpression(exp.Arguments[1].Expression, 2L, "*", 3L);
+        TestInfixExpression(exp.Arguments[2].Expression, 4L, "+", 5L);
     }
 
     [Theory]
@@ -1010,7 +1010,7 @@ public class ParserTests
         var function = Assert.IsType<MemberAccessExpression>(call.Function);
         Assert.Equal("WriteLine", function.Member);
         Assert.Single(call.Arguments);
-        Assert.IsType<IntegerLiteral>(call.Arguments[0]);
+        Assert.IsType<IntegerLiteral>(call.Arguments[0].Expression);
     }
 
     [Fact]
@@ -1058,6 +1058,23 @@ public class ParserTests
         var infix = Assert.IsType<InfixExpression>(assignment.Value);
         TestIdentifier(infix.Left, "x");
         TestIntegerLiteral(infix.Right, 1);
+    }
+
+    [Fact]
+    public void TestParsesCallArgumentModifiers()
+    {
+        var input = "Foo(out x, ref y, z);";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var call = Assert.IsType<CallExpression>(statement.Expression);
+        Assert.Equal(3, call.Arguments.Count);
+        Assert.Equal(CallArgumentModifier.Out, call.Arguments[0].Modifier);
+        Assert.Equal(CallArgumentModifier.Ref, call.Arguments[1].Modifier);
+        Assert.Equal(CallArgumentModifier.None, call.Arguments[2].Modifier);
     }
 
     [Fact]

@@ -343,7 +343,7 @@ public class NameResolver
                 ResolveExpression(callExpression.Function);
                 foreach (var argument in callExpression.Arguments)
                 {
-                    ResolveExpression(argument);
+                    ResolveExpression(argument.Expression);
                 }
                 break;
             case MemberAccessExpression memberAccessExpression:

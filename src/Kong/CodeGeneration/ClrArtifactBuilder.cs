@@ -568,7 +568,7 @@ public class ClrArtifactBuilder
 
                         if (!StaticClrMethodResolver.TryResolve(
                                 staticCall.MethodPath,
-                                staticCall.ArgumentTypes,
+                                BuildClrArguments(staticCall.ArgumentTypes, staticCall.ArgumentModifiers),
                                 out var binding,
                                 out _,
                                 out var resolveError))
@@ -585,7 +585,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, staticCall.Arguments, staticCall.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCall.Arguments, staticCall.ArgumentTypes, staticCall.ArgumentModifiers, staticCall.ByRefLocals, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
@@ -615,7 +615,7 @@ public class ClrArtifactBuilder
                     {
                         if (!StaticClrMethodResolver.TryResolve(
                                 staticCallVoid.MethodPath,
-                                staticCallVoid.ArgumentTypes,
+                                BuildClrArguments(staticCallVoid.ArgumentTypes, staticCallVoid.ArgumentModifiers),
                                 out var binding,
                                 out _,
                                 out var resolveError))
@@ -632,7 +632,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, staticCallVoid.Arguments, staticCallVoid.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCallVoid.Arguments, staticCallVoid.ArgumentTypes, staticCallVoid.ArgumentModifiers, staticCallVoid.ByRefLocals, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
@@ -653,7 +653,7 @@ public class ClrArtifactBuilder
                         if (!InstanceClrMemberResolver.TryResolveMethod(
                                 instanceCall.ReceiverType,
                                 instanceCall.MemberName,
-                                instanceCall.ArgumentTypes,
+                                BuildClrArguments(instanceCall.ArgumentTypes, instanceCall.ArgumentModifiers),
                                 out var binding,
                                 out _,
                                 out var resolveMessage))
@@ -671,7 +671,7 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Ldloc, valueLocals[instanceCall.Receiver]);
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, instanceCall.Arguments, instanceCall.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCall.Arguments, instanceCall.ArgumentTypes, instanceCall.ArgumentModifiers, instanceCall.ByRefLocals, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
@@ -687,7 +687,7 @@ public class ClrArtifactBuilder
                         if (!InstanceClrMemberResolver.TryResolveMethod(
                                 instanceCallVoid.ReceiverType,
                                 instanceCallVoid.MemberName,
-                                instanceCallVoid.ArgumentTypes,
+                                BuildClrArguments(instanceCallVoid.ArgumentTypes, instanceCallVoid.ArgumentModifiers),
                                 out var binding,
                                 out _,
                                 out var resolveMessage))
@@ -705,7 +705,7 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Ldloc, valueLocals[instanceCallVoid.Receiver]);
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, instanceCallVoid.Arguments, instanceCallVoid.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCallVoid.Arguments, instanceCallVoid.ArgumentTypes, instanceCallVoid.ArgumentModifiers, instanceCallVoid.ByRefLocals, binding.MethodDefinition, diagnostics))
                         {
                             return false;
                         }
@@ -940,7 +940,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, newObject.Arguments, newObject.ArgumentTypes, binding.Constructor, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, newObject.Arguments.Select(a => (IrValueId?)a).ToArray(), newObject.ArgumentTypes, BuildNoModifiers(newObject.ArgumentTypes.Count), BuildNoByRefLocals(newObject.ArgumentTypes.Count), binding.Constructor, diagnostics))
                         {
                             return false;
                         }
@@ -1355,12 +1355,39 @@ public class ClrArtifactBuilder
         return module.ImportReference(binding.MethodDefinition);
     }
 
+    private static IReadOnlyList<ClrCallArgument> BuildClrArguments(
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        IReadOnlyList<CallArgumentModifier> argumentModifiers)
+    {
+        var arguments = new ClrCallArgument[argumentTypes.Count];
+        for (var i = 0; i < argumentTypes.Count; i++)
+        {
+            arguments[i] = new ClrCallArgument(argumentTypes[i], argumentModifiers[i]);
+        }
+
+        return arguments;
+    }
+
+    private static IReadOnlyList<CallArgumentModifier> BuildNoModifiers(int count)
+    {
+        return Enumerable.Repeat(CallArgumentModifier.None, count).ToArray();
+    }
+
+    private static IReadOnlyList<IrLocalId?> BuildNoByRefLocals(int count)
+    {
+        return Enumerable.Repeat<IrLocalId?>(null, count).ToArray();
+    }
+
     private static bool EmitResolvedStaticCallArguments(
         ModuleDefinition module,
         ILProcessor il,
         IReadOnlyDictionary<IrValueId, VariableDefinition> valueLocals,
-        IReadOnlyList<IrValueId> arguments,
+        IReadOnlyDictionary<IrLocalId, VariableDefinition> localVariables,
+        IReadOnlyDictionary<IrLocalId, int> parameterLocalIndexes,
+        IReadOnlyList<IrValueId?> arguments,
         IReadOnlyList<TypeSymbol> argumentTypes,
+        IReadOnlyList<CallArgumentModifier> argumentModifiers,
+        IReadOnlyList<IrLocalId?> byRefLocals,
         MethodDefinition method,
         DiagnosticBag diagnostics)
     {
@@ -1385,7 +1412,10 @@ public class ClrArtifactBuilder
                     return false;
                 }
 
-                EmitArgumentWithConversion(il, valueLocals[arguments[i]], argumentTypes[i], parameterType);
+                if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics))
+                {
+                    return false;
+                }
             }
 
             for (var i = arguments.Count; i < parameters.Count; i++)
@@ -1414,7 +1444,10 @@ public class ClrArtifactBuilder
                 return false;
             }
 
-            EmitArgumentWithConversion(il, valueLocals[arguments[i]], argumentTypes[i], parameterType);
+            if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics))
+            {
+                return false;
+            }
         }
 
         if (parameters[^1].ParameterType is not Mono.Cecil.ArrayType paramsArrayType)
@@ -1429,10 +1462,16 @@ public class ClrArtifactBuilder
             return false;
         }
 
-        var hasExplicitArrayArgument = arguments.Count == parameters.Count && argumentTypes[^1] is ArrayTypeSymbol providedArray && TypeEquals(providedArray.ElementType, paramsElementType);
+        var hasExplicitArrayArgument = arguments.Count == parameters.Count && argumentTypes[^1] is ArrayTypeSymbol providedArray && TypeEquals(providedArray.ElementType, paramsElementType) && argumentModifiers[^1] == CallArgumentModifier.None;
         if (hasExplicitArrayArgument)
         {
-            EmitArgumentWithConversion(il, valueLocals[arguments[^1]], argumentTypes[^1], new ArrayTypeSymbol(paramsElementType));
+            if (arguments[^1] == null)
+            {
+                diagnostics.Report(Span.Empty, "phase-5 CLR backend params array argument requires value", "IL001");
+                return false;
+            }
+
+            EmitArgumentWithConversion(il, valueLocals[arguments[^1]!.Value], argumentTypes[^1], new ArrayTypeSymbol(paramsElementType));
             return true;
         }
 
@@ -1442,12 +1481,75 @@ public class ClrArtifactBuilder
 
         for (var i = 0; i < paramsCount; i++)
         {
+            if (argumentModifiers[fixedCount + i] != CallArgumentModifier.None || arguments[fixedCount + i] == null)
+            {
+                diagnostics.Report(Span.Empty, "phase-5 CLR backend does not support out/ref modifiers in params arguments", "IL001");
+                return false;
+            }
+
             il.Emit(OpCodes.Dup);
             il.Emit(OpCodes.Ldc_I4, i);
-            EmitArgumentWithConversion(il, valueLocals[arguments[fixedCount + i]], argumentTypes[fixedCount + i], paramsElementType);
+            EmitArgumentWithConversion(il, valueLocals[arguments[fixedCount + i]!.Value], argumentTypes[fixedCount + i], paramsElementType);
             EmitStoreElement(il, paramsElementType);
         }
 
+        return true;
+    }
+
+    private static bool EmitCallArgument(
+        ModuleDefinition module,
+        ILProcessor il,
+        IReadOnlyDictionary<IrValueId, VariableDefinition> valueLocals,
+        IReadOnlyDictionary<IrLocalId, VariableDefinition> localVariables,
+        IReadOnlyDictionary<IrLocalId, int> parameterLocalIndexes,
+        MethodDefinition currentMethod,
+        int argumentIndex,
+        IrValueId? argumentValue,
+        TypeSymbol argumentType,
+        CallArgumentModifier argumentModifier,
+        IrLocalId? byRefLocal,
+        TypeSymbol parameterType,
+        ParameterDefinition targetParameter,
+        DiagnosticBag diagnostics)
+    {
+        if (targetParameter.ParameterType is ByReferenceType)
+        {
+            var expectedModifier = targetParameter.IsOut ? CallArgumentModifier.Out : CallArgumentModifier.Ref;
+            if (argumentModifier != expectedModifier || byRefLocal == null)
+            {
+                diagnostics.Report(Span.Empty,
+                    $"phase-5 CLR backend byref argument {argumentIndex + 1} modifier mismatch",
+                    "IL001");
+                return false;
+            }
+
+            if (localVariables.TryGetValue(byRefLocal.Value, out var localVariable))
+            {
+                il.Emit(OpCodes.Ldloca, localVariable);
+                return true;
+            }
+
+            if (parameterLocalIndexes.TryGetValue(byRefLocal.Value, out var parameterIndex))
+            {
+                il.Emit(OpCodes.Ldarga, currentMethod.Parameters[parameterIndex]);
+                return true;
+            }
+
+            diagnostics.Report(Span.Empty,
+                $"phase-5 CLR backend could not resolve byref local for argument {argumentIndex + 1}",
+                "IL001");
+            return false;
+        }
+
+        if (argumentModifier != CallArgumentModifier.None || argumentValue == null)
+        {
+            diagnostics.Report(Span.Empty,
+                $"phase-5 CLR backend invalid non-byref argument at position {argumentIndex + 1}",
+                "IL001");
+            return false;
+        }
+
+        EmitArgumentWithConversion(il, valueLocals[argumentValue.Value], argumentType, parameterType);
         return true;
     }
 
@@ -1671,6 +1773,11 @@ public class ClrArtifactBuilder
 
     private static bool TryMapType(TypeReference typeReference, out TypeSymbol type)
     {
+        if (typeReference is ByReferenceType byReferenceType)
+        {
+            return TryMapType(byReferenceType.ElementType, out type);
+        }
+
         if (typeReference is Mono.Cecil.ArrayType arrayType)
         {
             if (!TryMapType(arrayType.ElementType, out var elementType))

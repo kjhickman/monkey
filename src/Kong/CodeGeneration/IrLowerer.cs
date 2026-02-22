@@ -1070,7 +1070,7 @@ public class IrLowerer
             var globalArguments = new List<IrValueId>(callExpression.Arguments.Count);
             foreach (var argument in callExpression.Arguments)
             {
-                var value = LowerExpression(argument);
+                var value = LowerExpression(argument.Expression);
                 if (value == null)
                 {
                     return null;
@@ -1099,7 +1099,7 @@ public class IrLowerer
         var arguments = new List<IrValueId>(callExpression.Arguments.Count);
         foreach (var argument in callExpression.Arguments)
         {
-            var value = LowerExpression(argument);
+            var value = LowerExpression(argument.Expression);
             if (value == null)
             {
                 return null;
@@ -1137,33 +1137,54 @@ public class IrLowerer
             methodPath = resolvedMethodPath;
         }
 
-        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
+        var arguments = new List<IrValueId?>(callExpression.Arguments.Count);
         var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        var argumentModifiers = new List<CallArgumentModifier>(callExpression.Arguments.Count);
+        var byRefLocals = new List<IrLocalId?>(callExpression.Arguments.Count);
         foreach (var argument in callExpression.Arguments)
         {
-            var value = LowerExpression(argument);
-            if (value == null)
+            if (!TryGetExpressionType(argument.Expression, out var argumentType))
             {
                 return null;
             }
 
-            if (!TryGetExpressionType(argument, out var argumentType))
+            if (argument.Modifier is CallArgumentModifier.Out or CallArgumentModifier.Ref)
             {
-                return null;
+                if (argument.Expression is not Identifier identifier || !_localsByName.TryGetValue(identifier.Value, out var local))
+                {
+                    _result.Diagnostics.Report(argument.Span,
+                        "phase-4 IR lowerer requires out/ref arguments to reference local variables",
+                        "IR002");
+                    return null;
+                }
+
+                arguments.Add(null);
+                byRefLocals.Add(local);
+            }
+            else
+            {
+                var value = LowerExpression(argument.Expression);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                arguments.Add(value.Value);
+                byRefLocals.Add(null);
             }
 
-            arguments.Add(value.Value);
             argumentTypes.Add(argumentType);
+            argumentModifiers.Add(argument.Modifier);
         }
 
         if (returnType == TypeSymbols.Void)
         {
-            _currentBlock.Instructions.Add(new IrStaticCallVoid(methodPath, arguments, argumentTypes));
+            _currentBlock.Instructions.Add(new IrStaticCallVoid(methodPath, arguments, argumentTypes, argumentModifiers, byRefLocals));
             return null;
         }
 
         var destination = AllocateValue(returnType);
-        _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes));
+        _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes, argumentModifiers, byRefLocals));
         return destination;
     }
 
@@ -1217,34 +1238,55 @@ public class IrLowerer
             return null;
         }
 
-        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
+        var arguments = new List<IrValueId?>(callExpression.Arguments.Count);
         var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        var argumentModifiers = new List<CallArgumentModifier>(callExpression.Arguments.Count);
+        var byRefLocals = new List<IrLocalId?>(callExpression.Arguments.Count);
         foreach (var argument in callExpression.Arguments)
         {
-            var value = LowerExpression(argument);
-            if (value == null)
+            if (!TryGetExpressionType(argument.Expression, out var argumentType))
             {
                 return null;
             }
 
-            if (!TryGetExpressionType(argument, out var argumentType))
+            if (argument.Modifier is CallArgumentModifier.Out or CallArgumentModifier.Ref)
             {
-                return null;
+                if (argument.Expression is not Identifier identifier || !_localsByName.TryGetValue(identifier.Value, out var local))
+                {
+                    _result.Diagnostics.Report(argument.Span,
+                        "phase-4 IR lowerer requires out/ref arguments to reference local variables",
+                        "IR002");
+                    return null;
+                }
+
+                arguments.Add(null);
+                byRefLocals.Add(local);
+            }
+            else
+            {
+                var value = LowerExpression(argument.Expression);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                arguments.Add(value.Value);
+                byRefLocals.Add(null);
             }
 
-            arguments.Add(value.Value);
             argumentTypes.Add(argumentType);
+            argumentModifiers.Add(argument.Modifier);
         }
 
         var memberName = _resolvedInstanceMethodMembers.GetValueOrDefault(callExpression, memberAccessExpression.Member);
         if (returnType == TypeSymbols.Void)
         {
-            _currentBlock.Instructions.Add(new IrInstanceCallVoid(receiver.Value, receiverType, memberName, arguments, argumentTypes));
+            _currentBlock.Instructions.Add(new IrInstanceCallVoid(receiver.Value, receiverType, memberName, arguments, argumentTypes, argumentModifiers, byRefLocals));
             return null;
         }
 
         var destination = AllocateValue(returnType);
-        _currentBlock.Instructions.Add(new IrInstanceCall(destination, receiver.Value, receiverType, memberName, arguments, argumentTypes));
+        _currentBlock.Instructions.Add(new IrInstanceCall(destination, receiver.Value, receiverType, memberName, arguments, argumentTypes, argumentModifiers, byRefLocals));
         return destination;
     }
 
