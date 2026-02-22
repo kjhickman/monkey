@@ -62,6 +62,13 @@ public static class ConstructorClrResolver
 
         if (scoredMatches.Count == 0)
         {
+            if (constructors.All(c => !IsSupportedConstructorSignature(c)))
+            {
+                error = StaticClrMethodResolutionError.UnsupportedParameterType;
+                errorMessage = $"constructors on CLR type '{typePath}' are currently unsupported by Kong interop";
+                return false;
+            }
+
             error = StaticClrMethodResolutionError.NoMatchingOverload;
             errorMessage = $"no matching constructor overload for '{typePath}' with argument types ({string.Join(", ", argumentTypes)})";
             return false;
@@ -338,6 +345,20 @@ public static class ConstructorClrResolver
     private static bool IsOptionalParameter(ParameterDefinition parameter)
     {
         return parameter.IsOptional || parameter.HasDefault;
+    }
+
+    private static bool IsSupportedConstructorSignature(MethodDefinition constructor)
+    {
+        foreach (var parameter in constructor.Parameters)
+        {
+            if (!TryMapClrTypeReferenceToKongType(parameter.ParameterType, out var mappedType) ||
+                mappedType == TypeSymbols.Void)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryMapClrFullNameToKongType(string clrTypeName, out TypeSymbol type)

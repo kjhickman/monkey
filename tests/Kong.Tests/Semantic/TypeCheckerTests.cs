@@ -553,6 +553,16 @@ public class TypeCheckerTests
         Assert.Equal("ToString", result.ResolvedInstanceMethodMembers[toStringCall]);
     }
 
+    [Fact]
+    public void TestReportsUnsupportedConstructorSignaturesClearly()
+    {
+        var (_, _, result) = ParseResolveAndCheck("new System.WeakReference(\"x\");");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
+        Assert.Contains(result.Diagnostics.All, d => d.Message.Contains("constructors on CLR type 'System.WeakReference'", StringComparison.Ordinal));
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);
