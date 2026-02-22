@@ -73,29 +73,37 @@ public static class StaticClrMethodResolver
             return false;
         }
 
-        var parameterClrTypes = new List<string>(parameterTypes.Count);
         foreach (var parameterType in parameterTypes)
         {
-            if (!TryMapKongTypeToClrFullName(parameterType, out var clrTypeName))
+            if (!TryMapKongTypeToClrFullName(parameterType, out _))
             {
                 error = StaticClrMethodResolutionError.UnsupportedParameterType;
                 errorMessage = $"static calls do not support Kong type '{parameterType}' in parameter list";
                 return false;
             }
-
-            parameterClrTypes.Add(clrTypeName);
         }
 
-        var matches = candidates
-            .Where(method => ParametersMatch(method.Parameters, parameterClrTypes))
-            .ToList();
+        var scoredMatches = new List<(MethodDefinition Method, int Score)>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            if (TryGetParameterMatchScore(candidate.Parameters, parameterTypes, out var score))
+            {
+                scoredMatches.Add((candidate, score));
+            }
+        }
 
-        if (matches.Count == 0)
+        if (scoredMatches.Count == 0)
         {
             error = StaticClrMethodResolutionError.NoMatchingOverload;
             errorMessage = $"no matching overload for static method '{methodPath}' with argument types ({string.Join(", ", parameterTypes)})";
             return false;
         }
+
+        var bestScore = scoredMatches.Min(m => m.Score);
+        var matches = scoredMatches
+            .Where(m => m.Score == bestScore)
+            .Select(m => m.Method)
+            .ToList();
 
         var compatibleMatches = matches
             .Where(m => TryMapClrFullNameToKongType(NormalizeTypeName(m.ReturnType.FullName), out _))
@@ -256,22 +264,89 @@ public static class StaticClrMethodResolver
         return true;
     }
 
-    private static bool ParametersMatch(IList<ParameterDefinition> parameters, IReadOnlyList<string> expectedClrTypeNames)
+    private static bool TryGetParameterMatchScore(IList<ParameterDefinition> parameters, IReadOnlyList<TypeSymbol> argumentTypes, out int score)
     {
-        if (parameters.Count != expectedClrTypeNames.Count)
+        score = 0;
+
+        if (parameters.Count != argumentTypes.Count)
         {
             return false;
         }
 
         for (var i = 0; i < parameters.Count; i++)
         {
-            if (NormalizeTypeName(parameters[i].ParameterType.FullName) != expectedClrTypeNames[i])
+            if (!TryMapClrFullNameToKongType(NormalizeTypeName(parameters[i].ParameterType.FullName), out var parameterType) ||
+                parameterType == TypeSymbols.Void)
             {
                 return false;
             }
+
+            if (!TryGetConversionScore(argumentTypes[i], parameterType, out var conversionScore))
+            {
+                return false;
+            }
+
+            score += conversionScore;
         }
 
         return true;
+    }
+
+    private static bool TryGetConversionScore(TypeSymbol source, TypeSymbol target, out int score)
+    {
+        score = int.MaxValue;
+
+        if (source == target)
+        {
+            score = 0;
+            return true;
+        }
+
+        if (source == TypeSymbols.Char)
+        {
+            score = target switch
+            {
+                _ when target == TypeSymbols.Int => 1,
+                _ when target == TypeSymbols.Long => 2,
+                _ when target == TypeSymbols.Double => 3,
+                _ => int.MaxValue,
+            };
+
+            return score != int.MaxValue;
+        }
+
+        if (source == TypeSymbols.Byte)
+        {
+            score = target switch
+            {
+                _ when target == TypeSymbols.Int => 1,
+                _ when target == TypeSymbols.Long => 2,
+                _ when target == TypeSymbols.Double => 3,
+                _ => int.MaxValue,
+            };
+
+            return score != int.MaxValue;
+        }
+
+        if (source == TypeSymbols.Int)
+        {
+            score = target switch
+            {
+                _ when target == TypeSymbols.Long => 1,
+                _ when target == TypeSymbols.Double => 2,
+                _ => int.MaxValue,
+            };
+
+            return score != int.MaxValue;
+        }
+
+        if (source == TypeSymbols.Long)
+        {
+            score = target == TypeSymbols.Double ? 1 : int.MaxValue;
+            return score != int.MaxValue;
+        }
+
+        return false;
     }
 
     private static bool IsSupportedMethodSignature(MethodDefinition method)

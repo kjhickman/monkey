@@ -326,6 +326,26 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksStaticClrNumericWideningForOverloadResolution()
+    {
+        var source = "System.Math.Sqrt(9); System.Math.Max(System.Byte.Parse(\"7\"), 10);";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var sqrtStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var sqrtCall = Assert.IsType<CallExpression>(sqrtStatement.Expression);
+        Assert.Equal(TypeSymbols.Double, result.ExpressionTypes[sqrtCall]);
+        Assert.Equal("System.Math.Sqrt", result.ResolvedStaticMethodPaths[sqrtCall]);
+
+        var maxStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var maxCall = Assert.IsType<CallExpression>(maxStatement.Expression);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[maxCall]);
+        Assert.Equal("System.Math.Max", result.ResolvedStaticMethodPaths[maxCall]);
+    }
+
+    [Fact]
     public void TestTypeChecksDoubleCharAndByteLiterals()
     {
         var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b;";
