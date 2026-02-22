@@ -8,6 +8,8 @@ public class TypeCheckResult
     public Dictionary<IExpression, TypeSymbol> ExpressionTypes { get; } = [];
     public Dictionary<CallExpression, string> ResolvedStaticMethodPaths { get; } = [];
     public Dictionary<MemberAccessExpression, string> ResolvedStaticValuePaths { get; } = [];
+    public Dictionary<CallExpression, string> ResolvedInstanceMethodMembers { get; } = [];
+    public Dictionary<MemberAccessExpression, string> ResolvedInstanceValueMembers { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
@@ -436,7 +438,13 @@ public class TypeChecker
         var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
 
         if (expression.Function is MemberAccessExpression memberAccessExpression &&
-            TryCheckStaticMethodCall(expression, memberAccessExpression, argumentTypes, out var staticReturnType))
+            TryCheckInstanceMethodCall(expression, memberAccessExpression, argumentTypes, out var instanceReturnType))
+        {
+            return instanceReturnType;
+        }
+
+        if (expression.Function is MemberAccessExpression memberAccessExpression2 &&
+            TryCheckStaticMethodCall(expression, memberAccessExpression2, argumentTypes, out var staticReturnType))
         {
             return staticReturnType;
         }
@@ -474,6 +482,11 @@ public class TypeChecker
 
     private TypeSymbol CheckMemberAccessExpression(MemberAccessExpression expression)
     {
+        if (TryCheckInstanceValueAccess(expression, out var instanceType))
+        {
+            return instanceType;
+        }
+
         if (!TryGetQualifiedMemberPath(expression, out var memberPath))
         {
             _result.Diagnostics.Report(
@@ -498,6 +511,76 @@ public class TypeChecker
 
         _result.ResolvedStaticValuePaths[expression] = resolvedPath;
         return binding.Type;
+    }
+
+    private bool TryCheckInstanceValueAccess(MemberAccessExpression expression, out TypeSymbol valueType)
+    {
+        valueType = TypeSymbols.Error;
+
+        if (!IsPotentialInstanceReceiver(expression.Object))
+        {
+            return false;
+        }
+
+        var receiverType = CheckExpression(expression.Object);
+        if (receiverType == TypeSymbols.Error)
+        {
+            return true;
+        }
+
+        if (!InstanceClrMemberResolver.TryResolveValue(
+                receiverType,
+                expression.Member,
+                out var binding,
+                out var resolutionError,
+                out var resolutionMessage))
+        {
+            var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+            _result.Diagnostics.Report(expression.Span, resolutionMessage, code);
+            valueType = TypeSymbols.Error;
+            return true;
+        }
+
+        _result.ResolvedInstanceValueMembers[expression] = expression.Member;
+        valueType = binding.Type;
+        return true;
+    }
+
+    private bool TryCheckInstanceMethodCall(
+        CallExpression callExpression,
+        MemberAccessExpression memberAccessExpression,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out TypeSymbol returnType)
+    {
+        returnType = TypeSymbols.Error;
+
+        if (!IsPotentialInstanceReceiver(memberAccessExpression.Object))
+        {
+            return false;
+        }
+
+        var receiverType = CheckExpression(memberAccessExpression.Object);
+        if (receiverType == TypeSymbols.Error)
+        {
+            return true;
+        }
+
+        if (!InstanceClrMemberResolver.TryResolveMethod(
+                receiverType,
+                memberAccessExpression.Member,
+                argumentTypes,
+                out var binding,
+                out var resolutionError,
+                out var resolutionMessage))
+        {
+            var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+            _result.Diagnostics.Report(memberAccessExpression.Span, resolutionMessage, code);
+            return true;
+        }
+
+        _result.ResolvedInstanceMethodMembers[callExpression] = memberAccessExpression.Member;
+        returnType = binding.ReturnType;
+        return true;
     }
 
     private bool TryCheckStaticMethodCall(
@@ -627,6 +710,21 @@ public class TypeChecker
 
         diagnostic = $"ambiguous static member reference '{memberPath}' from imports; matching candidates: {string.Join(", ", knownCandidates.OrderBy(c => c))}";
         return false;
+    }
+
+    private bool IsPotentialInstanceReceiver(IExpression expression)
+    {
+        if (expression is Identifier identifier)
+        {
+            return _names.IdentifierSymbols.ContainsKey(identifier);
+        }
+
+        if (expression is MemberAccessExpression memberAccess)
+        {
+            return IsPotentialInstanceReceiver(memberAccess.Object);
+        }
+
+        return true;
     }
 
     private TypeSymbol CheckArrayLiteral(ArrayLiteral expression)

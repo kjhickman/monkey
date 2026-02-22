@@ -86,9 +86,30 @@ public sealed record IrStaticCallVoid(
     IReadOnlyList<IrValueId> Arguments,
     IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
 
+public sealed record IrInstanceCall(
+    IrValueId Destination,
+    IrValueId Receiver,
+    TypeSymbol ReceiverType,
+    string MemberName,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
+public sealed record IrInstanceCallVoid(
+    IrValueId Receiver,
+    TypeSymbol ReceiverType,
+    string MemberName,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
 public sealed record IrStaticValueGet(
     IrValueId Destination,
     string MemberPath) : IrInstruction;
+
+public sealed record IrInstanceValueGet(
+    IrValueId Destination,
+    IrValueId Receiver,
+    TypeSymbol ReceiverType,
+    string MemberName) : IrInstruction;
 
 public sealed record IrCreateClosure(
     IrValueId Destination,

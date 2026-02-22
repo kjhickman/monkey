@@ -230,6 +230,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesInstanceClrStringMethodsAndProperty()
+    {
+        var source = "let s: string = \" hello \"; let trimmed: string = s.Trim(); let hasEll: bool = trimmed.Contains(\"ell\"); let len: int = trimmed.Length; if (hasEll) { if (len == 5) { 1; } else { 0; } } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

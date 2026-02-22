@@ -233,6 +233,36 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersInstanceClrMethodCall()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \" hello \"; s.Trim(); 1;");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var call = Assert.IsType<IrInstanceCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrInstanceCall));
+        Assert.Equal(TypeSymbols.String, call.ReceiverType);
+        Assert.Equal("Trim", call.MemberName);
+    }
+
+    [Fact]
+    public void TestLowersInstanceClrPropertyAccess()
+    {
+        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \"abc\"; s.Length; 1;");
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var get = Assert.IsType<IrInstanceValueGet>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrInstanceValueGet));
+        Assert.Equal(TypeSymbols.String, get.ReceiverType);
+        Assert.Equal("Length", get.MemberName);
+    }
+
+    [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
         var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";

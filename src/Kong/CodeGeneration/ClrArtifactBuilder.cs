@@ -642,6 +642,79 @@ public class ClrArtifactBuilder
                         break;
                     }
 
+                    case IrInstanceCall instanceCall:
+                    {
+                        if (!function.ValueTypes.TryGetValue(instanceCall.Destination, out var instanceReturnType))
+                        {
+                            diagnostics.Report(Span.Empty, "phase-5 CLR backend missing return type for instance call", "IL001");
+                            return false;
+                        }
+
+                        if (!InstanceClrMemberResolver.TryResolveMethod(
+                                instanceCall.ReceiverType,
+                                instanceCall.MemberName,
+                                instanceCall.ArgumentTypes,
+                                out var binding,
+                                out _,
+                                out var resolveMessage))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveMessage}", "IL001");
+                            return false;
+                        }
+
+                        if (binding.ReturnType != instanceReturnType)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend expected instance call '{instanceCall.MemberName}' to return '{instanceReturnType}', but resolver returned '{binding.ReturnType}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[instanceCall.Receiver]);
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, instanceCall.Arguments, instanceCall.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        {
+                            return false;
+                        }
+
+                        var importedMethod = module.ImportReference(binding.MethodDefinition);
+                        il.Emit(OpCodes.Callvirt, importedMethod);
+                        il.Emit(OpCodes.Stloc, valueLocals[instanceCall.Destination]);
+                        break;
+                    }
+
+                    case IrInstanceCallVoid instanceCallVoid:
+                    {
+                        if (!InstanceClrMemberResolver.TryResolveMethod(
+                                instanceCallVoid.ReceiverType,
+                                instanceCallVoid.MemberName,
+                                instanceCallVoid.ArgumentTypes,
+                                out var binding,
+                                out _,
+                                out var resolveMessage))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveMessage}", "IL001");
+                            return false;
+                        }
+
+                        if (binding.ReturnType != TypeSymbols.Void)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend expected instance call '{instanceCallVoid.MemberName}' to return 'void', but resolver returned '{binding.ReturnType}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[instanceCallVoid.Receiver]);
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, instanceCallVoid.Arguments, instanceCallVoid.ArgumentTypes, binding.MethodDefinition, diagnostics))
+                        {
+                            return false;
+                        }
+
+                        var importedMethod = module.ImportReference(binding.MethodDefinition);
+                        il.Emit(OpCodes.Callvirt, importedMethod);
+                        break;
+                    }
+
                     case IrStaticValueGet staticValueGet:
                     {
                         var staticValueMember = ImportStaticValueMember(module, staticValueGet.MemberPath, diagnostics);
@@ -667,6 +740,40 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Stloc, valueLocals[staticValueGet.Destination]);
+                        break;
+                    }
+
+                    case IrInstanceValueGet instanceValueGet:
+                    {
+                        if (!InstanceClrMemberResolver.TryResolveValue(
+                                instanceValueGet.ReceiverType,
+                                instanceValueGet.MemberName,
+                                out var binding,
+                                out _,
+                                out var resolveMessage))
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend {resolveMessage}", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[instanceValueGet.Receiver]);
+                        if (binding.PropertyGetter != null)
+                        {
+                            var getter = module.ImportReference(binding.PropertyGetter);
+                            il.Emit(OpCodes.Callvirt, getter);
+                        }
+                        else if (binding.Field != null)
+                        {
+                            var field = module.ImportReference(binding.Field);
+                            il.Emit(OpCodes.Ldfld, field);
+                        }
+                        else
+                        {
+                            diagnostics.Report(Span.Empty, $"phase-5 CLR backend invalid instance member binding for '{instanceValueGet.MemberName}'", "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[instanceValueGet.Destination]);
                         break;
                     }
 

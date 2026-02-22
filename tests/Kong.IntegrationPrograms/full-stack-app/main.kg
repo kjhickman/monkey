@@ -18,10 +18,13 @@ fn Main() {
     let c: char = 'A';
     let fromClr: double = System.Math.Sqrt(9);
     let msg: string = Label(total);
+    let cleaned: string = "  kong  ".Trim();
 
     // Exercise logical operators with short-circuit-friendly shape.
     let ok: bool = picked == 42 &&
         word == "kong" &&
+        cleaned.Contains("ong") &&
+        cleaned.Length == 4 &&
         b == 3b &&
         c == 'A' &&
         fromClr == 3.0 &&

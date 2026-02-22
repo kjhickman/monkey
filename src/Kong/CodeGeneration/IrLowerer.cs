@@ -10,6 +10,8 @@ public class IrLowerer
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<CallExpression, string> _resolvedStaticMethodPaths = [];
     private readonly Dictionary<MemberAccessExpression, string> _resolvedStaticValuePaths = [];
+    private readonly Dictionary<CallExpression, string> _resolvedInstanceMethodMembers = [];
+    private readonly Dictionary<MemberAccessExpression, string> _resolvedInstanceValueMembers = [];
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
     private readonly Dictionary<FunctionDeclaration, FunctionTypeSymbol> _declaredFunctionTypes = [];
     private readonly Dictionary<string, FunctionTypeSymbol> _declaredFunctionTypesByName = [];
@@ -39,6 +41,8 @@ public class IrLowerer
         _expressionTypes.Clear();
         _resolvedStaticMethodPaths.Clear();
         _resolvedStaticValuePaths.Clear();
+        _resolvedInstanceMethodMembers.Clear();
+        _resolvedInstanceValueMembers.Clear();
         _variableTypes.Clear();
         _declaredFunctionTypes.Clear();
         _declaredFunctionTypesByName.Clear();
@@ -55,6 +59,16 @@ public class IrLowerer
         foreach (var pair in typeCheckResult.ResolvedStaticValuePaths)
         {
             _resolvedStaticValuePaths[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedInstanceMethodMembers)
+        {
+            _resolvedInstanceMethodMembers[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedInstanceValueMembers)
+        {
+            _resolvedInstanceValueMembers[pair.Key] = pair.Value;
         }
 
         foreach (var pair in typeCheckResult.VariableTypes)
@@ -994,6 +1008,11 @@ public class IrLowerer
 
         if (callExpression.Function is MemberAccessExpression memberAccessExpression)
         {
+            if (_resolvedInstanceMethodMembers.ContainsKey(callExpression))
+            {
+                return LowerInstanceCallExpression(memberAccessExpression, callExpression, returnType);
+            }
+
             return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
         }
 
@@ -1105,6 +1124,11 @@ public class IrLowerer
 
     private IrValueId? LowerStaticValueAccessExpression(MemberAccessExpression memberAccessExpression)
     {
+        if (_resolvedInstanceValueMembers.ContainsKey(memberAccessExpression))
+        {
+            return LowerInstanceValueAccessExpression(memberAccessExpression);
+        }
+
         if (!TryGetExpressionType(memberAccessExpression, out var valueType) || !IsSupportedRuntimeType(valueType))
         {
             _result.Diagnostics.Report(memberAccessExpression.Span,
@@ -1126,6 +1150,86 @@ public class IrLowerer
 
         var destination = AllocateValue(valueType);
         _currentBlock.Instructions.Add(new IrStaticValueGet(destination, memberPath));
+        return destination;
+    }
+
+    private IrValueId? LowerInstanceCallExpression(
+        MemberAccessExpression memberAccessExpression,
+        CallExpression callExpression,
+        TypeSymbol returnType)
+    {
+        if (!TryGetExpressionType(memberAccessExpression.Object, out var receiverType) || !IsSupportedRuntimeType(receiverType))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Object.Span,
+                "phase-4 IR lowerer requires supported instance receiver type",
+                "IR001");
+            return null;
+        }
+
+        var receiver = LowerExpression(memberAccessExpression.Object);
+        if (receiver == null)
+        {
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
+        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        foreach (var argument in callExpression.Arguments)
+        {
+            var value = LowerExpression(argument);
+            if (value == null)
+            {
+                return null;
+            }
+
+            if (!TryGetExpressionType(argument, out var argumentType))
+            {
+                return null;
+            }
+
+            arguments.Add(value.Value);
+            argumentTypes.Add(argumentType);
+        }
+
+        var memberName = _resolvedInstanceMethodMembers.GetValueOrDefault(callExpression, memberAccessExpression.Member);
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrInstanceCallVoid(receiver.Value, receiverType, memberName, arguments, argumentTypes));
+            return null;
+        }
+
+        var destination = AllocateValue(returnType);
+        _currentBlock.Instructions.Add(new IrInstanceCall(destination, receiver.Value, receiverType, memberName, arguments, argumentTypes));
+        return destination;
+    }
+
+    private IrValueId? LowerInstanceValueAccessExpression(MemberAccessExpression memberAccessExpression)
+    {
+        if (!TryGetExpressionType(memberAccessExpression.Object, out var receiverType) || !IsSupportedRuntimeType(receiverType))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Object.Span,
+                "phase-4 IR lowerer requires supported instance receiver type",
+                "IR001");
+            return null;
+        }
+
+        if (!TryGetExpressionType(memberAccessExpression, out var valueType) || !IsSupportedRuntimeType(valueType))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                "phase-4 IR lowerer requires supported instance member value type",
+                "IR001");
+            return null;
+        }
+
+        var receiver = LowerExpression(memberAccessExpression.Object);
+        if (receiver == null)
+        {
+            return null;
+        }
+
+        var memberName = _resolvedInstanceValueMembers.GetValueOrDefault(memberAccessExpression, memberAccessExpression.Member);
+        var destination = AllocateValue(valueType);
+        _currentBlock.Instructions.Add(new IrInstanceValueGet(destination, receiver.Value, receiverType, memberName));
         return destination;
     }
 

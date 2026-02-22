@@ -513,6 +513,31 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
     }
 
+    [Fact]
+    public void TestTypeChecksInstanceClrStringMethodsAndProperties()
+    {
+        var source = "let s: string = \" hello \"; s.Trim(); s.Contains(\"ell\"); s.Length;";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var trimStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var trimCall = Assert.IsType<CallExpression>(trimStatement.Expression);
+        Assert.Equal(TypeSymbols.String, result.ExpressionTypes[trimCall]);
+        Assert.Equal("Trim", result.ResolvedInstanceMethodMembers[trimCall]);
+
+        var containsStatement = Assert.IsType<ExpressionStatement>(unit.Statements[3]);
+        var containsCall = Assert.IsType<CallExpression>(containsStatement.Expression);
+        Assert.Equal(TypeSymbols.Bool, result.ExpressionTypes[containsCall]);
+        Assert.Equal("Contains", result.ResolvedInstanceMethodMembers[containsCall]);
+
+        var lengthStatement = Assert.IsType<ExpressionStatement>(unit.Statements[4]);
+        var lengthAccess = Assert.IsType<MemberAccessExpression>(lengthStatement.Expression);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[lengthAccess]);
+        Assert.Equal("Length", result.ResolvedInstanceValueMembers[lengthAccess]);
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);
