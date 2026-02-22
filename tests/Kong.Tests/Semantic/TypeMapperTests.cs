@@ -47,6 +47,45 @@ public class TypeMapperTests
     }
 
     [Fact]
+    public void TryMapKongType_Double_MapsToDouble()
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+
+        var mapped = mapper.TryMapKongType(TypeSymbols.Double, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.Equal(module.TypeSystem.Double, mapped);
+    }
+
+    [Fact]
+    public void TryMapKongType_Char_MapsToChar()
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+
+        var mapped = mapper.TryMapKongType(TypeSymbols.Char, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.Equal(module.TypeSystem.Char, mapped);
+    }
+
+    [Fact]
+    public void TryMapKongType_Byte_MapsToByte()
+    {
+        var module = CreateTestModule();
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+        var diagnostics = new DiagnosticBag();
+
+        var mapped = mapper.TryMapKongType(TypeSymbols.Byte, module, diagnostics);
+
+        Assert.NotNull(mapped);
+        Assert.Equal(module.TypeSystem.Byte, mapped);
+    }
+
+    [Fact]
     public void TryMapKongType_Bool_MapsToBoolean()
     {
         var module = CreateTestModule();
@@ -123,6 +162,30 @@ public class TypeMapperTests
         var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
 
         Assert.True(mapper.IsTypeSupported(TypeSymbols.Long));
+    }
+
+    [Fact]
+    public void IsTypeSupported_Double_ReturnsTrue()
+    {
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+
+        Assert.True(mapper.IsTypeSupported(TypeSymbols.Double));
+    }
+
+    [Fact]
+    public void IsTypeSupported_Char_ReturnsTrue()
+    {
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+
+        Assert.True(mapper.IsTypeSupported(TypeSymbols.Char));
+    }
+
+    [Fact]
+    public void IsTypeSupported_Byte_ReturnsTrue()
+    {
+        var mapper = new DefaultTypeMapper(CreateEmptyDelegateMap());
+
+        Assert.True(mapper.IsTypeSupported(TypeSymbols.Byte));
     }
 
     [Fact]

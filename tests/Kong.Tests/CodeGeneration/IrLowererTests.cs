@@ -186,6 +186,39 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersStaticClrDoubleCharAndByteCalls()
+    {
+        var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).OfType<IrStaticCall>().ToList();
+        Assert.Contains(staticCalls, c => c.MethodPath == "System.Convert.ToDouble");
+        Assert.Contains(staticCalls, c => c.MethodPath == "System.Char.Parse");
+        Assert.Contains(staticCalls, c => c.MethodPath == "System.Byte.Parse");
+    }
+
+    [Fact]
+    public void TestLowersDoubleCharAndByteLiterals()
+    {
+        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; 1;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrConstDouble);
+        Assert.Contains(instructions, i => i is IrConstInt);
+    }
+
+    [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
         var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";

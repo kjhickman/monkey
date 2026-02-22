@@ -312,6 +312,60 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksStaticClrDoubleReturnType()
+    {
+        var (unit, names, result) = ParseResolveAndCheck("System.Convert.ToDouble(\"4\");");
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var expressionStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(expressionStatement.Expression);
+        Assert.Equal(TypeSymbols.Double, result.ExpressionTypes[call]);
+        Assert.Equal("System.Convert.ToDouble", result.ResolvedStaticMethodPaths[call]);
+    }
+
+    [Fact]
+    public void TestTypeChecksDoubleCharAndByteLiterals()
+    {
+        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b;";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestTypeChecksStaticClrCharAndByteReturnTypes()
+    {
+        var source = "System.Char.Parse(\"a\"); System.Byte.Parse(\"42\");";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var charStatement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var charCall = Assert.IsType<CallExpression>(charStatement.Expression);
+        Assert.Equal(TypeSymbols.Char, result.ExpressionTypes[charCall]);
+        Assert.Equal("System.Char.Parse", result.ResolvedStaticMethodPaths[charCall]);
+
+        var byteStatement = Assert.IsType<ExpressionStatement>(unit.Statements[2]);
+        var byteCall = Assert.IsType<CallExpression>(byteStatement.Expression);
+        Assert.Equal(TypeSymbols.Byte, result.ExpressionTypes[byteCall]);
+        Assert.Equal("System.Byte.Parse", result.ResolvedStaticMethodPaths[byteCall]);
+    }
+
+    [Fact]
+    public void TestAllowsWideningFromByteAndChar()
+    {
+        var source = "let fromByte: int = System.Byte.Parse(\"7\"); let fromChar: long = System.Char.Parse(\"A\");";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestTypeChecksStaticClrStringMethods()
     {
         var source = "import System; String.IsNullOrEmpty(\"\"); String.Concat(\"a\", \"b\"); String.Equals(\"x\", \"x\");";

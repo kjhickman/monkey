@@ -10,6 +10,9 @@ public enum TokenType
     // Identifiers + literals
     Identifier,
     Integer,
+    Double,
+    Char,
+    Byte,
     String,
 
     // Operators

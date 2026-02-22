@@ -420,6 +420,16 @@ public class ClrArtifactBuilder
                         {
                             il.Emit(OpCodes.Ldc_I4, checked((int)constInt.Value));
                         }
+                        else if (constType == TypeSymbols.Byte)
+                        {
+                            il.Emit(OpCodes.Ldc_I4, checked((int)constInt.Value));
+                            il.Emit(OpCodes.Conv_U1);
+                        }
+                        else if (constType == TypeSymbols.Char)
+                        {
+                            il.Emit(OpCodes.Ldc_I4, checked((int)constInt.Value));
+                            il.Emit(OpCodes.Conv_U2);
+                        }
                         else if (constType == TypeSymbols.Long)
                         {
                             il.Emit(OpCodes.Ldc_I8, constInt.Value);
@@ -431,6 +441,11 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Stloc, valueLocals[constInt.Destination]);
+                        break;
+
+                    case IrConstDouble constDouble:
+                        il.Emit(OpCodes.Ldc_R8, constDouble.Value);
+                        il.Emit(OpCodes.Stloc, valueLocals[constDouble.Destination]);
                         break;
 
                     case IrConstBool constBool:
@@ -831,6 +846,21 @@ public class ClrArtifactBuilder
         if (type == TypeSymbols.Long)
         {
             return module.TypeSystem.Int64;
+        }
+
+        if (type == TypeSymbols.Double)
+        {
+            return module.TypeSystem.Double;
+        }
+
+        if (type == TypeSymbols.Char)
+        {
+            return module.TypeSystem.Char;
+        }
+
+        if (type == TypeSymbols.Byte)
+        {
+            return module.TypeSystem.Byte;
         }
 
         if (type == TypeSymbols.Bool)

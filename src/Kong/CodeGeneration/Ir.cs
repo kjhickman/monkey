@@ -43,6 +43,8 @@ public abstract record IrInstruction;
 
 public sealed record IrConstInt(IrValueId Destination, long Value) : IrInstruction;
 
+public sealed record IrConstDouble(IrValueId Destination, double Value) : IrInstruction;
+
 public sealed record IrConstBool(IrValueId Destination, bool Value) : IrInstruction;
 
 public sealed record IrConstString(IrValueId Destination, string Value) : IrInstruction;

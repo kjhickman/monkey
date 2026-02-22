@@ -387,4 +387,51 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesDoubleCharAndByteLiterals()
+    {
+        var input = "1.25; 'a'; 42b;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Double, "1.25"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.Char, "a"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.Byte, "42"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
+    public void TestLexesEscapedCharLiterals()
+    {
+        var input = "'\\n' '\\\\' '\\\''";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Char, "\n"),
+            (TokenType.Char, "\\"),
+            (TokenType.Char, "'"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

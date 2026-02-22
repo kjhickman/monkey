@@ -205,6 +205,36 @@ public class IntegerLiteral : IExpression
     public string String() => Token.Literal;
 }
 
+public class DoubleLiteral : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+    public double Value { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Token.Literal;
+}
+
+public class CharLiteral : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+    public char Value { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Token.Literal;
+}
+
+public class ByteLiteral : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+    public byte Value { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Token.Literal;
+}
+
 public class PrefixExpression : IExpression
 {
     public Span Span { get; set; }

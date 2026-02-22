@@ -454,6 +454,27 @@ public class IrLowerer
                 return destination;
             }
 
+            case DoubleLiteral doubleLiteral:
+            {
+                var destination = AllocateValue(TypeSymbols.Double);
+                _currentBlock.Instructions.Add(new IrConstDouble(destination, doubleLiteral.Value));
+                return destination;
+            }
+
+            case CharLiteral charLiteral:
+            {
+                var destination = AllocateValue(TypeSymbols.Char);
+                _currentBlock.Instructions.Add(new IrConstInt(destination, charLiteral.Value));
+                return destination;
+            }
+
+            case ByteLiteral byteLiteral:
+            {
+                var destination = AllocateValue(TypeSymbols.Byte);
+                _currentBlock.Instructions.Add(new IrConstInt(destination, byteLiteral.Value));
+                return destination;
+            }
+
             case BooleanLiteral booleanLiteral:
             {
                 var destination = AllocateValue(TypeSymbols.Bool);
@@ -522,13 +543,20 @@ public class IrLowerer
                 if (!TryGetExpressionType(prefixExpression.Right, out var rightType) || !IsNumericType(rightType))
                 {
                     _result.Diagnostics.Report(prefixExpression.Span,
-                        "phase-4 IR lowerer supports unary '-' only for int/long",
+                        "phase-4 IR lowerer supports unary '-' only for int/long/double",
                         "IR001");
                     return null;
                 }
 
                 var zero = AllocateValue(rightType);
-                _currentBlock.Instructions.Add(new IrConstInt(zero, 0));
+                if (rightType == TypeSymbols.Double)
+                {
+                    _currentBlock.Instructions.Add(new IrConstDouble(zero, 0d));
+                }
+                else
+                {
+                    _currentBlock.Instructions.Add(new IrConstInt(zero, 0));
+                }
 
                 var right = LowerExpression(prefixExpression.Right);
                 if (right == null)
@@ -590,7 +618,7 @@ public class IrLowerer
                     if (!areBothNumeric)
                     {
                         _result.Diagnostics.Report(infixExpression.Span,
-                            $"phase-6 IR lowerer supports arithmetic operators only for matching int/long types, got '{leftType}' and '{rightType}'",
+                            $"phase-6 IR lowerer supports arithmetic operators only for matching int/long/double types, got '{leftType}' and '{rightType}'",
                             "IR001");
                         return null;
                     }
@@ -600,17 +628,18 @@ public class IrLowerer
                     if (!areBothNumeric)
                     {
                         _result.Diagnostics.Report(infixExpression.Span,
-                            $"phase-6 IR lowerer supports comparison operators only for matching int/long types, got '{leftType}' and '{rightType}'",
+                            $"phase-6 IR lowerer supports comparison operators only for matching int/long/double types, got '{leftType}' and '{rightType}'",
                             "IR001");
                         return null;
                     }
                 }
                 else if (op is IrBinaryOperator.Equal or IrBinaryOperator.NotEqual)
                 {
-                    if (!areSameType || !supportsEqualityType)
+                    var supportsComparableEqualityType = supportsEqualityType || leftType == TypeSymbols.Char || leftType == TypeSymbols.Byte;
+                    if (!areSameType || !supportsComparableEqualityType)
                     {
                         _result.Diagnostics.Report(infixExpression.Span,
-                            $"phase-6 IR lowerer supports equality operators for matching int/bool/string types, got '{leftType}' and '{rightType}'",
+                            $"phase-6 IR lowerer supports equality operators for matching int/long/double/byte/char/bool/string types, got '{leftType}' and '{rightType}'",
                             "IR001");
                         return null;
                     }
@@ -1206,6 +1235,9 @@ public class IrLowerer
 
         return type == TypeSymbols.Int ||
                type == TypeSymbols.Long ||
+               type == TypeSymbols.Double ||
+               type == TypeSymbols.Char ||
+               type == TypeSymbols.Byte ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
                type is ArrayTypeSymbol { ElementType: IntTypeSymbol } ||
@@ -1250,7 +1282,7 @@ public class IrLowerer
 
     private static bool IsNumericType(TypeSymbol type)
     {
-        return type == TypeSymbols.Int || type == TypeSymbols.Long;
+        return type == TypeSymbols.Int || type == TypeSymbols.Long || type == TypeSymbols.Double;
     }
 
     private static bool TryMapBinaryOperator(string op, out IrBinaryOperator irOp)

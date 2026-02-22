@@ -9,6 +9,9 @@ public class TypeSymbolTests
     {
         Assert.Equal("int", TypeSymbols.Int.Name);
         Assert.Equal("long", TypeSymbols.Long.Name);
+        Assert.Equal("double", TypeSymbols.Double.Name);
+        Assert.Equal("char", TypeSymbols.Char.Name);
+        Assert.Equal("byte", TypeSymbols.Byte.Name);
         Assert.Equal("string", TypeSymbols.String.Name);
         Assert.Equal("bool", TypeSymbols.Bool.Name);
         Assert.Equal("void", TypeSymbols.Void.Name);
@@ -20,6 +23,9 @@ public class TypeSymbolTests
     {
         Assert.Same(TypeSymbols.Int, TypeSymbols.TryGetPrimitive("int"));
         Assert.Same(TypeSymbols.Long, TypeSymbols.TryGetPrimitive("long"));
+        Assert.Same(TypeSymbols.Double, TypeSymbols.TryGetPrimitive("double"));
+        Assert.Same(TypeSymbols.Char, TypeSymbols.TryGetPrimitive("char"));
+        Assert.Same(TypeSymbols.Byte, TypeSymbols.TryGetPrimitive("byte"));
         Assert.Same(TypeSymbols.String, TypeSymbols.TryGetPrimitive("string"));
         Assert.Same(TypeSymbols.Bool, TypeSymbols.TryGetPrimitive("bool"));
         Assert.Same(TypeSymbols.Void, TypeSymbols.TryGetPrimitive("void"));

@@ -313,6 +313,24 @@ public static class StaticClrMethodResolver
             return true;
         }
 
+        if (type == TypeSymbols.Double)
+        {
+            clrTypeName = "System.Double";
+            return true;
+        }
+
+        if (type == TypeSymbols.Char)
+        {
+            clrTypeName = "System.Char";
+            return true;
+        }
+
+        if (type == TypeSymbols.Byte)
+        {
+            clrTypeName = "System.Byte";
+            return true;
+        }
+
         if (type == TypeSymbols.Bool)
         {
             clrTypeName = "System.Boolean";
@@ -345,6 +363,15 @@ public static class StaticClrMethodResolver
                 return true;
             case "System.Int32":
                 type = TypeSymbols.Int;
+                return true;
+            case "System.Double":
+                type = TypeSymbols.Double;
+                return true;
+            case "System.Char":
+                type = TypeSymbols.Char;
+                return true;
+            case "System.Byte":
+                type = TypeSymbols.Byte;
                 return true;
             case "System.Boolean":
                 type = TypeSymbols.Bool;

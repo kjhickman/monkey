@@ -32,6 +32,39 @@ public sealed record LongTypeSymbol : TypeSymbol
     public override string Name => "long";
 }
 
+public sealed record DoubleTypeSymbol : TypeSymbol
+{
+    public static DoubleTypeSymbol Instance { get; } = new();
+
+    private DoubleTypeSymbol()
+    {
+    }
+
+    public override string Name => "double";
+}
+
+public sealed record CharTypeSymbol : TypeSymbol
+{
+    public static CharTypeSymbol Instance { get; } = new();
+
+    private CharTypeSymbol()
+    {
+    }
+
+    public override string Name => "char";
+}
+
+public sealed record ByteTypeSymbol : TypeSymbol
+{
+    public static ByteTypeSymbol Instance { get; } = new();
+
+    private ByteTypeSymbol()
+    {
+    }
+
+    public override string Name => "byte";
+}
+
 public sealed record StringTypeSymbol : TypeSymbol
 {
     public static StringTypeSymbol Instance { get; } = new();
@@ -101,6 +134,9 @@ public static class TypeSymbols
 {
     public static IntTypeSymbol Int { get; } = IntTypeSymbol.Instance;
     public static LongTypeSymbol Long { get; } = LongTypeSymbol.Instance;
+    public static DoubleTypeSymbol Double { get; } = DoubleTypeSymbol.Instance;
+    public static CharTypeSymbol Char { get; } = CharTypeSymbol.Instance;
+    public static ByteTypeSymbol Byte { get; } = ByteTypeSymbol.Instance;
     public static StringTypeSymbol String { get; } = StringTypeSymbol.Instance;
     public static BoolTypeSymbol Bool { get; } = BoolTypeSymbol.Instance;
     public static VoidTypeSymbol Void { get; } = VoidTypeSymbol.Instance;
@@ -113,6 +149,9 @@ public static class TypeSymbols
         {
             "int" => Int,
             "long" => Long,
+            "double" => Double,
+            "char" => Char,
+            "byte" => Byte,
             "string" => String,
             "bool" => Bool,
             "void" => Void,

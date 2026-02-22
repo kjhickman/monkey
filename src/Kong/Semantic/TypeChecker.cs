@@ -224,6 +224,9 @@ public class TypeChecker
         var type = expression switch
         {
             IntegerLiteral integerLiteral => CheckIntegerLiteral(integerLiteral),
+            DoubleLiteral => TypeSymbols.Double,
+            CharLiteral => TypeSymbols.Char,
+            ByteLiteral => TypeSymbols.Byte,
             StringLiteral => TypeSymbols.String,
             BooleanLiteral => TypeSymbols.Bool,
             Identifier identifier => CheckIdentifier(identifier),
@@ -287,7 +290,7 @@ public class TypeChecker
         return expression.Operator switch
         {
             "!" when right == TypeSymbols.Bool => TypeSymbols.Bool,
-            "-" when IsNumericType(right) => right,
+            "-" when TryGetUnaryNegationResultType(right, out var resultType) => resultType,
             "!" => ReportPrefixTypeError(expression, right, "bool"),
             "-" => ReportPrefixTypeError(expression, right, "numeric type"),
             _ => ReportUnknownOperator(expression, expression.Operator),
@@ -302,7 +305,7 @@ public class TypeChecker
         return expression.Operator switch
         {
             "+" or "-" or "*" or "/" =>
-                RequireSameNumericType(expression, left, right),
+                RequireNumericOperands(expression, left, right),
             "<" or ">" =>
                 RequireComparableNumericTypes(expression, left, right),
             "==" or "!=" =>
@@ -674,11 +677,11 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
-    private TypeSymbol RequireSameNumericType(InfixExpression expression, TypeSymbol left, TypeSymbol right)
+    private TypeSymbol RequireNumericOperands(InfixExpression expression, TypeSymbol left, TypeSymbol right)
     {
-        if (IsNumericType(left) && TypeEquals(left, right))
+        if (TryGetBinaryNumericResultType(left, right, out var resultType))
         {
-            return left;
+            return resultType;
         }
 
         if (left != TypeSymbols.Error && right != TypeSymbols.Error)
@@ -693,7 +696,7 @@ public class TypeChecker
 
     private TypeSymbol RequireComparableNumericTypes(InfixExpression expression, TypeSymbol left, TypeSymbol right)
     {
-        if (IsNumericType(left) && TypeEquals(left, right))
+        if (TryGetBinaryNumericResultType(left, right, out _))
         {
             return TypeSymbols.Bool;
         }
@@ -749,7 +752,7 @@ public class TypeChecker
             return true;
         }
 
-        if (source == TypeSymbols.Int && target == TypeSymbols.Long)
+        if (CanWidenNumeric(source, target))
         {
             return true;
         }
@@ -807,6 +810,87 @@ public class TypeChecker
 
     private static bool IsNumericType(TypeSymbol type)
     {
-        return type == TypeSymbols.Int || type == TypeSymbols.Long;
+        return type == TypeSymbols.Int ||
+               type == TypeSymbols.Long ||
+               type == TypeSymbols.Double;
+    }
+
+    private static bool TryGetUnaryNegationResultType(TypeSymbol operandType, out TypeSymbol resultType)
+    {
+        resultType = TypeSymbols.Error;
+        if (operandType != TypeSymbols.Int && operandType != TypeSymbols.Long && operandType != TypeSymbols.Double)
+        {
+            return false;
+        }
+
+        resultType = operandType;
+        return true;
+    }
+
+    private static bool TryGetBinaryNumericResultType(TypeSymbol left, TypeSymbol right, out TypeSymbol resultType)
+    {
+        resultType = TypeSymbols.Error;
+        if (!IsNumericType(left) || !IsNumericType(right))
+        {
+            return false;
+        }
+
+        if (!TypeEquals(left, right))
+        {
+            return false;
+        }
+
+        resultType = left;
+        return true;
+    }
+
+    private static bool CanWidenNumeric(TypeSymbol source, TypeSymbol target)
+    {
+        if (source == TypeSymbols.Char && target == TypeSymbols.Char)
+        {
+            return true;
+        }
+
+        if (source == TypeSymbols.Char)
+        {
+            return target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Double;
+        }
+
+        if (source == TypeSymbols.Byte)
+        {
+            return target == TypeSymbols.Byte || target == TypeSymbols.Int || target == TypeSymbols.Long || target == TypeSymbols.Double;
+        }
+
+        if (!IsNumericType(source) || !IsNumericType(target))
+        {
+            return false;
+        }
+
+        return GetNumericRank(source) <= GetNumericRank(target);
+    }
+
+    private static int GetNumericRank(TypeSymbol type)
+    {
+        if (type == TypeSymbols.Byte)
+        {
+            return 1;
+        }
+
+        if (type == TypeSymbols.Int)
+        {
+            return 2;
+        }
+
+        if (type == TypeSymbols.Long)
+        {
+            return 3;
+        }
+
+        if (type == TypeSymbols.Double)
+        {
+            return 4;
+        }
+
+        return int.MaxValue;
     }
 }

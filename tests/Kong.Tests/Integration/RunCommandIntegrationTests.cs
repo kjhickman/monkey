@@ -542,6 +542,42 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsStaticClrDoubleCharAndByteTypes()
+    {
+        var source = "fn Main() { let d: double = System.Convert.ToDouble(\"4\"); let root: double = System.Math.Sqrt(d); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("1", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandSupportsDoubleCharAndByteLiterals()
+    {
+        var source = "fn Main() { let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; if (d > 1.0) { if (c == 'a') { if (b == 42b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("1", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandSupportsAdditionalStaticClrBclCalls()
     {
         var source = "fn Main() { let low: int = System.Math.Min(10, 3); let high: int = System.Math.Max(10, 3); let clamped: int = System.Math.Clamp(high, 0, 100); let label: string = System.String.Concat(\"v\", \"13\"); if (low == 3) { if (clamped == 10) { if (System.String.Equals(label, \"v13\")) { if (!System.String.IsNullOrEmpty(label)) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";

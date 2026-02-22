@@ -1,5 +1,6 @@
 using Kong.Common;
 using Kong.Lexing;
+using System.Globalization;
 
 namespace Kong.Parsing;
 
@@ -52,6 +53,9 @@ public class Parser
         {
             { TokenType.Identifier, ParseIdentifier },
             { TokenType.Integer, ParseIntegerLiteral },
+            { TokenType.Double, ParseDoubleLiteral },
+            { TokenType.Char, ParseCharLiteral },
+            { TokenType.Byte, ParseByteLiteral },
             { TokenType.String, ParseStringLiteral },
             { TokenType.Function, ParseFunctionLiteral },
             { TokenType.True, ParseBoolean },
@@ -627,6 +631,60 @@ public class Parser
             Value = _curToken.Literal,
             Span = _curToken.Span,
         };
+    }
+
+    private IExpression ParseDoubleLiteral()
+    {
+        var literal = new DoubleLiteral
+        {
+            Token = _curToken,
+            Span = _curToken.Span,
+        };
+
+        if (!double.TryParse(_curToken.Literal, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            _diagnostics.Report(_curToken.Span, $"could not parse \"{_curToken.Literal}\" as double", "P003");
+            return null!;
+        }
+
+        literal.Value = value;
+        return literal;
+    }
+
+    private IExpression ParseCharLiteral()
+    {
+        var literal = new CharLiteral
+        {
+            Token = _curToken,
+            Span = _curToken.Span,
+        };
+
+        if (_curToken.Literal.Length != 1)
+        {
+            _diagnostics.Report(_curToken.Span, $"could not parse \"{_curToken.Literal}\" as char", "P003");
+            return null!;
+        }
+
+        literal.Value = _curToken.Literal[0];
+        return literal;
+    }
+
+    private IExpression ParseByteLiteral()
+    {
+        var literal = new ByteLiteral
+        {
+            Token = _curToken,
+            Span = _curToken.Span,
+        };
+
+        if (!byte.TryParse(_curToken.Literal, out var value))
+        {
+            _diagnostics.Report(_curToken.Span, $"could not parse \"{_curToken.Literal}\" as byte", "P003");
+            return null!;
+        }
+
+        literal.Value = value;
+        return literal;
     }
 
     private IExpression ParseFunctionLiteral()

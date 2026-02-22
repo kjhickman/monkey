@@ -28,6 +28,9 @@ public class ParserTests
 
     [Theory]
     [InlineData("let x: int = 5;", "int")]
+    [InlineData("let pi: double = 1.25;", "double")]
+    [InlineData("let c: char = 'a';", "char")]
+    [InlineData("let b: byte = 42b;", "byte")]
     [InlineData("let xs: int[] = [1, 2];", "int[]")]
     public void TestLetStatementsWithTypeAnnotations(string input, string expectedType)
     {
@@ -95,6 +98,60 @@ public class ParserTests
         var literal = Assert.IsType<IntegerLiteral>(stmt.Expression);
         Assert.Equal(5L, literal.Value);
         Assert.Equal("5", literal.TokenLiteral());
+    }
+
+    [Fact]
+    public void TestDoubleLiteralExpression()
+    {
+        var input = "1.5;";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Single(unit.Statements);
+
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var literal = Assert.IsType<DoubleLiteral>(stmt.Expression);
+        Assert.Equal(1.5, literal.Value);
+        Assert.Equal("1.5", literal.TokenLiteral());
+    }
+
+    [Fact]
+    public void TestCharLiteralExpression()
+    {
+        var input = "'a';";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Single(unit.Statements);
+
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var literal = Assert.IsType<CharLiteral>(stmt.Expression);
+        Assert.Equal('a', literal.Value);
+        Assert.Equal("a", literal.TokenLiteral());
+    }
+
+    [Fact]
+    public void TestByteLiteralExpression()
+    {
+        var input = "42b;";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        Assert.Single(unit.Statements);
+
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var literal = Assert.IsType<ByteLiteral>(stmt.Expression);
+        Assert.Equal((byte)42, literal.Value);
+        Assert.Equal("42", literal.TokenLiteral());
     }
 
     [Theory]
@@ -529,8 +586,17 @@ public class ParserTests
             case string s:
                 TestIdentifier(exp, s);
                 break;
-            case bool b:
-                TestBooleanLiteral(exp, b);
+            case double d:
+                TestDoubleLiteral(exp, d);
+                break;
+            case char c:
+                TestCharLiteral(exp, c);
+                break;
+            case byte b:
+                TestByteLiteral(exp, b);
+                break;
+            case bool boolValue:
+                TestBooleanLiteral(exp, boolValue);
                 break;
             default:
                 Assert.Fail($"type of expected not handled. got={expected.GetType()}");
@@ -543,6 +609,24 @@ public class ParserTests
         var integ = Assert.IsType<IntegerLiteral>(exp);
         Assert.Equal(value, integ.Value);
         Assert.Equal(value.ToString(), integ.TokenLiteral());
+    }
+
+    private static void TestDoubleLiteral(IExpression exp, double value)
+    {
+        var literal = Assert.IsType<DoubleLiteral>(exp);
+        Assert.Equal(value, literal.Value);
+    }
+
+    private static void TestCharLiteral(IExpression exp, char value)
+    {
+        var literal = Assert.IsType<CharLiteral>(exp);
+        Assert.Equal(value, literal.Value);
+    }
+
+    private static void TestByteLiteral(IExpression exp, byte value)
+    {
+        var literal = Assert.IsType<ByteLiteral>(exp);
+        Assert.Equal(value, literal.Value);
     }
 
     private static void TestIdentifier(IExpression exp, string value)

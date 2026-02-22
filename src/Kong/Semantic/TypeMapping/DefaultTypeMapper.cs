@@ -28,6 +28,21 @@ public class DefaultTypeMapper : ITypeMapper
             return module.TypeSystem.Int64;
         }
 
+        if (kongType == TypeSymbols.Double)
+        {
+            return module.TypeSystem.Double;
+        }
+
+        if (kongType == TypeSymbols.Char)
+        {
+            return module.TypeSystem.Char;
+        }
+
+        if (kongType == TypeSymbols.Byte)
+        {
+            return module.TypeSystem.Byte;
+        }
+
         if (kongType == TypeSymbols.Bool)
         {
             return module.TypeSystem.Boolean;
@@ -72,6 +87,9 @@ public class DefaultTypeMapper : ITypeMapper
 
         if (type == TypeSymbols.Int ||
             type == TypeSymbols.Long ||
+            type == TypeSymbols.Double ||
+            type == TypeSymbols.Char ||
+            type == TypeSymbols.Byte ||
             type == TypeSymbols.Bool ||
             type == TypeSymbols.String)
         {

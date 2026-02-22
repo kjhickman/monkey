@@ -170,6 +170,28 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesStaticClrDoubleCharAndByteProgram()
+    {
+        var source = "let d: double = System.Convert.ToDouble(\"4\"); let root: double = System.Math.Sqrt(d); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { 1; } else { 0; } } else { 0; } } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesDoubleCharAndByteLiterals()
+    {
+        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; if (d > 1.0) { if (c == 'a') { if (b == 42b) { 1; } else { 0; } } else { 0; } } else { 0; }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

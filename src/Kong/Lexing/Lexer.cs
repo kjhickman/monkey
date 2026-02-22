@@ -115,6 +115,18 @@ public class Lexer
                 token = new Token(TokenType.String, value, new Span(start, end));
                 break;
             }
+            case '\'':
+            {
+                if (!TryReadCharLiteral(out var value))
+                {
+                    token = NewToken(TokenType.Illegal, _ch, start);
+                    break;
+                }
+
+                var end = new Position(_line, _column + 1);
+                token = new Token(TokenType.Char, value.ToString(), new Span(start, end));
+                break;
+            }
             case '\0':
                 token = new Token(TokenType.EndOfFile, "", new Span(start, start));
                 break;
@@ -129,9 +141,9 @@ public class Lexer
 
                 if (IsDigit(_ch))
                 {
-                    var literal = ReadNumber();
+                    var literal = ReadNumber(out var tokenType);
                     var end = new Position(_line, _column);
-                    return new Token(TokenType.Integer, literal, new Span(start, end));
+                    return new Token(tokenType, literal, new Span(start, end));
                 }
 
                 token = NewToken(TokenType.Illegal, _ch, start);
@@ -184,14 +196,74 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private string ReadNumber()
+    private string ReadNumber(out TokenType tokenType)
     {
+        tokenType = TokenType.Integer;
         var position = _position;
         while (IsDigit(_ch))
         {
             ReadChar();
         }
+
+        if (_ch == '.' && IsDigit(PeekChar()))
+        {
+            tokenType = TokenType.Double;
+            ReadChar();
+            while (IsDigit(_ch))
+            {
+                ReadChar();
+            }
+
+            return _input[position.._position];
+        }
+
+        if (_ch == 'b')
+        {
+            tokenType = TokenType.Byte;
+            var literal = _input[position.._position];
+            ReadChar();
+            return literal;
+        }
+
         return _input[position.._position];
+    }
+
+    private bool TryReadCharLiteral(out char value)
+    {
+        value = '\0';
+
+        ReadChar();
+        if (_ch is '\0' or '\n' or '\r')
+        {
+            return false;
+        }
+
+        if (_ch == '\\')
+        {
+            ReadChar();
+            value = _ch switch
+            {
+                '\\' => '\\',
+                '\'' => '\'',
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                '0' => '\0',
+                _ => '\0',
+            };
+
+            if (value == '\0' && _ch != '0')
+            {
+                return false;
+            }
+        }
+        else
+        {
+            value = _ch;
+        }
+
+        ReadChar();
+        return _ch == '\'';
     }
 
     private string ReadString()
