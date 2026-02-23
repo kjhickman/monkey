@@ -97,7 +97,10 @@ public class TypeChecker
     {
         foreach (var external in _externalEnumDeclarations)
         {
-            _enumTypes[external.Name.Value] = new EnumTypeSymbol(external.Name.Value, []);
+            var externalTypeParameters = external.TypeParameters
+                .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p.Value))
+                .ToList();
+            _enumTypes[external.Name.Value] = new EnumTypeSymbol(external.Name.Value, externalTypeParameters);
             _namedTypeSymbols[external.Name.Value] = _enumTypes[external.Name.Value];
         }
 
@@ -117,14 +120,10 @@ public class TypeChecker
                 continue;
             }
 
-            if (declaration.TypeParameters.Count > 0)
-            {
-                _result.Diagnostics.Report(declaration.Name.Span,
-                    $"generic enum declarations are not implemented yet for '{declaration.Name.Value}'",
-                    "T129");
-            }
-
-            _enumTypes[declaration.Name.Value] = new EnumTypeSymbol(declaration.Name.Value, []);
+            var typeParameters = declaration.TypeParameters
+                .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p.Value))
+                .ToList();
+            _enumTypes[declaration.Name.Value] = new EnumTypeSymbol(declaration.Name.Value, typeParameters);
             _namedTypeSymbols[declaration.Name.Value] = _enumTypes[declaration.Name.Value];
         }
 
@@ -137,6 +136,12 @@ public class TypeChecker
 
             var variants = new List<EnumVariantDefinition>(declaration.Variants.Count);
             var seenVariants = new HashSet<string>(StringComparer.Ordinal);
+            var genericTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+            foreach (var typeParameter in declaration.TypeParameters)
+            {
+                genericTypeBindings[typeParameter.Value] = new GenericParameterTypeSymbol(typeParameter.Value);
+            }
+
             for (var i = 0; i < declaration.Variants.Count; i++)
             {
                 var variant = declaration.Variants[i];
@@ -151,13 +156,16 @@ public class TypeChecker
                 var payloadTypes = new List<TypeSymbol>(variant.PayloadTypes.Count);
                 foreach (var payloadTypeNode in variant.PayloadTypes)
                 {
-                    payloadTypes.Add(TypeAnnotationBinder.Bind(payloadTypeNode, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
+                    payloadTypes.Add(TypeAnnotationBinder.Bind(payloadTypeNode, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error);
                 }
 
                 variants.Add(new EnumVariantDefinition(variant.Name.Value, payloadTypes, i));
             }
 
-            var enumDefinition = new EnumDefinitionSymbol(declaration.Name.Value, [], variants);
+            var enumDefinition = new EnumDefinitionSymbol(
+                declaration.Name.Value,
+                declaration.TypeParameters.Select(tp => tp.Value).ToList(),
+                variants);
             _result.EnumDefinitions[declaration.Name.Value] = enumDefinition;
             RegisterVariantSymbols(enumDefinition);
         }
@@ -273,20 +281,26 @@ public class TypeChecker
 
     private void CheckLetStatement(LetStatement statement)
     {
-        var diagnosticsBeforeInitializer = _result.Diagnostics.Count;
-        var initializerType = statement.Value != null
-            ? CheckExpression(statement.Value)
-            : TypeSymbols.Error;
-        var initializerHadErrors = _result.Diagnostics.Count > diagnosticsBeforeInitializer;
-
         TypeSymbol declaredType;
         if (statement.TypeAnnotation == null)
         {
+            var diagnosticsBeforeInitializer = _result.Diagnostics.Count;
+            var initializerType = statement.Value != null
+                ? CheckExpression(statement.Value)
+                : TypeSymbols.Error;
+            var initializerHadErrors = _result.Diagnostics.Count > diagnosticsBeforeInitializer;
             declaredType = InferLetType(statement, initializerType, initializerHadErrors);
         }
         else
         {
             declaredType = TypeAnnotationBinder.Bind(statement.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+
+            var initializerType = statement.Value == null
+                ? TypeSymbols.Error
+                : declaredType is EnumTypeSymbol expectedEnumType && statement.Value is CallExpression enumCall
+                    ? CheckEnumVariantConstructorCall(enumCall, expectedEnumType, null)
+                    : CheckExpression(statement.Value);
+
             if (!IsAssignable(initializerType, declaredType))
             {
                 _result.Diagnostics.Report(statement.Span,
@@ -353,7 +367,9 @@ public class TypeChecker
             return;
         }
 
-        var valueType = CheckExpression(statement.Value);
+        var valueType = statement.Value is CallExpression enumCall && targetType is EnumTypeSymbol expectedEnumType
+            ? CheckEnumVariantConstructorCall(enumCall, expectedEnumType, null)
+            : CheckExpression(statement.Value);
         if (!IsAssignable(valueType, targetType))
         {
             _result.Diagnostics.Report(statement.Value.Span,
@@ -449,7 +465,9 @@ public class TypeChecker
 
         var expectedReturnType = _currentFunctionReturnTypes.Peek();
         var actualReturnType = statement.ReturnValue != null
-            ? CheckExpression(statement.ReturnValue)
+            ? statement.ReturnValue is CallExpression enumCall && expectedReturnType is EnumTypeSymbol expectedEnumType
+                ? CheckEnumVariantConstructorCall(enumCall, expectedEnumType, null)
+                : CheckExpression(statement.ReturnValue)
             : TypeSymbols.Void;
 
         if (!IsAssignable(actualReturnType, expectedReturnType))
@@ -637,6 +655,7 @@ public class TypeChecker
         var seenVariants = new HashSet<string>(StringComparer.Ordinal);
         var resolvedArms = new List<MatchArmResolution>(expression.Arms.Count);
         var armTypes = new List<TypeSymbol>(expression.Arms.Count);
+        var substitution = BuildTypeParameterSubstitution(enumDefinition, enumType);
 
         foreach (var arm in expression.Arms)
         {
@@ -657,10 +676,14 @@ public class TypeChecker
                 continue;
             }
 
-            if (arm.Bindings.Count != variant.PayloadTypes.Count)
+            var concretePayloadTypes = variant.PayloadTypes
+                .Select(payload => SubstituteGenericParameters(payload, substitution))
+                .ToList();
+
+            if (arm.Bindings.Count != concretePayloadTypes.Count)
             {
                 _result.Diagnostics.Report(arm.Span,
-                    $"match arm '{variant.Name}' expects {variant.PayloadTypes.Count} binding(s), got {arm.Bindings.Count}",
+                    $"match arm '{variant.Name}' expects {concretePayloadTypes.Count} binding(s), got {arm.Bindings.Count}",
                     "T131");
                 continue;
             }
@@ -671,14 +694,14 @@ public class TypeChecker
                 var binding = arm.Bindings[i];
                 if (_names.IdentifierSymbols.TryGetValue(binding, out var bindingSymbol))
                 {
-                    _symbolTypes[bindingSymbol] = variant.PayloadTypes[i];
+                    _symbolTypes[bindingSymbol] = concretePayloadTypes[i];
                     bindingSymbols.Add(bindingSymbol);
                 }
             }
 
             var armType = CheckBlockExpressionType(arm.Body);
             armTypes.Add(armType);
-            resolvedArms.Add(new MatchArmResolution(variant.Name, variant.Tag, variant.PayloadTypes, bindingSymbols));
+            resolvedArms.Add(new MatchArmResolution(variant.Name, variant.Tag, concretePayloadTypes, bindingSymbols));
         }
 
         if (seenVariants.Count != enumDefinition.Variants.Count)
@@ -823,38 +846,9 @@ public class TypeChecker
         if (expression.Function is Identifier identifier &&
             _names.IdentifierSymbols.TryGetValue(identifier, out var symbol) &&
             symbol.Kind == NameSymbolKind.EnumVariant &&
-            _variantSymbols.TryGetValue(symbol.Name, out var variantBinding))
+            _variantSymbols.TryGetValue(symbol.Name, out _))
         {
-            var expectedPayloadTypes = variantBinding.Variant.PayloadTypes;
-            if (argumentTypes.Count != expectedPayloadTypes.Count)
-            {
-                _result.Diagnostics.Report(
-                    expression.Span,
-                    $"wrong number of arguments for enum variant '{variantBinding.Variant.Name}': expected {expectedPayloadTypes.Count}, got {argumentTypes.Count}",
-                    "T112");
-                return new EnumTypeSymbol(variantBinding.Enum.Name, []);
-            }
-
-            for (var i = 0; i < expectedPayloadTypes.Count; i++)
-            {
-                if (!IsAssignable(argumentTypes[i], expectedPayloadTypes[i]))
-                {
-                    _result.Diagnostics.Report(
-                        expression.Arguments[i].Span,
-                        $"argument {i + 1} type mismatch for enum variant '{variantBinding.Variant.Name}': expected '{expectedPayloadTypes[i]}', got '{argumentTypes[i]}'",
-                        "T113");
-                }
-            }
-
-            _result.ResolvedEnumVariantConstructions[expression] = new EnumVariantConstruction(
-                variantBinding.Enum.Name,
-                variantBinding.Variant.Name,
-                variantBinding.Variant.Tag,
-                variantBinding.Enum.MaxPayloadArity,
-                variantBinding.Variant.PayloadTypes);
-            return _namedTypeSymbols.TryGetValue(variantBinding.Enum.Name, out var enumType)
-                ? enumType
-                : new EnumTypeSymbol(variantBinding.Enum.Name, []);
+            return CheckEnumVariantConstructorCall(expression, expectedEnumType: null, argumentTypes);
         }
 
         var functionType = CheckExpression(expression.Function);
@@ -886,6 +880,244 @@ public class TypeChecker
         }
 
         return fn.ReturnType;
+    }
+
+    private TypeSymbol CheckEnumVariantConstructorCall(
+        CallExpression expression,
+        EnumTypeSymbol? expectedEnumType,
+        IReadOnlyList<TypeSymbol>? precomputedArgumentTypes)
+    {
+        var argumentTypes = precomputedArgumentTypes?.ToList() ?? expression.Arguments.Select(a => CheckExpression(a.Expression)).ToList();
+
+        if (expression.Function is not Identifier identifier ||
+            !_names.IdentifierSymbols.TryGetValue(identifier, out var symbol) ||
+            symbol.Kind != NameSymbolKind.EnumVariant ||
+            !_variantSymbols.TryGetValue(symbol.Name, out var variantBinding))
+        {
+            _result.Diagnostics.Report(expression.Span,
+                "internal error: expected enum variant constructor call",
+                "T130");
+            return TypeSymbols.Error;
+        }
+
+        if (expectedEnumType != null && !string.Equals(expectedEnumType.EnumName, variantBinding.Enum.Name, StringComparison.Ordinal))
+        {
+            _result.Diagnostics.Report(
+                expression.Span,
+                $"enum variant '{variantBinding.Variant.Name}' does not belong to expected enum '{expectedEnumType.EnumName}'",
+                "T113");
+            return expectedEnumType;
+        }
+
+        var inferredTypeArguments = InferEnumTypeArguments(variantBinding.Enum, variantBinding.Variant, argumentTypes, expectedEnumType);
+        if (inferredTypeArguments == null)
+        {
+            return new EnumTypeSymbol(variantBinding.Enum.Name, []);
+        }
+
+        var concreteEnumType = new EnumTypeSymbol(variantBinding.Enum.Name, inferredTypeArguments);
+        var substitution = BuildTypeParameterSubstitution(variantBinding.Enum, concreteEnumType);
+        var concretePayloadTypes = variantBinding.Variant.PayloadTypes
+            .Select(payloadType => SubstituteGenericParameters(payloadType, substitution))
+            .ToList();
+
+        if (argumentTypes.Count != concretePayloadTypes.Count)
+        {
+            _result.Diagnostics.Report(
+                expression.Span,
+                $"wrong number of arguments for enum variant '{variantBinding.Variant.Name}': expected {concretePayloadTypes.Count}, got {argumentTypes.Count}",
+                "T112");
+            return concreteEnumType;
+        }
+
+        for (var i = 0; i < concretePayloadTypes.Count; i++)
+        {
+            if (!IsAssignable(argumentTypes[i], concretePayloadTypes[i]))
+            {
+                _result.Diagnostics.Report(
+                    expression.Arguments[i].Span,
+                    $"argument {i + 1} type mismatch for enum variant '{variantBinding.Variant.Name}': expected '{concretePayloadTypes[i]}', got '{argumentTypes[i]}'",
+                    "T113");
+            }
+        }
+
+        _result.ResolvedEnumVariantConstructions[expression] = new EnumVariantConstruction(
+            variantBinding.Enum.Name,
+            variantBinding.Variant.Name,
+            variantBinding.Variant.Tag,
+            variantBinding.Enum.MaxPayloadArity,
+            concretePayloadTypes);
+        _result.ExpressionTypes[expression] = concreteEnumType;
+        return concreteEnumType;
+    }
+
+    private List<TypeSymbol>? InferEnumTypeArguments(
+        EnumDefinitionSymbol enumDefinition,
+        EnumVariantDefinition variant,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        EnumTypeSymbol? expectedEnumType)
+    {
+        if (enumDefinition.TypeParameters.Count == 0)
+        {
+            return [];
+        }
+
+        if (expectedEnumType != null)
+        {
+            if (expectedEnumType.TypeArguments.Count != enumDefinition.TypeParameters.Count)
+            {
+                _result.Diagnostics.Report(
+                    Span.Empty,
+                    $"internal error: expected enum '{expectedEnumType.EnumName}' has wrong arity",
+                    "T130");
+                return null;
+            }
+
+            return expectedEnumType.TypeArguments.ToList();
+        }
+
+        if (argumentTypes.Count != variant.PayloadTypes.Count)
+        {
+            _result.Diagnostics.Report(
+                Span.Empty,
+                $"cannot infer generic enum type arguments for '{enumDefinition.Name}.{variant.Name}' due to argument count mismatch",
+                "T112");
+            return null;
+        }
+
+        var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        for (var i = 0; i < variant.PayloadTypes.Count; i++)
+        {
+            if (!TryInferGenericType(variant.PayloadTypes[i], argumentTypes[i], inference))
+            {
+                _result.Diagnostics.Report(
+                    Span.Empty,
+                    $"cannot infer generic enum type arguments for '{enumDefinition.Name}.{variant.Name}'",
+                    "T130");
+                return null;
+            }
+        }
+
+        var typeArguments = new List<TypeSymbol>(enumDefinition.TypeParameters.Count);
+        foreach (var typeParameter in enumDefinition.TypeParameters)
+        {
+            if (!inference.TryGetValue(typeParameter, out var inferred))
+            {
+                _result.Diagnostics.Report(
+                    Span.Empty,
+                    $"cannot infer type argument '{typeParameter}' for enum '{enumDefinition.Name}'",
+                    "T130");
+                return null;
+            }
+
+            typeArguments.Add(inferred);
+        }
+
+        return typeArguments;
+    }
+
+    private static Dictionary<string, TypeSymbol> BuildTypeParameterSubstitution(
+        EnumDefinitionSymbol enumDefinition,
+        EnumTypeSymbol concreteEnumType)
+    {
+        var substitution = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        for (var i = 0; i < enumDefinition.TypeParameters.Count && i < concreteEnumType.TypeArguments.Count; i++)
+        {
+            substitution[enumDefinition.TypeParameters[i]] = concreteEnumType.TypeArguments[i];
+        }
+
+        return substitution;
+    }
+
+    private static TypeSymbol SubstituteGenericParameters(TypeSymbol type, IReadOnlyDictionary<string, TypeSymbol> substitution)
+    {
+        if (type is GenericParameterTypeSymbol genericParameter)
+        {
+            return substitution.TryGetValue(genericParameter.ParameterName, out var concrete)
+                ? concrete
+                : type;
+        }
+
+        if (type is ArrayTypeSymbol array)
+        {
+            return new ArrayTypeSymbol(SubstituteGenericParameters(array.ElementType, substitution));
+        }
+
+        if (type is FunctionTypeSymbol function)
+        {
+            var parameters = function.ParameterTypes.Select(p => SubstituteGenericParameters(p, substitution)).ToList();
+            var returnType = SubstituteGenericParameters(function.ReturnType, substitution);
+            return new FunctionTypeSymbol(parameters, returnType);
+        }
+
+        if (type is EnumTypeSymbol enumType)
+        {
+            var args = enumType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new EnumTypeSymbol(enumType.EnumName, args);
+        }
+
+        return type;
+    }
+
+    private static bool TryInferGenericType(
+        TypeSymbol template,
+        TypeSymbol actual,
+        Dictionary<string, TypeSymbol> inference)
+    {
+        if (template is GenericParameterTypeSymbol parameter)
+        {
+            if (inference.TryGetValue(parameter.ParameterName, out var existing))
+            {
+                return TypeEquals(existing, actual);
+            }
+
+            inference[parameter.ParameterName] = actual;
+            return true;
+        }
+
+        if (template is ArrayTypeSymbol templateArray && actual is ArrayTypeSymbol actualArray)
+        {
+            return TryInferGenericType(templateArray.ElementType, actualArray.ElementType, inference);
+        }
+
+        if (template is EnumTypeSymbol templateEnum && actual is EnumTypeSymbol actualEnum)
+        {
+            if (!string.Equals(templateEnum.EnumName, actualEnum.EnumName, StringComparison.Ordinal) ||
+                templateEnum.TypeArguments.Count != actualEnum.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < templateEnum.TypeArguments.Count; i++)
+            {
+                if (!TryInferGenericType(templateEnum.TypeArguments[i], actualEnum.TypeArguments[i], inference))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (template is FunctionTypeSymbol templateFunction && actual is FunctionTypeSymbol actualFunction)
+        {
+            if (templateFunction.ParameterTypes.Count != actualFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < templateFunction.ParameterTypes.Count; i++)
+            {
+                if (!TryInferGenericType(templateFunction.ParameterTypes[i], actualFunction.ParameterTypes[i], inference))
+                {
+                    return false;
+                }
+            }
+
+            return TryInferGenericType(templateFunction.ReturnType, actualFunction.ReturnType, inference);
+        }
+
+        return TypeEquals(template, actual);
     }
 
     private TypeSymbol CheckNewExpression(NewExpression expression)

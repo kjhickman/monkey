@@ -1,8 +1,8 @@
 namespace Demo.Results;
 
-enum Result {
-    Ok(int),
-    Err(string),
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
 }
 
 enum Status {

@@ -33,6 +33,14 @@ public static class TypeAnnotationBinder
 
         if (namedTypes != null && namedTypes.TryGetValue(namedType.Name, out var namedTypeSymbol))
         {
+            if (namedTypeSymbol is EnumTypeSymbol enumType && enumType.TypeArguments.Count > 0)
+            {
+                diagnostics.Report(namedType.Span,
+                    $"generic enum '{namedType.Name}' requires {enumType.TypeArguments.Count} type argument(s)",
+                    "T001");
+                return null;
+            }
+
             return namedTypeSymbol;
         }
 
@@ -54,6 +62,14 @@ public static class TypeAnnotationBinder
         if (genericTarget is not EnumTypeSymbol enumType)
         {
             diagnostics.Report(genericType.Span, $"type '{genericType.Name}' does not accept type arguments", "T001");
+            return null;
+        }
+
+        if (genericType.TypeArguments.Count != enumType.TypeArguments.Count)
+        {
+            diagnostics.Report(genericType.Span,
+                $"wrong number of type arguments for '{genericType.Name}': expected {enumType.TypeArguments.Count}, got {genericType.TypeArguments.Count}",
+                "T001");
             return null;
         }
 

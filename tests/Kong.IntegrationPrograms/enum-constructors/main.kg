@@ -4,8 +4,8 @@ import System;
 namespace Demo.App;
 
 fn Main() {
-    let a: Result = Ok(42);
-    let b: Result = Err("boom");
+    let a: Result<int, string> = Ok(42);
+    let b: Result<int, string> = Err("boom");
     let s: Status = Done();
     let ax: int = Unwrap(a);
     let bx: int = Unwrap(b);
@@ -17,7 +17,7 @@ fn Main() {
     }
 }
 
-fn Unwrap(value: Result) -> int {
+fn Unwrap(value: Result<int, string>) -> int {
     match (value) {
         Ok(n) => { n; },
         Err(msg) => { -1; },

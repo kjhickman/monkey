@@ -239,7 +239,9 @@ public class TypeCheckerTests
         var letStatement = Assert.IsType<LetStatement>(unit.Statements[2]);
         var call = Assert.IsType<CallExpression>(letStatement.Value);
         Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
-        Assert.Equal(new EnumTypeSymbol("Result", []), callType);
+        var enumType = Assert.IsType<EnumTypeSymbol>(callType);
+        Assert.Equal("Result", enumType.EnumName);
+        Assert.Empty(enumType.TypeArguments);
         Assert.True(result.ResolvedEnumVariantConstructions.ContainsKey(call));
     }
 
@@ -283,6 +285,35 @@ public class TypeCheckerTests
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T131");
+    }
+
+    [Fact]
+    public void TestTypeChecksGenericEnumVariantConstructorWithContext()
+    {
+        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(42);";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsGenericEnumVariantConstructorWithoutEnoughContext()
+    {
+        var (_, _, result) = ParseResolveAndCheck("enum Result<T, E> { Ok(T), Err(E) } Ok(42);");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T130");
+    }
+
+    [Fact]
+    public void TestTypeChecksGenericEnumMatchPayloadBindings()
+    {
+        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(7); let n: int = match (r) { Ok(v) => { v; }, Err(e) => { 0; } };";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
     }
 
     [Fact]

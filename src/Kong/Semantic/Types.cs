@@ -236,6 +236,11 @@ public sealed record EnumTypeSymbol(string EnumName, IReadOnlyList<TypeSymbol> T
         : $"{EnumName}<{string.Join(", ", TypeArguments)}>";
 }
 
+public sealed record GenericParameterTypeSymbol(string ParameterName) : TypeSymbol
+{
+    public override string Name => ParameterName;
+}
+
 public sealed record EnumVariantDefinition(string Name, IReadOnlyList<TypeSymbol> PayloadTypes, int Tag);
 
 public sealed record EnumDefinitionSymbol(
