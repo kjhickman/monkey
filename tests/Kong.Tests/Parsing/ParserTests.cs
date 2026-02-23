@@ -1094,6 +1094,35 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesIndexAssignmentStatement()
+    {
+        var input = "xs[1] = 42;";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<IndexAssignmentStatement>(unit.Statements[0]);
+        TestIdentifier(statement.Target.Left, "xs");
+        TestIntegerLiteral(statement.Target.Index, 1);
+        TestIntegerLiteral(statement.Value, 42);
+    }
+
+    [Fact]
+    public void TestParsesBreakAndContinueStatements()
+    {
+        var input = "for i in xs { break; continue; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var loop = Assert.IsType<ForInStatement>(unit.Statements[0]);
+        Assert.IsType<BreakStatement>(loop.Body.Statements[0]);
+        Assert.IsType<ContinueStatement>(loop.Body.Statements[1]);
+    }
+
+    [Fact]
     public void TestParsesImportStatement()
     {
         var input = "import System.Console;";

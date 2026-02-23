@@ -12,6 +12,7 @@ fn Main() {
     let total: int = Add(40, 2);
     let scaled: double = Scale(1.5);
     let matrix: int[][] = [[1, 2], [42, 99]];
+    matrix[0][1] = 3;
     let picked: int = Pick(matrix);
     let words: string[] = ["hi", "kong"];
     let word: string = Word(words);
@@ -40,6 +41,16 @@ fn Main() {
     for i in matrix[0] {
         loopTotal = loopTotal + i;
     }
+    var control: int = 0;
+    for x in matrix[0] {
+        continue;
+        control = control + x;
+    }
+    for y in matrix[0] {
+        control = control + y;
+        break;
+        control = control + 100;
+    }
     checks = checks + 1;
 
     // Exercise logical operators with short-circuit-friendly shape.
@@ -52,7 +63,8 @@ fn Main() {
         fromClr == 3.0 &&
         scaled == 3.0 &&
         parseOk && parsed &&
-        loopTotal == 3 &&
+        loopTotal == 4 &&
+        control == 1 &&
         checks == 1;
 
     if (ok || false) {

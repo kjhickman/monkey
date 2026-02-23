@@ -22,6 +22,7 @@ public class TypeChecker
     private readonly TypeCheckResult _result = new();
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
+    private int _loopDepth;
     private NameResolution _names = null!;
     private IReadOnlyDictionary<string, FunctionTypeSymbol> _externalFunctionTypes =
         new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
@@ -98,8 +99,17 @@ public class TypeChecker
             case AssignmentStatement assignmentStatement:
                 CheckAssignmentStatement(assignmentStatement);
                 break;
+            case IndexAssignmentStatement indexAssignmentStatement:
+                CheckIndexAssignmentStatement(indexAssignmentStatement);
+                break;
             case ForInStatement forInStatement:
                 CheckForInStatement(forInStatement);
+                break;
+            case BreakStatement breakStatement:
+                CheckBreakStatement(breakStatement);
+                break;
+            case ContinueStatement continueStatement:
+                CheckContinueStatement(continueStatement);
                 break;
             case FunctionDeclaration functionDeclaration:
                 CheckFunctionDeclaration(functionDeclaration);
@@ -249,7 +259,62 @@ public class TypeChecker
             _symbolTypes[symbol] = elementType;
         }
 
+        _loopDepth++;
         CheckBlockStatement(statement.Body);
+        _loopDepth--;
+    }
+
+    private void CheckIndexAssignmentStatement(IndexAssignmentStatement statement)
+    {
+        var left = CheckExpression(statement.Target.Left);
+        var index = CheckExpression(statement.Target.Index);
+        var valueType = CheckExpression(statement.Value);
+
+        if (index != TypeSymbols.Int && index != TypeSymbols.Error)
+        {
+            _result.Diagnostics.Report(statement.Target.Index.Span,
+                $"array index must be 'int', got '{index}'",
+                "T115");
+        }
+
+        if (left is not ArrayTypeSymbol arrayType)
+        {
+            if (left != TypeSymbols.Error)
+            {
+                _result.Diagnostics.Report(statement.Target.Left.Span,
+                    $"cannot index-assign expression of type '{left}'",
+                    "T116");
+            }
+
+            return;
+        }
+
+        if (!IsAssignable(valueType, arrayType.ElementType))
+        {
+            _result.Diagnostics.Report(statement.Value.Span,
+                $"cannot assign expression of type '{valueType}' to array element of type '{arrayType.ElementType}'",
+                "T102");
+        }
+    }
+
+    private void CheckBreakStatement(BreakStatement statement)
+    {
+        if (_loopDepth == 0)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "'break' can only be used inside a loop",
+                "T126");
+        }
+    }
+
+    private void CheckContinueStatement(ContinueStatement statement)
+    {
+        if (_loopDepth == 0)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "'continue' can only be used inside a loop",
+                "T127");
+        }
     }
 
     private void CheckReturnStatement(ReturnStatement statement)

@@ -640,6 +640,26 @@ public class TypeCheckerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T125");
     }
 
+    [Fact]
+    public void TestTypeChecksArrayElementAssignment()
+    {
+        var source = "var xs: int[] = [1, 2, 3]; xs[1] = 42;";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsBreakContinueOutsideLoop()
+    {
+        var (_, _, result) = ParseResolveAndCheck("break; continue;");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T126");
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T127");
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

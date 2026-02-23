@@ -285,6 +285,28 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesArrayElementAssignment()
+    {
+        var source = "var xs: int[] = [1, 2, 3]; xs[1] = 42; xs[1];";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(42, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesForInBreakAndContinue()
+    {
+        var source = "let xs: int[] = [1, 2, 3, 4]; var total: int = 0; for i in xs { continue; total = total + i; } for j in xs { total = total + j; break; total = total + 100; } total;";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

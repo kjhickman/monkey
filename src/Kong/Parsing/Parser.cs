@@ -183,10 +183,103 @@ public class Parser
             TokenType.Let => ParseLetStatement(),
             TokenType.Var => ParseVarStatement(),
             TokenType.For => ParseForInStatement(),
+            TokenType.Break => ParseBreakStatement(),
+            TokenType.Continue => ParseContinueStatement(),
             TokenType.Return => ParseReturnStatement(),
-            TokenType.Identifier when PeekTokenIs(TokenType.Assign) => ParseAssignmentStatement(),
+            TokenType.Identifier => ParseIdentifierLedStatement(),
             _ => ParseExpressionStatement(),
         };
+    }
+
+    private IStatement? ParseIdentifierLedStatement()
+    {
+        var startSpan = _curToken.Span;
+        var left = ParseExpression(Precedence.Lowest);
+        if (left == null)
+        {
+            return null;
+        }
+
+        if (PeekTokenIs(TokenType.Assign))
+        {
+            NextToken();
+            var assignToken = _curToken;
+            NextToken();
+            var value = ParseExpression(Precedence.Lowest);
+            if (value == null)
+            {
+                return null;
+            }
+
+            if (PeekTokenIs(TokenType.Semicolon))
+            {
+                NextToken();
+            }
+
+            return left switch
+            {
+                Identifier identifier => new AssignmentStatement
+                {
+                    Token = identifier.Token,
+                    Name = identifier,
+                    Value = value,
+                    Span = new Span(startSpan.Start, _curToken.Span.End),
+                },
+                IndexExpression indexExpression => new IndexAssignmentStatement
+                {
+                    Token = assignToken,
+                    Target = indexExpression,
+                    Value = value,
+                    Span = new Span(startSpan.Start, _curToken.Span.End),
+                },
+                _ => ReportInvalidAssignmentTarget(startSpan),
+            };
+        }
+
+        var expressionStatement = new ExpressionStatement
+        {
+            Token = left is Identifier id ? id.Token : _curToken,
+            Expression = left,
+            Span = new Span(startSpan.Start, _curToken.Span.End),
+        };
+
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+            expressionStatement.Span = new Span(startSpan.Start, _curToken.Span.End);
+        }
+
+        return expressionStatement;
+    }
+
+    private IStatement? ReportInvalidAssignmentTarget(Span startSpan)
+    {
+        _diagnostics.Report(startSpan, "invalid assignment target; expected identifier or array index", "P004");
+        return null;
+    }
+
+    private BreakStatement ParseBreakStatement()
+    {
+        var statement = new BreakStatement { Token = _curToken, Span = _curToken.Span };
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+            statement.Span = new Span(statement.Span.Start, _curToken.Span.End);
+        }
+
+        return statement;
+    }
+
+    private ContinueStatement ParseContinueStatement()
+    {
+        var statement = new ContinueStatement { Token = _curToken, Span = _curToken.Span };
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+            statement.Span = new Span(statement.Span.Start, _curToken.Span.End);
+        }
+
+        return statement;
     }
 
     private ForInStatement? ParseForInStatement()

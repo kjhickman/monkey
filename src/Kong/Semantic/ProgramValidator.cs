@@ -81,9 +81,17 @@ public static class ProgramValidator
                 case AssignmentStatement { Value: { } assignedValue }:
                     ReportUnsupportedIfWithoutElse(assignedValue, diagnostics);
                     break;
+                case IndexAssignmentStatement indexAssignmentStatement:
+                    ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Target.Left, diagnostics);
+                    ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Target.Index, diagnostics);
+                    ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Value, diagnostics);
+                    break;
                 case ForInStatement forInStatement:
                     ReportUnsupportedIfWithoutElse(forInStatement.Iterable, diagnostics);
                     ReportUnsupportedIfWithoutElse(forInStatement.Body, diagnostics);
+                    break;
+                case BreakStatement:
+                case ContinueStatement:
                     break;
                 case ReturnStatement { ReturnValue: { } returnValue }:
                     ReportUnsupportedIfWithoutElse(returnValue, diagnostics);

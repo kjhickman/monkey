@@ -589,4 +589,27 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesBreakAndContinueKeywords()
+    {
+        var input = "break; continue;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Break, "break"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.Continue, "continue"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

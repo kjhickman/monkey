@@ -174,8 +174,14 @@ public class NameResolver
             case AssignmentStatement assignmentStatement:
                 ResolveAssignmentStatement(assignmentStatement);
                 break;
+            case IndexAssignmentStatement indexAssignmentStatement:
+                ResolveIndexAssignmentStatement(indexAssignmentStatement);
+                break;
             case ForInStatement forInStatement:
                 ResolveForInStatement(forInStatement);
+                break;
+            case BreakStatement:
+            case ContinueStatement:
                 break;
             case FunctionDeclaration functionDeclaration:
                 ResolveFunctionDeclaration(functionDeclaration);
@@ -304,6 +310,13 @@ public class NameResolver
     private void ResolveAssignmentStatement(AssignmentStatement statement)
     {
         ResolveIdentifier(statement.Name);
+        ResolveExpression(statement.Value);
+    }
+
+    private void ResolveIndexAssignmentStatement(IndexAssignmentStatement statement)
+    {
+        ResolveExpression(statement.Target.Left);
+        ResolveExpression(statement.Target.Index);
         ResolveExpression(statement.Value);
     }
 

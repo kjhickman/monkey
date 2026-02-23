@@ -157,6 +157,14 @@ public class IrLowerer
                     }
                     break;
 
+                case IndexAssignmentStatement indexAssignmentStatement:
+                    if (!LowerIndexAssignmentStatement(indexAssignmentStatement))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -164,6 +172,14 @@ public class IrLowerer
                         return false;
                     }
                     break;
+
+                case BreakStatement:
+                case ContinueStatement:
+                    _result.Diagnostics.Report(statement.Span,
+                        "phase-4 IR lowerer does not support break/continue outside loops",
+                        "IR001");
+                    Restore();
+                    return false;
 
                 case FunctionDeclaration functionDeclaration:
                     if (!LowerFunctionDeclaration(functionDeclaration, isTopLevel))
@@ -226,7 +242,7 @@ public class IrLowerer
 
                 default:
                     _result.Diagnostics.Report(statement.Span,
-                        "phase-4 IR lowerer supports let/var, assignment, for-in, return, and expression statements only",
+                        "phase-4 IR lowerer supports let/var, assignment, index assignment, for-in, return, and expression statements only",
                         "IR001");
                     Restore();
                     return false;
@@ -386,6 +402,36 @@ public class IrLowerer
         return true;
     }
 
+    private bool LowerIndexAssignmentStatement(IndexAssignmentStatement statement)
+    {
+        if (!TryGetExpressionType(statement.Target.Left, out var leftType) || leftType is not ArrayTypeSymbol { ElementType: var elementType })
+        {
+            _result.Diagnostics.Report(statement.Target.Left.Span,
+                "phase-4 IR lowerer requires array index assignment target to be an array type",
+                "IR001");
+            return false;
+        }
+
+        if (!IsSupportedArrayElementType(elementType))
+        {
+            _result.Diagnostics.Report(statement.Target.Left.Span,
+                $"phase-4 IR lowerer does not support index assignment for arrays with element type '{elementType}'",
+                "IR001");
+            return false;
+        }
+
+        var arrayValue = LowerExpression(statement.Target.Left);
+        var indexValue = LowerExpression(statement.Target.Index);
+        var value = LowerExpression(statement.Value);
+        if (arrayValue == null || indexValue == null || value == null)
+        {
+            return false;
+        }
+
+        _currentBlock.Instructions.Add(new IrArrayStore(arrayValue.Value, indexValue.Value, value.Value, elementType));
+        return true;
+    }
+
     private bool LowerForInStatement(ForInStatement statement)
     {
         if (!TryGetExpressionType(statement.Iterable, out var iterableType) || iterableType is not ArrayTypeSymbol { ElementType: var elementType })
@@ -432,7 +478,7 @@ public class IrLowerer
         _currentBlock.Instructions.Add(new IrArrayIndex(elementValue, arrayValue.Value, indexForElement, elementType));
         _currentBlock.Instructions.Add(new IrStoreLocal(iteratorLocal, elementValue));
 
-        if (!LowerLoopBody(statement.Body, conditionBlock.Id, indexLocal))
+        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, indexLocal))
         {
             return false;
         }
@@ -441,7 +487,7 @@ public class IrLowerer
         return true;
     }
 
-    private bool LowerLoopBody(BlockStatement body, int continueBlockId, IrLocalId indexLocal)
+    private bool LowerLoopBody(BlockStatement body, int continueBlockId, int breakBlockId, IrLocalId indexLocal)
     {
         foreach (var statement in body.Statements)
         {
@@ -459,12 +505,24 @@ public class IrLowerer
                         return false;
                     }
                     break;
+                case IndexAssignmentStatement indexAssignmentStatement:
+                    if (!LowerIndexAssignmentStatement(indexAssignmentStatement))
+                    {
+                        return false;
+                    }
+                    break;
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
                         return false;
                     }
                     break;
+                case BreakStatement:
+                    _currentBlock.Terminator = new IrJump(breakBlockId);
+                    return true;
+                case ContinueStatement:
+                    EmitLoopIncrement(indexLocal, continueBlockId);
+                    return true;
                 case ImportStatement:
                 case NamespaceStatement:
                     break;
@@ -514,6 +572,12 @@ public class IrLowerer
             }
         }
 
+        EmitLoopIncrement(indexLocal, continueBlockId);
+        return true;
+    }
+
+    private void EmitLoopIncrement(IrLocalId indexLocal, int continueBlockId)
+    {
         var currentIndex = AllocateValue(TypeSymbols.Int);
         _currentBlock.Instructions.Add(new IrLoadLocal(currentIndex, indexLocal));
         var one = AllocateValue(TypeSymbols.Int);
@@ -522,7 +586,6 @@ public class IrLowerer
         _currentBlock.Instructions.Add(new IrBinary(incremented, IrBinaryOperator.Add, currentIndex, one));
         _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal, incremented));
         _currentBlock.Terminator = new IrJump(continueBlockId);
-        return true;
     }
 
     private (string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals)? LowerFunctionLiteral(
@@ -1063,6 +1126,13 @@ public class IrLowerer
                     }
                     break;
 
+                case IndexAssignmentStatement indexAssignmentStatement:
+                    if (!LowerIndexAssignmentStatement(indexAssignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -1145,6 +1215,13 @@ public class IrLowerer
 
                 case AssignmentStatement assignmentStatement:
                     if (!LowerAssignmentStatement(assignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
+                case IndexAssignmentStatement indexAssignmentStatement:
+                    if (!LowerIndexAssignmentStatement(indexAssignmentStatement))
                     {
                         return null;
                     }

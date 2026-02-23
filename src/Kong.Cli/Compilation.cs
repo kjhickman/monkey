@@ -306,12 +306,20 @@ public static class Compilation
             case AssignmentStatement assignmentStatement:
                 ValidateExpression(assignmentStatement.Value, filePath, diagnostics);
                 break;
+            case IndexAssignmentStatement indexAssignmentStatement:
+                ValidateExpression(indexAssignmentStatement.Target.Left, filePath, diagnostics);
+                ValidateExpression(indexAssignmentStatement.Target.Index, filePath, diagnostics);
+                ValidateExpression(indexAssignmentStatement.Value, filePath, diagnostics);
+                break;
             case ReturnStatement { ReturnValue: { } returnValue }:
                 ValidateExpression(returnValue, filePath, diagnostics);
                 break;
             case ForInStatement forInStatement:
                 ValidateExpression(forInStatement.Iterable, filePath, diagnostics);
                 ValidateBlock(forInStatement.Body, filePath, diagnostics);
+                break;
+            case BreakStatement:
+            case ContinueStatement:
                 break;
             case ExpressionStatement { Expression: { } expression }:
                 ValidateExpression(expression, filePath, diagnostics);

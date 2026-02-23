@@ -138,6 +138,8 @@ public sealed record IrNewArray(IrValueId Destination, TypeSymbol ElementType, I
 
 public sealed record IrArrayIndex(IrValueId Destination, IrValueId Array, IrValueId Index, TypeSymbol ElementType) : IrInstruction;
 
+public sealed record IrArrayStore(IrValueId Array, IrValueId Index, IrValueId Value, TypeSymbol ElementType) : IrInstruction;
+
 public sealed record IrArrayLength(IrValueId Destination, IrValueId Array) : IrInstruction;
 
 public sealed record IrNewObject(

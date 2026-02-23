@@ -71,6 +71,41 @@ public class AssignmentStatement : IStatement
     }
 }
 
+public class IndexAssignmentStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the '=' token
+    public IndexExpression Target { get; set; } = null!;
+    public IExpression Value { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"{Target.String()} = {Value.String()};";
+    }
+}
+
+public class BreakStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String() => "break;";
+}
+
+public class ContinueStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String() => "continue;";
+}
+
 public class Identifier : IExpression
 {
     public Span Span { get; set; }
