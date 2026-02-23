@@ -1,0 +1,12 @@
+import TodoScanner.Core;
+import TodoScanner.IO;
+import TodoScanner.Output;
+
+namespace TodoScanner.App;
+
+fn Main() {
+    let root = GetCurrentDirectoryPath();
+    PrintHeader(root);
+    let summary = ScanDirectory(root);
+    PrintSummary(summary[0], summary[1]);
+}

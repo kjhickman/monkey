@@ -121,7 +121,7 @@ public static class StaticClrMethodResolver
             .ToList();
 
         var compatibleMatches = matches
-            .Where(m => TryMapClrFullNameToKongType(NormalizeTypeName(m.ReturnType.FullName), out _))
+            .Where(m => TryMapClrTypeReferenceToKongType(m.ReturnType, out _))
             .ToList();
 
         if (compatibleMatches.Count == 0)
@@ -140,7 +140,7 @@ public static class StaticClrMethodResolver
         }
 
         var selected = compatibleMatches[0];
-        _ = TryMapClrFullNameToKongType(NormalizeTypeName(selected.ReturnType.FullName), out var returnType);
+        _ = TryMapClrTypeReferenceToKongType(selected.ReturnType, out var returnType);
 
         binding = new StaticClrMethodBinding(methodPath, arguments.Select(a => a.Type).ToArray(), returnType, selected);
         return true;
@@ -195,7 +195,7 @@ public static class StaticClrMethodResolver
         if (properties.Count == 1)
         {
             var property = properties[0];
-            if (!TryMapClrFullNameToKongType(NormalizeTypeName(property.PropertyType.FullName), out var propertyType))
+            if (!TryMapClrTypeReferenceToKongType(property.PropertyType, out var propertyType))
             {
                 error = StaticClrMethodResolutionError.UnsupportedReturnType;
                 errorMessage = $"static member '{memberPath}' has unsupported CLR type '{property.PropertyType.FullName}'";
@@ -207,7 +207,7 @@ public static class StaticClrMethodResolver
         }
 
         var field = fields[0];
-        if (!TryMapClrFullNameToKongType(NormalizeTypeName(field.FieldType.FullName), out var fieldType))
+        if (!TryMapClrTypeReferenceToKongType(field.FieldType, out var fieldType))
         {
             error = StaticClrMethodResolutionError.UnsupportedReturnType;
             errorMessage = $"static member '{memberPath}' has unsupported CLR type '{field.FieldType.FullName}'";

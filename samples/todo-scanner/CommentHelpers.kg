@@ -1,0 +1,20 @@
+namespace TodoScanner.Core;
+
+// todo: support block comments when the language adds richer comment APIs.
+fn ExtractCommentSegment(line: string) -> string {
+    let marker = line.IndexOf("//");
+    if (marker < 0) {
+        "";
+    } else {
+        line.Substring(marker + 2).Trim();
+    }
+}
+
+fn ContainsTodoComment(line: string) -> bool {
+    let commentText = ExtractCommentSegment(line);
+    if (commentText == "") {
+        false;
+    } else {
+        commentText.ToLower().Contains("todo");
+    }
+}

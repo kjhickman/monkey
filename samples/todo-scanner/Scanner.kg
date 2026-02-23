@@ -1,0 +1,48 @@
+import TodoScanner.IO;
+import TodoScanner.Output;
+
+namespace TodoScanner.Core;
+
+public fn ScanDirectory(root: string) -> int[] {
+    ScanPath(root, root);
+}
+
+fn ScanPath(root: string, path: string) -> int[] {
+    let files = System.IO.Directory.GetFiles(path, "*.kg");
+    let subdirectories = System.IO.Directory.GetDirectories(path);
+    var fileCount = 0;
+    var todoCount = 0;
+
+    for filePath in files {
+        fileCount = fileCount + 1;
+        todoCount = todoCount + ScanFile(root, filePath);
+    }
+
+    for subdirectoryPath in subdirectories {
+        let nested = ScanPath(root, subdirectoryPath);
+        fileCount = fileCount + nested[0];
+        todoCount = todoCount + nested[1];
+    }
+
+    [fileCount, todoCount];
+}
+
+fn ScanFile(root: string, filePath: string) -> int {
+    let content = ReadFileContent(filePath);
+    let lines = content.Split('\n');
+    let relativePath = GetRelativePath(root, filePath);
+    var lineNumber = 0;
+    var fileTodoHits = 0;
+
+    for line in lines {
+        lineNumber = lineNumber + 1;
+        if (ContainsTodoComment(line)) {
+            let commentText = ExtractCommentSegment(line);
+            PrintTodo(relativePath, lineNumber, commentText);
+            fileTodoHits = fileTodoHits + 1;
+        } else {
+        }
+    }
+
+    fileTodoHits;
+}

@@ -1,0 +1,15 @@
+import System.IO;
+
+namespace TodoScanner.IO;
+
+public fn GetCurrentDirectoryPath() -> string {
+    Directory.GetCurrentDirectory();
+}
+
+public fn ReadFileContent(filePath: string) -> string {
+    File.ReadAllText(filePath);
+}
+
+public fn GetRelativePath(root: string, filePath: string) -> string {
+    Path.GetRelativePath(root, filePath);
+}

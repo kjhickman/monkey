@@ -1,0 +1,17 @@
+import System;
+
+namespace TodoScanner.Output;
+
+public fn PrintHeader(root: string) {
+    Console.WriteLine(String.Concat("Scanning .kg files under: ", root));
+}
+
+public fn PrintTodo(path: string, lineNumber: int, commentText: string) {
+    Console.WriteLine(String.Concat(path, ":", Convert.ToString(lineNumber), " -> ", commentText));
+}
+
+public fn PrintSummary(fileCount: int, todoCount: int) {
+    Console.WriteLine("");
+    Console.WriteLine(String.Concat("Files scanned: ", Convert.ToString(fileCount)));
+    Console.WriteLine(String.Concat("TODO comments: ", Convert.ToString(todoCount)));
+}
