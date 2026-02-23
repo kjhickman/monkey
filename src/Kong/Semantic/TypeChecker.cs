@@ -37,8 +37,35 @@ public sealed record MatchResolution(
     string EnumName,
     IReadOnlyList<MatchArmResolution> Arms);
 
+public sealed record UserMethodSignature(
+    string Name,
+    IReadOnlyList<TypeSymbol> ParameterTypes,
+    TypeSymbol ReturnType,
+    bool IsPublic);
+
+public sealed record InterfaceMethodSignatureSymbol(
+    string Name,
+    IReadOnlyList<TypeSymbol> ParameterTypes,
+    TypeSymbol ReturnType);
+
 public class TypeChecker
 {
+    private sealed class ClassDefinition
+    {
+        public required string Name { get; init; }
+        public bool IsPublic { get; init; }
+        public Dictionary<string, TypeSymbol> Fields { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, UserMethodSignature> Methods { get; } = new(StringComparer.Ordinal);
+        public HashSet<string> ImplementedInterfaces { get; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed class InterfaceDefinition
+    {
+        public required string Name { get; init; }
+        public bool IsPublic { get; init; }
+        public Dictionary<string, InterfaceMethodSignatureSymbol> Methods { get; } = new(StringComparer.Ordinal);
+    }
+
     private readonly TypeCheckResult _result = new();
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
@@ -51,6 +78,9 @@ public class TypeChecker
     private readonly Dictionary<string, EnumTypeSymbol> _enumTypes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (EnumDefinitionSymbol Enum, EnumVariantDefinition Variant)> _variantSymbols = new(StringComparer.Ordinal);
     private readonly Dictionary<string, TypeSymbol> _namedTypeSymbols = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ClassDefinition> _classDefinitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, InterfaceDefinition> _interfaceDefinitions = new(StringComparer.Ordinal);
+    private readonly Stack<ClassTypeSymbol> _currentSelfTypes = [];
 
     public TypeCheckResult Check(CompilationUnit unit, NameResolution names)
     {
@@ -73,6 +103,9 @@ public class TypeChecker
         _enumTypes.Clear();
         _variantSymbols.Clear();
         _namedTypeSymbols.Clear();
+        _classDefinitions.Clear();
+        _interfaceDefinitions.Clear();
+        _currentSelfTypes.Clear();
         _result.EnumDefinitions.Clear();
         _result.ResolvedEnumVariantConstructions.Clear();
         _result.ResolvedMatches.Clear();
@@ -83,6 +116,8 @@ public class TypeChecker
 
         _result.Diagnostics.AddRange(names.Diagnostics);
         PredeclareEnumDeclarations(unit);
+        PredeclareClassAndInterfaceDeclarations(unit);
+        PredeclareImplBlocks(unit);
         PredeclareFunctionDeclarations(unit);
 
         foreach (var statement in unit.Statements)
@@ -179,6 +214,255 @@ public class TypeChecker
         }
     }
 
+    private void PredeclareClassAndInterfaceDeclarations(CompilationUnit unit)
+    {
+        foreach (var declaration in unit.Statements.OfType<ClassDeclaration>())
+        {
+            if (_namedTypeSymbols.ContainsKey(declaration.Name.Value))
+            {
+                _result.Diagnostics.Report(declaration.Name.Span,
+                    $"duplicate type declaration '{declaration.Name.Value}'",
+                    "T132");
+                continue;
+            }
+
+            var classType = new ClassTypeSymbol(declaration.Name.Value);
+            _namedTypeSymbols[declaration.Name.Value] = classType;
+
+            var classDefinition = new ClassDefinition
+            {
+                Name = declaration.Name.Value,
+                IsPublic = declaration.IsPublic,
+            };
+            _classDefinitions[declaration.Name.Value] = classDefinition;
+        }
+
+        foreach (var declaration in unit.Statements.OfType<InterfaceDeclaration>())
+        {
+            if (_namedTypeSymbols.ContainsKey(declaration.Name.Value))
+            {
+                _result.Diagnostics.Report(declaration.Name.Span,
+                    $"duplicate type declaration '{declaration.Name.Value}'",
+                    "T132");
+                continue;
+            }
+
+            var interfaceType = new InterfaceTypeSymbol(declaration.Name.Value);
+            _namedTypeSymbols[declaration.Name.Value] = interfaceType;
+
+            var interfaceDefinition = new InterfaceDefinition
+            {
+                Name = declaration.Name.Value,
+                IsPublic = declaration.IsPublic,
+            };
+            _interfaceDefinitions[declaration.Name.Value] = interfaceDefinition;
+        }
+
+        foreach (var declaration in unit.Statements.OfType<ClassDeclaration>())
+        {
+            if (!_classDefinitions.TryGetValue(declaration.Name.Value, out var classDefinition))
+            {
+                continue;
+            }
+
+            foreach (var field in declaration.Fields)
+            {
+                if (classDefinition.Fields.ContainsKey(field.Name.Value))
+                {
+                    _result.Diagnostics.Report(field.Name.Span,
+                        $"duplicate field '{field.Name.Value}' in class '{declaration.Name.Value}'",
+                        "T132");
+                    continue;
+                }
+
+                var fieldType = TypeAnnotationBinder.Bind(field.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+                classDefinition.Fields[field.Name.Value] = fieldType;
+            }
+        }
+
+        foreach (var declaration in unit.Statements.OfType<InterfaceDeclaration>())
+        {
+            if (!_interfaceDefinitions.TryGetValue(declaration.Name.Value, out var interfaceDefinition))
+            {
+                continue;
+            }
+
+            foreach (var method in declaration.Methods)
+            {
+                var signature = BindInterfaceMethodSignature(method, declaration.Name.Value);
+                if (signature == null)
+                {
+                    continue;
+                }
+
+                if (!interfaceDefinition.Methods.TryAdd(signature.Name, signature))
+                {
+                    _result.Diagnostics.Report(method.Name.Span,
+                        $"duplicate method '{signature.Name}' in interface '{declaration.Name.Value}'",
+                        "T132");
+                }
+            }
+        }
+    }
+
+    private void PredeclareImplBlocks(CompilationUnit unit)
+    {
+        foreach (var implBlock in unit.Statements.OfType<ImplBlock>())
+        {
+            if (!_classDefinitions.TryGetValue(implBlock.TypeName.Value, out var classDefinition))
+            {
+                continue;
+            }
+
+            foreach (var method in implBlock.Methods)
+            {
+                var signature = BindUserMethodSignature(method, implBlock.TypeName.Value);
+                if (signature == null)
+                {
+                    continue;
+                }
+
+                if (!classDefinition.Methods.TryAdd(signature.Name, signature))
+                {
+                    _result.Diagnostics.Report(method.Name.Span,
+                        $"duplicate method '{signature.Name}' in impl for class '{implBlock.TypeName.Value}'",
+                        "T132");
+                }
+            }
+        }
+
+        foreach (var interfaceImplBlock in unit.Statements.OfType<InterfaceImplBlock>())
+        {
+            if (!_classDefinitions.TryGetValue(interfaceImplBlock.TypeName.Value, out var classDefinition) ||
+                !_interfaceDefinitions.TryGetValue(interfaceImplBlock.InterfaceName.Value, out var interfaceDefinition))
+            {
+                continue;
+            }
+
+            var implementedMethods = new Dictionary<string, UserMethodSignature>(StringComparer.Ordinal);
+            foreach (var method in interfaceImplBlock.Methods)
+            {
+                var signature = BindUserMethodSignature(method, interfaceImplBlock.TypeName.Value);
+                if (signature == null)
+                {
+                    continue;
+                }
+
+                if (!implementedMethods.TryAdd(signature.Name, signature))
+                {
+                    _result.Diagnostics.Report(method.Name.Span,
+                        $"duplicate method '{signature.Name}' in impl '{interfaceImplBlock.InterfaceName.Value} for {interfaceImplBlock.TypeName.Value}'",
+                        "T132");
+                    continue;
+                }
+
+                if (!interfaceDefinition.Methods.TryGetValue(signature.Name, out var interfaceMethod))
+                {
+                    _result.Diagnostics.Report(method.Name.Span,
+                        $"method '{signature.Name}' is not declared in interface '{interfaceDefinition.Name}'",
+                        "T133");
+                    continue;
+                }
+
+                if (signature.ParameterTypes.Count != interfaceMethod.ParameterTypes.Count ||
+                    !TypeEquals(signature.ReturnType, interfaceMethod.ReturnType))
+                {
+                    _result.Diagnostics.Report(method.Span,
+                        $"method '{signature.Name}' in impl '{interfaceDefinition.Name} for {classDefinition.Name}' does not match interface signature",
+                        "T133");
+                    continue;
+                }
+
+                for (var i = 0; i < signature.ParameterTypes.Count; i++)
+                {
+                    if (!TypeEquals(signature.ParameterTypes[i], interfaceMethod.ParameterTypes[i]))
+                    {
+                        _result.Diagnostics.Report(method.Span,
+                            $"method '{signature.Name}' in impl '{interfaceDefinition.Name} for {classDefinition.Name}' does not match interface signature",
+                            "T133");
+                        break;
+                    }
+                }
+
+                classDefinition.Methods[signature.Name] = signature;
+            }
+
+            foreach (var interfaceMethod in interfaceDefinition.Methods.Values)
+            {
+                if (!implementedMethods.ContainsKey(interfaceMethod.Name))
+                {
+                    _result.Diagnostics.Report(interfaceImplBlock.Span,
+                        $"impl '{interfaceDefinition.Name} for {classDefinition.Name}' is missing method '{interfaceMethod.Name}'",
+                        "T133");
+                }
+            }
+
+            classDefinition.ImplementedInterfaces.Add(interfaceDefinition.Name);
+        }
+    }
+
+    private InterfaceMethodSignatureSymbol? BindInterfaceMethodSignature(InterfaceMethodSignature method, string interfaceName)
+    {
+        var signature = BindUserMethodSignatureCore(method.Name, method.Parameters, method.ReturnTypeAnnotation, interfaceName, method.Span);
+        if (signature == null)
+        {
+            return null;
+        }
+
+        return new InterfaceMethodSignatureSymbol(signature.Name, signature.ParameterTypes, signature.ReturnType);
+    }
+
+    private UserMethodSignature? BindUserMethodSignature(MethodDeclaration method, string className)
+    {
+        return BindUserMethodSignatureCore(method.Name, method.Parameters, method.ReturnTypeAnnotation, className, method.Span, method.IsPublic);
+    }
+
+    private UserMethodSignature? BindUserMethodSignatureCore(
+        Identifier methodName,
+        IReadOnlyList<FunctionParameter> parameters,
+        ITypeNode? returnTypeAnnotation,
+        string receiverClassName,
+        Span methodSpan,
+        bool isPublic = false)
+    {
+        if (parameters.Count == 0 || !string.Equals(parameters[0].Name, "self", StringComparison.Ordinal))
+        {
+            _result.Diagnostics.Report(methodName.Span,
+                $"method '{methodName.Value}' must declare 'self' as the first parameter",
+                "T134");
+            return null;
+        }
+
+        if (parameters[0].TypeAnnotation != null)
+        {
+            _result.Diagnostics.Report(parameters[0].Span,
+                "'self' parameter must not declare a type annotation",
+                "T134");
+        }
+
+        var parameterTypes = new List<TypeSymbol>();
+        for (var i = 1; i < parameters.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (parameter.TypeAnnotation == null)
+            {
+                _result.Diagnostics.Report(parameter.Span,
+                    $"missing type annotation for parameter '{parameter.Name}'",
+                    "T105");
+                parameterTypes.Add(TypeSymbols.Error);
+                continue;
+            }
+
+            parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
+        }
+
+        var returnType = returnTypeAnnotation == null
+            ? TypeSymbols.Void
+            : TypeAnnotationBinder.Bind(returnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+
+        return new UserMethodSignature(methodName.Value, parameterTypes, returnType, isPublic);
+    }
+
     private void PredeclareFunctionDeclarations(CompilationUnit unit)
     {
         foreach (var statement in unit.Statements)
@@ -230,6 +514,9 @@ public class TypeChecker
             case IndexAssignmentStatement indexAssignmentStatement:
                 CheckIndexAssignmentStatement(indexAssignmentStatement);
                 break;
+            case MemberAssignmentStatement memberAssignmentStatement:
+                CheckMemberAssignmentStatement(memberAssignmentStatement);
+                break;
             case ForInStatement forInStatement:
                 CheckForInStatement(forInStatement);
                 break;
@@ -243,6 +530,14 @@ public class TypeChecker
                 CheckFunctionDeclaration(functionDeclaration);
                 break;
             case EnumDeclaration:
+            case ClassDeclaration:
+            case InterfaceDeclaration:
+                break;
+            case ImplBlock implBlock:
+                CheckImplBlock(implBlock);
+                break;
+            case InterfaceImplBlock interfaceImplBlock:
+                CheckInterfaceImplBlock(interfaceImplBlock);
                 break;
             case ReturnStatement returnStatement:
                 CheckReturnStatement(returnStatement);
@@ -435,6 +730,134 @@ public class TypeChecker
         }
     }
 
+    private void CheckMemberAssignmentStatement(MemberAssignmentStatement statement)
+    {
+        var receiverType = CheckExpression(statement.Target.Object);
+        var valueType = CheckExpression(statement.Value);
+        if (receiverType is not ClassTypeSymbol classType)
+        {
+            if (receiverType != TypeSymbols.Error)
+            {
+                _result.Diagnostics.Report(statement.Target.Span,
+                    $"member assignment requires class receiver type, got '{receiverType}'",
+                    "T135");
+            }
+
+            return;
+        }
+
+        if (!_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition) ||
+            !classDefinition.Fields.TryGetValue(statement.Target.Member, out var fieldType))
+        {
+            _result.Diagnostics.Report(statement.Target.Span,
+                $"class '{classType.ClassName}' has no field '{statement.Target.Member}'",
+                "T135");
+            return;
+        }
+
+        if (!IsAssignable(valueType, fieldType))
+        {
+            _result.Diagnostics.Report(statement.Value.Span,
+                $"cannot assign expression of type '{valueType}' to field '{statement.Target.Member}' of type '{fieldType}'",
+                "T102");
+        }
+    }
+
+    private void CheckImplBlock(ImplBlock implBlock)
+    {
+        if (!_classDefinitions.TryGetValue(implBlock.TypeName.Value, out var classDefinition))
+        {
+            return;
+        }
+
+        if (implBlock.Constructor != null)
+        {
+            CheckConstructorDeclaration(implBlock.Constructor, classDefinition);
+        }
+
+        foreach (var method in implBlock.Methods)
+        {
+            CheckMethodDeclaration(method, classDefinition);
+        }
+    }
+
+    private void CheckInterfaceImplBlock(InterfaceImplBlock interfaceImplBlock)
+    {
+        if (!_classDefinitions.TryGetValue(interfaceImplBlock.TypeName.Value, out var classDefinition))
+        {
+            return;
+        }
+
+        foreach (var method in interfaceImplBlock.Methods)
+        {
+            CheckMethodDeclaration(method, classDefinition);
+        }
+    }
+
+    private void CheckConstructorDeclaration(ConstructorDeclaration declaration, ClassDefinition classDefinition)
+    {
+        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name));
+        try
+        {
+            foreach (var parameter in declaration.Parameters)
+            {
+                if (parameter.TypeAnnotation == null)
+                {
+                    _result.Diagnostics.Report(parameter.Span,
+                        $"missing type annotation for parameter '{parameter.Name}'",
+                        "T105");
+                    continue;
+                }
+
+                if (_names.ParameterSymbols.TryGetValue(parameter, out var parameterSymbol))
+                {
+                    _symbolTypes[parameterSymbol] = TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+                }
+            }
+
+            _currentFunctionReturnTypes.Push(TypeSymbols.Void);
+            CheckBlockStatement(declaration.Body);
+            _currentFunctionReturnTypes.Pop();
+        }
+        finally
+        {
+            _currentSelfTypes.Pop();
+        }
+    }
+
+    private void CheckMethodDeclaration(MethodDeclaration declaration, ClassDefinition classDefinition)
+    {
+        var methodSignature = classDefinition.Methods.GetValueOrDefault(declaration.Name.Value);
+        var parameterTypes = methodSignature?.ParameterTypes ?? [];
+        var returnType = methodSignature?.ReturnType ?? TypeSymbols.Error;
+
+        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name));
+        try
+        {
+            if (declaration.Parameters.Count > 0 &&
+                _names.ParameterSymbols.TryGetValue(declaration.Parameters[0], out var selfParameterSymbol))
+            {
+                _symbolTypes[selfParameterSymbol] = new ClassTypeSymbol(classDefinition.Name);
+            }
+
+            for (var i = 1; i < declaration.Parameters.Count && i - 1 < parameterTypes.Count; i++)
+            {
+                if (_names.ParameterSymbols.TryGetValue(declaration.Parameters[i], out var parameterSymbol))
+                {
+                    _symbolTypes[parameterSymbol] = parameterTypes[i - 1];
+                }
+            }
+
+            _currentFunctionReturnTypes.Push(returnType);
+            CheckBlockStatement(declaration.Body);
+            _currentFunctionReturnTypes.Pop();
+        }
+        finally
+        {
+            _currentSelfTypes.Pop();
+        }
+    }
+
     private void CheckBreakStatement(BreakStatement statement)
     {
         if (_loopDepth == 0)
@@ -532,6 +955,15 @@ public class TypeChecker
         if (_symbolTypes.TryGetValue(symbol, out var declarationType))
         {
             return declarationType;
+        }
+
+        if (symbol.Kind == NameSymbolKind.Parameter &&
+            string.Equals(symbol.Name, "self", StringComparison.Ordinal) &&
+            _currentSelfTypes.Count > 0)
+        {
+            var selfType = _currentSelfTypes.Peek();
+            _symbolTypes[symbol] = selfType;
+            return selfType;
         }
 
         if (symbol.Kind == NameSymbolKind.Global &&
@@ -823,6 +1255,12 @@ public class TypeChecker
     {
         var clrArguments = BuildClrCallArguments(expression);
         var argumentTypes = clrArguments.Select(a => a.Type).ToList();
+
+        if (expression.Function is MemberAccessExpression userMemberAccessExpression &&
+            TryCheckUserInstanceMethodCall(userMemberAccessExpression, argumentTypes, out var userInstanceReturnType))
+        {
+            return userInstanceReturnType;
+        }
 
         if (expression.Function is MemberAccessExpression memberAccessExpression &&
             TryCheckInstanceMethodCall(expression, memberAccessExpression, clrArguments, out var instanceReturnType))
@@ -1147,6 +1585,11 @@ public class TypeChecker
 
     private TypeSymbol CheckMemberAccessExpression(MemberAccessExpression expression)
     {
+        if (TryCheckUserInstanceValueAccess(expression, out var userInstanceType))
+        {
+            return userInstanceType;
+        }
+
         if (TryCheckInstanceValueAccess(expression, out var instanceType))
         {
             return instanceType;
@@ -1208,6 +1651,129 @@ public class TypeChecker
 
         _result.ResolvedInstanceValueMembers[expression] = expression.Member;
         valueType = binding.Type;
+        return true;
+    }
+
+    private bool TryCheckUserInstanceValueAccess(MemberAccessExpression expression, out TypeSymbol valueType)
+    {
+        valueType = TypeSymbols.Error;
+
+        if (!IsPotentialInstanceReceiver(expression.Object))
+        {
+            return false;
+        }
+
+        var receiverType = CheckExpression(expression.Object);
+        if (receiverType is not ClassTypeSymbol classType)
+        {
+            return false;
+        }
+
+        if (!_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition))
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"unknown class '{classType.ClassName}'",
+                "T135");
+            return true;
+        }
+
+        if (!classDefinition.Fields.TryGetValue(expression.Member, out var fieldType))
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"class '{classType.ClassName}' has no field '{expression.Member}'",
+                "T135");
+            valueType = TypeSymbols.Error;
+            return true;
+        }
+
+        valueType = fieldType;
+
+        return true;
+    }
+
+    private bool TryCheckUserInstanceMethodCall(
+        MemberAccessExpression memberAccessExpression,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out TypeSymbol returnType)
+    {
+        returnType = TypeSymbols.Error;
+
+        if (!IsPotentialInstanceReceiver(memberAccessExpression.Object))
+        {
+            return false;
+        }
+
+        var receiverType = CheckExpression(memberAccessExpression.Object);
+        if (receiverType is not ClassTypeSymbol classType)
+        {
+            if (receiverType is InterfaceTypeSymbol interfaceType)
+            {
+                if (_interfaceDefinitions.TryGetValue(interfaceType.InterfaceName, out var interfaceDefinition) &&
+                    interfaceDefinition.Methods.TryGetValue(memberAccessExpression.Member, out var interfaceMethod))
+                {
+                    if (argumentTypes.Count != interfaceMethod.ParameterTypes.Count)
+                    {
+                        _result.Diagnostics.Report(memberAccessExpression.Span,
+                            $"wrong number of arguments for method '{interfaceMethod.Name}': expected {interfaceMethod.ParameterTypes.Count}, got {argumentTypes.Count}",
+                            "T112");
+                        returnType = interfaceMethod.ReturnType;
+                        return true;
+                    }
+
+                    for (var i = 0; i < argumentTypes.Count; i++)
+                    {
+                        if (!IsAssignable(argumentTypes[i], interfaceMethod.ParameterTypes[i]))
+                        {
+                            _result.Diagnostics.Report(memberAccessExpression.Span,
+                                $"argument {i + 1} type mismatch for method '{interfaceMethod.Name}': expected '{interfaceMethod.ParameterTypes[i]}', got '{argumentTypes[i]}'",
+                                "T113");
+                        }
+                    }
+
+                    returnType = interfaceMethod.ReturnType;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (!_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                $"unknown class '{classType.ClassName}'",
+                "T135");
+            return true;
+        }
+
+        if (!classDefinition.Methods.TryGetValue(memberAccessExpression.Member, out var methodSignature))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                $"class '{classType.ClassName}' has no method '{memberAccessExpression.Member}'",
+                "T135");
+            return true;
+        }
+
+        if (argumentTypes.Count != methodSignature.ParameterTypes.Count)
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                $"wrong number of arguments for method '{methodSignature.Name}': expected {methodSignature.ParameterTypes.Count}, got {argumentTypes.Count}",
+                "T112");
+            returnType = methodSignature.ReturnType;
+            return true;
+        }
+
+        for (var i = 0; i < argumentTypes.Count; i++)
+        {
+            if (!IsAssignable(argumentTypes[i], methodSignature.ParameterTypes[i]))
+            {
+                _result.Diagnostics.Report(memberAccessExpression.Span,
+                    $"argument {i + 1} type mismatch for method '{methodSignature.Name}': expected '{methodSignature.ParameterTypes[i]}', got '{argumentTypes[i]}'",
+                    "T113");
+            }
+        }
+
+        returnType = methodSignature.ReturnType;
         return true;
     }
 
@@ -1624,7 +2190,7 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
-    private static bool IsAssignable(TypeSymbol source, TypeSymbol target)
+    private bool IsAssignable(TypeSymbol source, TypeSymbol target)
     {
         if (source == TypeSymbols.Error || target == TypeSymbols.Error)
         {
@@ -1634,6 +2200,12 @@ public class TypeChecker
         if (CanWidenNumeric(source, target))
         {
             return true;
+        }
+
+        if (source is ClassTypeSymbol classType && target is InterfaceTypeSymbol interfaceType)
+        {
+            return _classDefinitions.TryGetValue(classType.ClassName, out var classDefinition) &&
+                   classDefinition.ImplementedInterfaces.Contains(interfaceType.InterfaceName);
         }
 
         return TypeEquals(source, target);

@@ -589,6 +589,8 @@ public class NameResolver
     private void ResolveConstructorDeclaration(ConstructorDeclaration declaration)
     {
         EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth + 1);
+        var selfSymbol = new NameSymbol("self", NameSymbolKind.Parameter, declaration.Span, _scope.FunctionDepth);
+        _scope.Symbols["self"] = selfSymbol;
         foreach (var parameter in declaration.Parameters)
         {
             if (_scope.TryLookupInCurrent(parameter.Name, out _))

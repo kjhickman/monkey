@@ -241,6 +241,16 @@ public sealed record GenericParameterTypeSymbol(string ParameterName) : TypeSymb
     public override string Name => ParameterName;
 }
 
+public sealed record ClassTypeSymbol(string ClassName) : TypeSymbol
+{
+    public override string Name => ClassName;
+}
+
+public sealed record InterfaceTypeSymbol(string InterfaceName) : TypeSymbol
+{
+    public override string Name => InterfaceName;
+}
+
 public sealed record EnumVariantDefinition(string Name, IReadOnlyList<TypeSymbol> PayloadTypes, int Tag);
 
 public sealed record EnumDefinitionSymbol(

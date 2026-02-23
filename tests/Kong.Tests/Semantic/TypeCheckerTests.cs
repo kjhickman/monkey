@@ -317,6 +317,46 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksClassImplConstructorAndMethodSelfAccess()
+    {
+        var source = "class User { name: string; age: int; } impl User { init(name: string, age: int) { self.name = name; self.age = age; } fn Age(self) -> int { self.age; } }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsInterfaceImplMissingMethod()
+    {
+        var source = "class User { name: string; } interface IGreeter { fn Greet(self); } impl IGreeter for User { }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T133");
+    }
+
+    [Fact]
+    public void TestReportsMethodWithoutSelfParameter()
+    {
+        var source = "class User { name: string; } impl User { fn Greet() { } }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T134");
+    }
+
+    [Fact]
+    public void TestReportsClassFieldAssignmentTypeMismatchInConstructor()
+    {
+        var source = "class User { age: int; } impl User { init(age: string) { self.age = age; } }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T102");
+    }
+
+    [Fact]
     public void TestReportsUnsupportedStaticClrMethodReturnType()
     {
         var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");
