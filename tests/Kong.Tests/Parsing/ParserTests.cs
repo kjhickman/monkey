@@ -1232,6 +1232,85 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesClassDeclaration()
+    {
+        var input = "class User { name: string; age: int; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<ClassDeclaration>(unit.Statements[0]);
+        Assert.Equal("User", declaration.Name.Value);
+        Assert.Equal(2, declaration.Fields.Count);
+        Assert.Equal("name", declaration.Fields[0].Name.Value);
+        Assert.Equal("age", declaration.Fields[1].Name.Value);
+    }
+
+    [Fact]
+    public void TestParsesInterfaceDeclaration()
+    {
+        var input = "interface IGreeter { fn Greet(self); fn Label(self) -> string; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<InterfaceDeclaration>(unit.Statements[0]);
+        Assert.Equal("IGreeter", declaration.Name.Value);
+        Assert.Equal(2, declaration.Methods.Count);
+        Assert.Equal("Greet", declaration.Methods[0].Name.Value);
+        Assert.Equal("Label", declaration.Methods[1].Name.Value);
+    }
+
+    [Fact]
+    public void TestParsesInherentImplBlock()
+    {
+        var input = "impl User { init(name: string, age: int) { self.name = name; self.age = age; } public fn Greet(self) { } }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var impl = Assert.IsType<ImplBlock>(unit.Statements[0]);
+        Assert.Equal("User", impl.TypeName.Value);
+        Assert.NotNull(impl.Constructor);
+        Assert.Single(impl.Methods);
+        Assert.True(impl.Methods[0].IsPublic);
+        Assert.Equal("Greet", impl.Methods[0].Name.Value);
+    }
+
+    [Fact]
+    public void TestParsesInterfaceImplBlock()
+    {
+        var input = "impl IGreeter for User { fn Greet(self) { } }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var impl = Assert.IsType<InterfaceImplBlock>(unit.Statements[0]);
+        Assert.Equal("IGreeter", impl.InterfaceName.Value);
+        Assert.Equal("User", impl.TypeName.Value);
+        Assert.Single(impl.Methods);
+    }
+
+    [Fact]
+    public void TestParsesPublicClassAndInterfaceDeclarations()
+    {
+        var input = "public class User { name: string; } public interface IGreeter { fn Greet(self); }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var classDeclaration = Assert.IsType<ClassDeclaration>(unit.Statements[0]);
+        var interfaceDeclaration = Assert.IsType<InterfaceDeclaration>(unit.Statements[1]);
+        Assert.True(classDeclaration.IsPublic);
+        Assert.True(interfaceDeclaration.IsPublic);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

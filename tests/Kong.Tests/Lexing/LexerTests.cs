@@ -487,6 +487,52 @@ public class LexerTests
     }
 
     [Fact]
+    public void TestLexesClassInterfaceImplSelfAndInitKeywords()
+    {
+        var input = "class User {} interface IGreeter {} impl User { init(selfName: string) {} fn Greet(self) {} }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Class, "class"),
+            (TokenType.Identifier, "User"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.Interface, "interface"),
+            (TokenType.Identifier, "IGreeter"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.Impl, "impl"),
+            (TokenType.Identifier, "User"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Init, "init"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.Identifier, "selfName"),
+            (TokenType.Colon, ":"),
+            (TokenType.Identifier, "string"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.Function, "fn"),
+            (TokenType.Identifier, "Greet"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.Self, "self"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
     public void TestLexesDoubleCharAndByteLiterals()
     {
         var input = "1.25; 'a'; 42b;";

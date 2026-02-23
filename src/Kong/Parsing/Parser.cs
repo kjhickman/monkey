@@ -56,6 +56,7 @@ public class Parser
         _prefixParseFns = new Dictionary<TokenType, Func<IExpression>>
         {
             { TokenType.Identifier, ParseIdentifier },
+            { TokenType.Self, ParseIdentifier },
             { TokenType.Integer, ParseIntegerLiteral },
             { TokenType.Double, ParseDoubleLiteral },
             { TokenType.Char, ParseCharLiteral },
@@ -172,32 +173,20 @@ public class Parser
 
     private IStatement? ParseStatement()
     {
-        if (_blockDepth == 0 &&
-            ((CurTokenIs(TokenType.Function) && PeekTokenIs(TokenType.Identifier)) ||
-             (CurTokenIs(TokenType.Public) && PeekTokenIs(TokenType.Function)) ||
-             (CurTokenIs(TokenType.Enum) && PeekTokenIs(TokenType.Identifier))))
-        {
-            if (CurTokenIs(TokenType.Enum))
-            {
-                return ParseEnumDeclaration();
-            }
-
-            return ParseFunctionDeclaration();
-        }
-
         if (CurTokenIs(TokenType.Public))
         {
-            _diagnostics.Report(_curToken.Span,
-                "'public' is only allowed on top-level function declarations",
-                "P006");
-            return null;
+            return ParsePublicTopLevelDeclaration();
         }
 
         return _curToken.Type switch
         {
+            TokenType.Function when _blockDepth == 0 && PeekTokenIs(TokenType.Identifier) => ParseFunctionDeclaration(),
             TokenType.Import => ParseImportStatement(),
             TokenType.Namespace => ParseNamespaceStatement(),
-            TokenType.Enum => ParseEnumDeclaration(),
+            TokenType.Enum when _blockDepth == 0 => ParseEnumDeclaration(),
+            TokenType.Class when _blockDepth == 0 => ParseClassDeclaration(),
+            TokenType.Interface when _blockDepth == 0 => ParseInterfaceDeclaration(),
+            TokenType.Impl when _blockDepth == 0 => ParseImplBlock(),
             TokenType.Let => ParseLetStatement(),
             TokenType.Var => ParseVarStatement(),
             TokenType.For => ParseForInStatement(),
@@ -205,8 +194,34 @@ public class Parser
             TokenType.Continue => ParseContinueStatement(),
             TokenType.Return => ParseReturnStatement(),
             TokenType.Identifier => ParseIdentifierLedStatement(),
+            TokenType.Self => ParseIdentifierLedStatement(),
             _ => ParseExpressionStatement(),
         };
+    }
+
+    private IStatement? ParsePublicTopLevelDeclaration()
+    {
+        if (_blockDepth == 0 && PeekTokenIs(TokenType.Function))
+        {
+            return ParseFunctionDeclaration();
+        }
+
+        if (_blockDepth == 0 && PeekTokenIs(TokenType.Class))
+        {
+            NextToken();
+            return ParseClassDeclaration(isPublic: true);
+        }
+
+        if (_blockDepth == 0 && PeekTokenIs(TokenType.Interface))
+        {
+            NextToken();
+            return ParseInterfaceDeclaration(isPublic: true);
+        }
+
+        _diagnostics.Report(_curToken.Span,
+            "'public' is only allowed on top-level function/class/interface declarations and impl methods",
+            "P006");
+        return null;
     }
 
     private IStatement? ParseIdentifierLedStatement()
@@ -250,6 +265,13 @@ public class Parser
                     Value = value,
                     Span = new Span(startSpan.Start, _curToken.Span.End),
                 },
+                MemberAccessExpression memberAccessExpression => new MemberAssignmentStatement
+                {
+                    Token = assignToken,
+                    Target = memberAccessExpression,
+                    Value = value,
+                    Span = new Span(startSpan.Start, _curToken.Span.End),
+                },
                 _ => ReportInvalidAssignmentTarget(startSpan),
             };
         }
@@ -272,7 +294,7 @@ public class Parser
 
     private IStatement? ReportInvalidAssignmentTarget(Span startSpan)
     {
-        _diagnostics.Report(startSpan, "invalid assignment target; expected identifier or array index", "P004");
+        _diagnostics.Report(startSpan, "invalid assignment target; expected identifier, member access, or array index", "P004");
         return null;
     }
 
@@ -475,12 +497,7 @@ public class Parser
         }
         else
         {
-            declaration.ReturnTypeAnnotation = new NamedType
-            {
-                Token = new Token(TokenType.Identifier, "void"),
-                Name = "void",
-                Span = declaration.Name.Span,
-            };
+            declaration.ReturnTypeAnnotation = CreateImplicitVoidType(declaration.Name.Span);
         }
 
         if (!ExpectPeek(TokenType.LeftBrace))
@@ -537,6 +554,452 @@ public class Parser
         return declaration;
     }
 
+    private ClassDeclaration? ParseClassDeclaration(bool isPublic = false)
+    {
+        var startSpan = _curToken.Span;
+        var declaration = new ClassDeclaration
+        {
+            Token = _curToken,
+            IsPublic = isPublic,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        declaration.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Fields = ParseClassFields();
+        if (declaration.Fields.Count == 0 && !CurTokenIs(TokenType.RightBrace))
+        {
+            return null;
+        }
+
+        declaration.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return declaration;
+    }
+
+    private List<FieldDeclaration> ParseClassFields()
+    {
+        var fields = new List<FieldDeclaration>();
+        if (PeekTokenIs(TokenType.RightBrace))
+        {
+            NextToken();
+            return fields;
+        }
+
+        while (true)
+        {
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return [];
+            }
+
+            var startSpan = _curToken.Span;
+            var field = new FieldDeclaration
+            {
+                Token = _curToken,
+                Name = new Identifier
+                {
+                    Token = _curToken,
+                    Value = _curToken.Literal,
+                    Span = _curToken.Span,
+                },
+            };
+
+            if (!ExpectPeek(TokenType.Colon))
+            {
+                return [];
+            }
+
+            NextToken();
+            field.TypeAnnotation = ParseTypeNode()!;
+            if (field.TypeAnnotation == null)
+            {
+                return [];
+            }
+
+            if (!ExpectPeek(TokenType.Semicolon))
+            {
+                return [];
+            }
+
+            field.Span = new Span(startSpan.Start, _curToken.Span.End);
+            fields.Add(field);
+
+            if (PeekTokenIs(TokenType.RightBrace))
+            {
+                NextToken();
+                break;
+            }
+        }
+
+        return fields;
+    }
+
+    private InterfaceDeclaration? ParseInterfaceDeclaration(bool isPublic = false)
+    {
+        var startSpan = _curToken.Span;
+        var declaration = new InterfaceDeclaration
+        {
+            Token = _curToken,
+            IsPublic = isPublic,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        declaration.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Methods = ParseInterfaceMethodSignatures();
+        if (declaration.Methods.Count == 0 && !CurTokenIs(TokenType.RightBrace))
+        {
+            return null;
+        }
+
+        declaration.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return declaration;
+    }
+
+    private List<InterfaceMethodSignature> ParseInterfaceMethodSignatures()
+    {
+        var methods = new List<InterfaceMethodSignature>();
+        if (PeekTokenIs(TokenType.RightBrace))
+        {
+            NextToken();
+            return methods;
+        }
+
+        while (true)
+        {
+            if (!ExpectPeek(TokenType.Function))
+            {
+                return [];
+            }
+
+            var method = ParseInterfaceMethodSignature();
+            if (method == null)
+            {
+                return [];
+            }
+
+            methods.Add(method);
+
+            if (PeekTokenIs(TokenType.RightBrace))
+            {
+                NextToken();
+                break;
+            }
+        }
+
+        return methods;
+    }
+
+    private InterfaceMethodSignature? ParseInterfaceMethodSignature()
+    {
+        var startSpan = _curToken.Span;
+        var signature = new InterfaceMethodSignature
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        signature.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null;
+        }
+
+        signature.Parameters = ParseFunctionParameters();
+        if (signature.Parameters == null)
+        {
+            return null;
+        }
+
+        if (PeekTokenIs(TokenType.Arrow))
+        {
+            NextToken();
+            NextToken();
+            signature.ReturnTypeAnnotation = ParseTypeNode();
+            if (signature.ReturnTypeAnnotation == null)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            signature.ReturnTypeAnnotation = CreateImplicitVoidType(signature.Name.Span);
+        }
+
+        if (!ExpectPeek(TokenType.Semicolon))
+        {
+            return null;
+        }
+
+        signature.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return signature;
+    }
+
+    private IStatement? ParseImplBlock()
+    {
+        var startSpan = _curToken.Span;
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        var firstName = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (PeekTokenIs(TokenType.For))
+        {
+            NextToken();
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return null;
+            }
+
+            var typeName = new Identifier
+            {
+                Token = _curToken,
+                Value = _curToken.Literal,
+                Span = _curToken.Span,
+            };
+
+            if (!ExpectPeek(TokenType.LeftBrace))
+            {
+                return null;
+            }
+
+            var interfaceImpl = new InterfaceImplBlock
+            {
+                Token = new Token(TokenType.Impl, "impl", startSpan),
+                InterfaceName = firstName,
+                TypeName = typeName,
+            };
+
+            interfaceImpl.Methods = ParseImplMethods(allowInit: false, out _);
+            if (interfaceImpl.Methods.Count == 0 && !CurTokenIs(TokenType.RightBrace))
+            {
+                return null;
+            }
+
+            interfaceImpl.Span = new Span(startSpan.Start, _curToken.Span.End);
+            return interfaceImpl;
+        }
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        var impl = new ImplBlock
+        {
+            Token = new Token(TokenType.Impl, "impl", startSpan),
+            TypeName = firstName,
+        };
+
+        ParseInherentImplMembers(impl);
+        if (impl.Methods.Count == 0 && impl.Constructor == null && !CurTokenIs(TokenType.RightBrace))
+        {
+            return null;
+        }
+
+        impl.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return impl;
+    }
+
+    private void ParseInherentImplMembers(ImplBlock impl)
+    {
+        var methods = ParseImplMethods(allowInit: true, constructor: out var constructor);
+        impl.Constructor = constructor;
+        impl.Methods = methods;
+    }
+
+    private List<MethodDeclaration> ParseImplMethods(bool allowInit, out ConstructorDeclaration? constructor)
+    {
+        constructor = null;
+        var methods = new List<MethodDeclaration>();
+
+        if (PeekTokenIs(TokenType.RightBrace))
+        {
+            NextToken();
+            return methods;
+        }
+
+        while (true)
+        {
+            NextToken();
+
+            if (allowInit && CurTokenIs(TokenType.Init))
+            {
+                var parsedConstructor = ParseConstructorDeclaration();
+                if (parsedConstructor == null)
+                {
+                    return [];
+                }
+
+                constructor = parsedConstructor;
+            }
+            else
+            {
+                var method = ParseMethodDeclaration();
+                if (method == null)
+                {
+                    return [];
+                }
+
+                methods.Add(method);
+            }
+
+            if (PeekTokenIs(TokenType.RightBrace))
+            {
+                NextToken();
+                break;
+            }
+        }
+
+        return methods;
+    }
+
+    private ConstructorDeclaration? ParseConstructorDeclaration()
+    {
+        var startSpan = _curToken.Span;
+        var declaration = new ConstructorDeclaration
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null;
+        }
+
+        declaration.Parameters = ParseFunctionParameters();
+        if (declaration.Parameters == null)
+        {
+            return null;
+        }
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Body = ParseBlockStatement();
+        declaration.Span = new Span(startSpan.Start, declaration.Body.Span.End);
+        return declaration;
+    }
+
+    private MethodDeclaration? ParseMethodDeclaration()
+    {
+        var startSpan = _curToken.Span;
+        var isPublic = false;
+        if (CurTokenIs(TokenType.Public))
+        {
+            isPublic = true;
+            NextToken();
+        }
+
+        if (!CurTokenIs(TokenType.Function))
+        {
+            _diagnostics.Report(_curToken.Span,
+                $"expected method declaration, got {_curToken.Type}",
+                "P006");
+            return null;
+        }
+
+        var declaration = new MethodDeclaration
+        {
+            Token = _curToken,
+            IsPublic = isPublic,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        declaration.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null;
+        }
+
+        declaration.Parameters = ParseFunctionParameters();
+        if (declaration.Parameters == null)
+        {
+            return null;
+        }
+
+        if (PeekTokenIs(TokenType.Arrow))
+        {
+            NextToken();
+            NextToken();
+            declaration.ReturnTypeAnnotation = ParseTypeNode();
+            if (declaration.ReturnTypeAnnotation == null)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            declaration.ReturnTypeAnnotation = CreateImplicitVoidType(declaration.Name.Span);
+        }
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Body = ParseBlockStatement();
+        declaration.Span = new Span(startSpan.Start, declaration.Body.Span.End);
+        return declaration;
+    }
+
     private List<Identifier> ParseTypeParameterList()
     {
         var parameters = new List<Identifier>();
@@ -580,6 +1043,16 @@ public class Parser
         }
 
         return parameters;
+    }
+
+    private static NamedType CreateImplicitVoidType(Span span)
+    {
+        return new NamedType
+        {
+            Token = new Token(TokenType.Identifier, "void"),
+            Name = "void",
+            Span = span,
+        };
     }
 
     private List<EnumVariant> ParseEnumVariants()
@@ -1455,7 +1928,7 @@ public class Parser
 
     private FunctionParameter? ParseFunctionParameter()
     {
-        if (!CurTokenIs(TokenType.Identifier))
+        if (!CurTokenIs(TokenType.Identifier) && !CurTokenIs(TokenType.Self))
         {
             _diagnostics.Report(_curToken.Span, $"expected parameter name, got {_curToken.Type}", "P005");
             return null;

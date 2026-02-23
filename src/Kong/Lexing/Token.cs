@@ -66,6 +66,11 @@ public enum TokenType
     Public,
     Enum,
     Match,
+    Class,
+    Interface,
+    Impl,
+    Self,
+    Init,
 }
 
 public record struct Token(TokenType Type, string Literal, Span Span = default)
@@ -92,6 +97,11 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "public", TokenType.Public },
         { "enum", TokenType.Enum },
         { "match", TokenType.Match },
+        { "class", TokenType.Class },
+        { "interface", TokenType.Interface },
+        { "impl", TokenType.Impl },
+        { "self", TokenType.Self },
+        { "init", TokenType.Init },
     };
 
     public static TokenType LookupIdentifier(string keyword)

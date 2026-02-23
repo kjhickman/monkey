@@ -86,6 +86,21 @@ public class IndexAssignmentStatement : IStatement
     }
 }
 
+public class MemberAssignmentStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the '=' token
+    public MemberAccessExpression Target { get; set; } = null!;
+    public IExpression Value { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"{Target.String()} = {Value.String()};";
+    }
+}
+
 public class BreakStatement : IStatement
 {
     public Span Span { get; set; }
@@ -297,6 +312,139 @@ public class EnumVariant : INode
         }
 
         return $"{Name.String()}({string.Join(", ", PayloadTypes.Select(t => t.String()))})";
+    }
+}
+
+public class ClassDeclaration : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'class' token
+    public bool IsPublic { get; set; }
+    public Identifier Name { get; set; } = null!;
+    public List<FieldDeclaration> Fields { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var visibility = IsPublic ? "public " : "";
+        return $"{visibility}class {Name.String()} {{ {string.Join(" ", Fields.Select(f => f.String()))} }}";
+    }
+}
+
+public class FieldDeclaration : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the field identifier token
+    public Identifier Name { get; set; } = null!;
+    public ITypeNode TypeAnnotation { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"{Name.String()}: {TypeAnnotation.String()};";
+}
+
+public class InterfaceDeclaration : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'interface' token
+    public bool IsPublic { get; set; }
+    public Identifier Name { get; set; } = null!;
+    public List<InterfaceMethodSignature> Methods { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var visibility = IsPublic ? "public " : "";
+        return $"{visibility}interface {Name.String()} {{ {string.Join(" ", Methods.Select(m => m.String()))} }}";
+    }
+}
+
+public class InterfaceMethodSignature : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'fn' token
+    public Identifier Name { get; set; } = null!;
+    public List<FunctionParameter> Parameters { get; set; } = [];
+    public ITypeNode? ReturnTypeAnnotation { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var returnType = ReturnTypeAnnotation == null ? string.Empty : $" -> {ReturnTypeAnnotation.String()}";
+        return $"fn {Name.String()}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType};";
+    }
+}
+
+public class ConstructorDeclaration : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'init' token
+    public List<FunctionParameter> Parameters { get; set; } = [];
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String() => $"init({string.Join(", ", Parameters.Select(p => p.String()))}) {Body.String()}";
+}
+
+public class MethodDeclaration : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'fn' token
+    public bool IsPublic { get; set; }
+    public Identifier Name { get; set; } = null!;
+    public List<FunctionParameter> Parameters { get; set; } = [];
+    public ITypeNode? ReturnTypeAnnotation { get; set; }
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var visibility = IsPublic ? "public " : "";
+        var returnType = ReturnTypeAnnotation == null ? string.Empty : $" -> {ReturnTypeAnnotation.String()}";
+        return $"{visibility}fn {Name.String()}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType} {Body.String()}";
+    }
+}
+
+public class ImplBlock : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'impl' token
+    public Identifier TypeName { get; set; } = null!;
+    public ConstructorDeclaration? Constructor { get; set; }
+    public List<MethodDeclaration> Methods { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var members = new List<string>();
+        if (Constructor != null)
+        {
+            members.Add(Constructor.String());
+        }
+
+        members.AddRange(Methods.Select(m => m.String()));
+        return $"impl {TypeName.String()} {{ {string.Join(" ", members)} }}";
+    }
+}
+
+public class InterfaceImplBlock : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'impl' token
+    public Identifier InterfaceName { get; set; } = null!;
+    public Identifier TypeName { get; set; } = null!;
+    public List<MethodDeclaration> Methods { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"impl {InterfaceName.String()} for {TypeName.String()} {{ {string.Join(" ", Methods.Select(m => m.String()))} }}";
     }
 }
 
