@@ -768,6 +768,16 @@ public static class Compilation
                 combined.DeclaredFunctionTypes[pair.Key] = pair.Value;
             }
 
+            foreach (var pair in module.TypeCheck.ClassDefinitions)
+            {
+                combined.ClassDefinitions[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.InterfaceDefinitions)
+            {
+                combined.InterfaceDefinitions[pair.Key] = pair.Value;
+            }
+
             foreach (var pair in module.TypeCheck.EnumDefinitions)
             {
                 combined.EnumDefinitions[pair.Key] = pair.Value;

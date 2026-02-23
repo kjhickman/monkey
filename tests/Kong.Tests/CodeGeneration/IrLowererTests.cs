@@ -279,6 +279,22 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersInterfaceMethodCallToInterfaceDispatchInstruction()
+    {
+        var source = "class Counter { value: int; } interface ICounter { fn Increment(self, by: int) -> int; } impl ICounter for Counter { fn Increment(self, by: int) -> int { self.value = self.value + by; self.value; } } let c = new Counter(); let i: ICounter = c; i.Increment(3);";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var dispatch = Assert.IsType<IrInterfaceCall>(lowering.Program!.EntryPoint.Blocks[0].Instructions.Last(i => i is IrInterfaceCall));
+        Assert.Equal("ICounter", dispatch.ReceiverType.InterfaceName);
+        Assert.Equal("Increment", dispatch.MemberName);
+    }
+
+    [Fact]
     public void TestLowersVarAssignment()
     {
         var source = "var x: int = 1; x = x + 1; x;";

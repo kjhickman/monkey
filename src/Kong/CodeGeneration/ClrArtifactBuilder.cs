@@ -36,6 +36,17 @@ public class ClrArtifactBuilder
         FieldDefinition TagField,
         IReadOnlyList<FieldDefinition> PayloadFields);
 
+    private sealed record ClassRuntimeInfo(
+        TypeDefinition Type,
+        MethodDefinition Constructor,
+        ClassDefinitionSymbol Definition,
+        IReadOnlyDictionary<string, FieldDefinition> Fields);
+
+    private sealed record InterfaceRuntimeInfo(
+        TypeDefinition Type,
+        IReadOnlyDictionary<string, MethodDefinition> Methods,
+        InterfaceDefinitionSymbol Definition);
+
     public ClrArtifactBuildResult BuildArtifact(
         CompilationUnit unit,
         TypeCheckResult typeCheckResult,
@@ -147,6 +158,16 @@ public class ClrArtifactBuilder
             foreach (var pair in program.EnumDefinitions)
             {
                 combinedProgram.EnumDefinitions[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in program.ClassDefinitions)
+            {
+                combinedProgram.ClassDefinitions[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in program.InterfaceDefinitions)
+            {
+                combinedProgram.InterfaceDefinitions[pair.Key] = pair.Value;
             }
 
             var functions = program.Functions;
@@ -284,6 +305,142 @@ public class ClrArtifactBuilder
         return map;
     }
 
+    private static Dictionary<string, ClassRuntimeInfo>? BuildClassRuntimeMap(
+        IReadOnlyDictionary<string, ClassDefinitionSymbol> classDefinitions,
+        ModuleDefinition module,
+        TypeDefinition programType,
+        IReadOnlyDictionary<string, TypeDefinition> enumTypeMap,
+        DiagnosticBag diagnostics)
+    {
+        var map = new Dictionary<string, ClassRuntimeInfo>(StringComparer.Ordinal);
+        foreach (var pair in classDefinitions.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var classDefinition = pair.Value;
+            var type = new TypeDefinition(
+                "Kong.Generated",
+                $"__class_{classDefinition.Name}",
+                CecilTypeAttributes.NestedPublic | CecilTypeAttributes.Class | CecilTypeAttributes.Sealed,
+                module.TypeSystem.Object);
+            programType.NestedTypes.Add(type);
+
+            var ctor = new MethodDefinition(
+                ".ctor",
+                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.SpecialName | CecilMethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            type.Methods.Add(ctor);
+            var objectCtor = module.ImportReference(typeof(object).GetConstructor(Type.EmptyTypes)!);
+            var ctorIl = ctor.Body.GetILProcessor();
+            ctorIl.Emit(OpCodes.Ldarg_0);
+            ctorIl.Emit(OpCodes.Call, objectCtor);
+            ctorIl.Emit(OpCodes.Ret);
+
+            map[classDefinition.Name] = new ClassRuntimeInfo(type, ctor, classDefinition, new Dictionary<string, FieldDefinition>(StringComparer.Ordinal));
+        }
+
+        var classTypeMap = map.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
+        var fieldTypeMapper = new DefaultTypeMapper(
+            new Dictionary<string, TypeDefinition>(StringComparer.Ordinal),
+            enumTypeMap,
+            classTypeMap);
+
+        foreach (var pair in classDefinitions)
+        {
+            var classDefinition = pair.Value;
+            var runtime = map[classDefinition.Name];
+            var fields = (Dictionary<string, FieldDefinition>)runtime.Fields;
+            foreach (var fieldPair in classDefinition.Fields)
+            {
+                var fieldType = MapType(fieldPair.Value, module, diagnostics, fieldTypeMapper);
+                if (fieldType == null)
+                {
+                    diagnostics.Report(Span.Empty,
+                        $"phase-5 CLR backend could not map field type '{fieldPair.Value}' for class '{classDefinition.Name}'",
+                        "IL001");
+                    return null;
+                }
+
+                var field = new FieldDefinition(fieldPair.Key, CecilFieldAttributes.Public, fieldType);
+                runtime.Type.Fields.Add(field);
+                fields[fieldPair.Key] = field;
+            }
+        }
+
+        return map;
+    }
+
+    private static Dictionary<string, InterfaceRuntimeInfo>? BuildInterfaceRuntimeMap(
+        IReadOnlyDictionary<string, InterfaceDefinitionSymbol> interfaceDefinitions,
+        ModuleDefinition module,
+        TypeDefinition programType,
+        IReadOnlyDictionary<string, TypeDefinition> enumTypeMap,
+        IReadOnlyDictionary<string, TypeDefinition> classTypeMap,
+        DiagnosticBag diagnostics)
+    {
+        var map = new Dictionary<string, InterfaceRuntimeInfo>(StringComparer.Ordinal);
+        foreach (var pair in interfaceDefinitions.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var interfaceDefinition = pair.Value;
+            var type = new TypeDefinition(
+                "Kong.Generated",
+                $"__iface_{interfaceDefinition.Name}",
+                CecilTypeAttributes.NestedPublic | CecilTypeAttributes.Interface | CecilTypeAttributes.Abstract,
+                null!);
+            programType.NestedTypes.Add(type);
+            map[interfaceDefinition.Name] = new InterfaceRuntimeInfo(type, new Dictionary<string, MethodDefinition>(StringComparer.Ordinal), interfaceDefinition);
+        }
+
+        var interfaceTypeMap = map.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
+        var typeMapper = new DefaultTypeMapper(
+            new Dictionary<string, TypeDefinition>(StringComparer.Ordinal),
+            enumTypeMap,
+            classTypeMap,
+            interfaceTypeMap);
+
+        foreach (var pair in interfaceDefinitions.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var interfaceDefinition = pair.Value;
+            var runtime = map[interfaceDefinition.Name];
+            var methods = (Dictionary<string, MethodDefinition>)runtime.Methods;
+            foreach (var methodPair in interfaceDefinition.Methods.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                var signature = methodPair.Value;
+                var returnType = MapType(signature.ReturnType, module, diagnostics, typeMapper);
+                if (returnType == null)
+                {
+                    diagnostics.Report(
+                        Span.Empty,
+                        $"phase-5 CLR backend could not map return type '{signature.ReturnType}' for interface method '{interfaceDefinition.Name}.{signature.Name}'",
+                        "IL001");
+                    return null;
+                }
+
+                var method = new MethodDefinition(
+                    signature.Name,
+                    CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.NewSlot | CecilMethodAttributes.Virtual | CecilMethodAttributes.Abstract,
+                    returnType);
+                foreach (var parameterTypeSymbol in signature.ParameterTypes)
+                {
+                    var parameterType = MapType(parameterTypeSymbol, module, diagnostics, typeMapper);
+                    if (parameterType == null)
+                    {
+                        diagnostics.Report(
+                            Span.Empty,
+                            $"phase-5 CLR backend could not map parameter type '{parameterTypeSymbol}' for interface method '{interfaceDefinition.Name}.{signature.Name}'",
+                            "IL001");
+                        return null;
+                    }
+
+                    method.Parameters.Add(new ParameterDefinition(parameterType));
+                }
+
+                runtime.Type.Methods.Add(method);
+                methods[signature.Name] = method;
+            }
+        }
+
+        return map;
+    }
+
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
     {
         var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
@@ -307,12 +464,26 @@ public class ClrArtifactBuilder
         }
 
         var enumTypeMap = enumRuntimeMap.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
-        var delegateTypeMap = BuildDelegateTypeMap(allFunctions, module, programType, diagnostics, enumTypeMap);
+        var classRuntimeMap = BuildClassRuntimeMap(program.ClassDefinitions, module, programType, enumTypeMap, diagnostics);
+        if (classRuntimeMap == null)
+        {
+            return null;
+        }
+
+        var classTypeMap = classRuntimeMap.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
+        var interfaceRuntimeMap = BuildInterfaceRuntimeMap(program.InterfaceDefinitions, module, programType, enumTypeMap, classTypeMap, diagnostics);
+        if (interfaceRuntimeMap == null)
+        {
+            return null;
+        }
+
+        var interfaceTypeMap = interfaceRuntimeMap.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
+        var delegateTypeMap = BuildDelegateTypeMap(allFunctions, module, programType, diagnostics, enumTypeMap, classTypeMap, interfaceTypeMap);
         if (delegateTypeMap == null)
         {
             return null;
         }
-        var typeMapper = new DefaultTypeMapper(delegateTypeMap, enumTypeMap);
+        var typeMapper = new DefaultTypeMapper(delegateTypeMap, enumTypeMap, classTypeMap, interfaceTypeMap);
 
         var methodMap = new Dictionary<string, MethodDefinition>();
         foreach (var function in allFunctions)
@@ -342,6 +513,11 @@ public class ClrArtifactBuilder
 
             programType.Methods.Add(method);
             methodMap[function.Name] = method;
+        }
+
+        if (!BuildClassMethodRuntimeSurface(classRuntimeMap, interfaceRuntimeMap, methodMap, module, diagnostics, typeMapper))
+        {
+            return null;
         }
 
         var mainMethod = new MethodDefinition(
@@ -388,7 +564,7 @@ public class ClrArtifactBuilder
 
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, enumRuntimeMap, module, diagnostics, delegateTypeMap, typeMapper))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, enumRuntimeMap, classRuntimeMap, interfaceRuntimeMap, module, diagnostics, delegateTypeMap, typeMapper))
             {
                 return null;
             }
@@ -399,6 +575,116 @@ public class ClrArtifactBuilder
         return stream.ToArray();
     }
 
+    private static bool BuildClassMethodRuntimeSurface(
+        IReadOnlyDictionary<string, ClassRuntimeInfo> classRuntimeMap,
+        IReadOnlyDictionary<string, InterfaceRuntimeInfo> interfaceRuntimeMap,
+        IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        foreach (var pair in classRuntimeMap.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var classRuntime = pair.Value;
+            var classMethods = new Dictionary<string, MethodDefinition>(StringComparer.Ordinal);
+
+            foreach (var methodPair in classRuntime.Definition.Methods.OrderBy(p => p.Key, StringComparer.Ordinal))
+            {
+                var methodSignature = methodPair.Value;
+                if (!TryResolveClassMethodHelperMethod(classRuntime.Definition.Name, methodSignature.Name, methodMap, out var helperMethod))
+                {
+                    diagnostics.Report(
+                        Span.Empty,
+                        $"phase-5 CLR backend could not resolve helper method for '{classRuntime.Definition.Name}.{methodSignature.Name}'",
+                        "IL001");
+                    return false;
+                }
+
+                var returnType = MapType(methodSignature.ReturnType, module, diagnostics, typeMapper);
+                if (returnType == null)
+                {
+                    return false;
+                }
+
+                var instanceMethod = new MethodDefinition(
+                    methodSignature.Name,
+                    CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.Virtual | CecilMethodAttributes.Final,
+                    returnType);
+
+                foreach (var parameterTypeSymbol in methodSignature.ParameterTypes)
+                {
+                    var parameterType = MapType(parameterTypeSymbol, module, diagnostics, typeMapper);
+                    if (parameterType == null)
+                    {
+                        return false;
+                    }
+
+                    instanceMethod.Parameters.Add(new ParameterDefinition(parameterType));
+                }
+
+                var il = instanceMethod.Body.GetILProcessor();
+                il.Emit(OpCodes.Ldarg_0);
+                foreach (var parameter in instanceMethod.Parameters)
+                {
+                    il.Emit(OpCodes.Ldarg, parameter);
+                }
+
+                il.Emit(OpCodes.Call, helperMethod);
+                il.Emit(OpCodes.Ret);
+
+                classRuntime.Type.Methods.Add(instanceMethod);
+                classMethods[methodSignature.Name] = instanceMethod;
+            }
+
+            foreach (var interfaceName in classRuntime.Definition.ImplementedInterfaces.OrderBy(n => n, StringComparer.Ordinal))
+            {
+                if (!interfaceRuntimeMap.TryGetValue(interfaceName, out var interfaceRuntime))
+                {
+                    diagnostics.Report(
+                        Span.Empty,
+                        $"phase-5 CLR backend could not resolve generated interface '{interfaceName}' for class '{classRuntime.Definition.Name}'",
+                        "IL001");
+                    return false;
+                }
+
+                classRuntime.Type.Interfaces.Add(new InterfaceImplementation(interfaceRuntime.Type));
+                foreach (var interfaceMethodPair in interfaceRuntime.Definition.Methods)
+                {
+                    if (!classMethods.TryGetValue(interfaceMethodPair.Key, out var classMethod) ||
+                        !interfaceRuntime.Methods.TryGetValue(interfaceMethodPair.Key, out var interfaceMethod))
+                    {
+                        diagnostics.Report(
+                            Span.Empty,
+                            $"phase-5 CLR backend missing implementation for interface method '{interfaceName}.{interfaceMethodPair.Key}' on class '{classRuntime.Definition.Name}'",
+                            "IL001");
+                        return false;
+                    }
+
+                    _ = classMethod;
+                    _ = interfaceMethod;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryResolveClassMethodHelperMethod(
+        string className,
+        string memberName,
+        IReadOnlyDictionary<string, MethodDefinition> methodMap,
+        out MethodDefinition helperMethod)
+    {
+        var directName = $"__method_{className}_{memberName}";
+        if (methodMap.TryGetValue(directName, out helperMethod!))
+        {
+            return true;
+        }
+
+        var interfaceName = $"__method_{className}_{memberName}_iface";
+        return methodMap.TryGetValue(interfaceName, out helperMethod!);
+    }
+
     private static bool EmitFunction(
         IrFunction function,
         MethodDefinition method,
@@ -406,6 +692,8 @@ public class ClrArtifactBuilder
         IReadOnlyDictionary<string, IrFunction> functionMap,
         IReadOnlyDictionary<string, DisplayClassInfo> displayClassMap,
         IReadOnlyDictionary<string, EnumRuntimeInfo> enumRuntimeMap,
+        IReadOnlyDictionary<string, ClassRuntimeInfo> classRuntimeMap,
+        IReadOnlyDictionary<string, InterfaceRuntimeInfo> interfaceRuntimeMap,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
         IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
@@ -779,6 +1067,43 @@ public class ClrArtifactBuilder
                         break;
                     }
 
+                    case IrInterfaceCall interfaceCall:
+                    {
+                        if (!EmitInterfaceCall(
+                                interfaceCall.Receiver,
+                                interfaceCall.ReceiverType,
+                                interfaceCall.MemberName,
+                                interfaceCall.Arguments,
+                                valueLocals,
+                                interfaceRuntimeMap,
+                                il,
+                                diagnostics))
+                        {
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[interfaceCall.Destination]);
+                        break;
+                    }
+
+                    case IrInterfaceCallVoid interfaceCallVoid:
+                    {
+                        if (!EmitInterfaceCall(
+                                interfaceCallVoid.Receiver,
+                                interfaceCallVoid.ReceiverType,
+                                interfaceCallVoid.MemberName,
+                                interfaceCallVoid.Arguments,
+                                valueLocals,
+                                interfaceRuntimeMap,
+                                il,
+                                diagnostics))
+                        {
+                            return false;
+                        }
+
+                        break;
+                    }
+
                     case IrStaticValueGet staticValueGet:
                     {
                         var staticValueMember = ImportStaticValueMember(module, staticValueGet.MemberPath, diagnostics);
@@ -809,6 +1134,23 @@ public class ClrArtifactBuilder
 
                     case IrInstanceValueGet instanceValueGet:
                     {
+                        if (instanceValueGet.ReceiverType is ClassTypeSymbol classReceiverType)
+                        {
+                            if (!classRuntimeMap.TryGetValue(classReceiverType.ClassName, out var classRuntime) ||
+                                !classRuntime.Fields.TryGetValue(instanceValueGet.MemberName, out var classField))
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend could not resolve class field '{classReceiverType.ClassName}.{instanceValueGet.MemberName}'",
+                                    "IL001");
+                                return false;
+                            }
+
+                            il.Emit(OpCodes.Ldloc, valueLocals[instanceValueGet.Receiver]);
+                            il.Emit(OpCodes.Ldfld, classField);
+                            il.Emit(OpCodes.Stloc, valueLocals[instanceValueGet.Destination]);
+                            break;
+                        }
+
                         if (!InstanceClrMemberResolver.TryResolveValue(
                                 instanceValueGet.ReceiverType,
                                 instanceValueGet.MemberName,
@@ -839,6 +1181,31 @@ public class ClrArtifactBuilder
 
                         il.Emit(OpCodes.Stloc, valueLocals[instanceValueGet.Destination]);
                         break;
+                    }
+
+                    case IrInstanceValueSet instanceValueSet:
+                    {
+                        if (instanceValueSet.ReceiverType is ClassTypeSymbol classReceiverType)
+                        {
+                            if (!classRuntimeMap.TryGetValue(classReceiverType.ClassName, out var classRuntime) ||
+                                !classRuntime.Fields.TryGetValue(instanceValueSet.MemberName, out var classField))
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend could not resolve class field '{classReceiverType.ClassName}.{instanceValueSet.MemberName}'",
+                                    "IL001");
+                                return false;
+                            }
+
+                            il.Emit(OpCodes.Ldloc, valueLocals[instanceValueSet.Receiver]);
+                            il.Emit(OpCodes.Ldloc, valueLocals[instanceValueSet.Value]);
+                            il.Emit(OpCodes.Stfld, classField);
+                            break;
+                        }
+
+                        diagnostics.Report(Span.Empty,
+                            "phase-5 CLR backend supports member assignment only for user classes",
+                            "IL001");
+                        return false;
                     }
 
                     case IrCreateClosure createClosure:
@@ -1008,6 +1375,29 @@ public class ClrArtifactBuilder
 
                     case IrNewObject newObject:
                     {
+                        if (newObject.ObjectType is ClassTypeSymbol classObjectType)
+                        {
+                            if (!classRuntimeMap.TryGetValue(classObjectType.ClassName, out var classRuntime))
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend could not resolve class type '{classObjectType.ClassName}'",
+                                    "IL001");
+                                return false;
+                            }
+
+                            if (newObject.Arguments.Count != 0)
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend currently expects class allocation '{classObjectType.ClassName}' to use default constructor only",
+                                    "IL001");
+                                return false;
+                            }
+
+                            il.Emit(OpCodes.Newobj, classRuntime.Constructor);
+                            il.Emit(OpCodes.Stloc, valueLocals[newObject.Destination]);
+                            break;
+                        }
+
                         if (!ConstructorClrResolver.TryResolve(
                                 newObject.ObjectType is ClrNominalTypeSymbol nominal ? nominal.ClrTypeFullName : newObject.ObjectType == TypeSymbols.String ? "System.String" : string.Empty,
                                 newObject.ArgumentTypes,
@@ -1192,7 +1582,9 @@ public class ClrArtifactBuilder
         ModuleDefinition module,
         DiagnosticBag diagnostics,
         IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
-        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null)
+        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null,
+        IReadOnlyDictionary<string, TypeDefinition>? classTypeMap = null,
+        IReadOnlyDictionary<string, TypeDefinition>? interfaceTypeMap = null)
     {
         if (type == TypeSymbols.Int)
         {
@@ -1281,7 +1673,7 @@ public class ClrArtifactBuilder
 
         if (type is ArrayTypeSymbol arrayType)
         {
-            var mappedElement = MapType(arrayType.ElementType, module, diagnostics, delegateTypeMap, enumTypeMap);
+            var mappedElement = MapType(arrayType.ElementType, module, diagnostics, delegateTypeMap, enumTypeMap, classTypeMap, interfaceTypeMap);
             return mappedElement == null ? null : new Mono.Cecil.ArrayType(mappedElement);
         }
 
@@ -1312,6 +1704,21 @@ public class ClrArtifactBuilder
             return module.ImportReference(enumTypeDefinition);
         }
 
+        if (type is ClassTypeSymbol classType && classTypeMap != null && classTypeMap.TryGetValue(classType.ClassName, out var classTypeDefinition))
+        {
+            return module.ImportReference(classTypeDefinition);
+        }
+
+        if (type is InterfaceTypeSymbol interfaceType)
+        {
+            if (interfaceTypeMap != null && interfaceTypeMap.TryGetValue(interfaceType.InterfaceName, out var interfaceTypeDefinition))
+            {
+                return module.ImportReference(interfaceTypeDefinition);
+            }
+
+            return module.TypeSystem.Object;
+        }
+
         diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");
         return null;
     }
@@ -1330,7 +1737,9 @@ public class ClrArtifactBuilder
         ModuleDefinition module,
         TypeDefinition programType,
         DiagnosticBag diagnostics,
-        IReadOnlyDictionary<string, TypeDefinition> enumTypeMap)
+        IReadOnlyDictionary<string, TypeDefinition> enumTypeMap,
+        IReadOnlyDictionary<string, TypeDefinition> classTypeMap,
+        IReadOnlyDictionary<string, TypeDefinition> interfaceTypeMap)
     {
         var functionTypes = new Dictionary<string, FunctionTypeSymbol>();
         foreach (var function in functions)
@@ -1379,7 +1788,7 @@ public class ClrArtifactBuilder
             ctor.Parameters.Add(new ParameterDefinition(module.TypeSystem.IntPtr));
             delegateType.Methods.Add(ctor);
 
-            var returnType = MapType(functionType.ReturnType, module, diagnostics, delegateMap, enumTypeMap);
+            var returnType = MapType(functionType.ReturnType, module, diagnostics, delegateMap, enumTypeMap, classTypeMap, interfaceTypeMap);
             if (returnType == null)
             {
                 return null;
@@ -1395,7 +1804,7 @@ public class ClrArtifactBuilder
 
             foreach (var parameterType in functionType.ParameterTypes)
             {
-                var mapped = MapType(parameterType, module, diagnostics, delegateMap, enumTypeMap);
+                var mapped = MapType(parameterType, module, diagnostics, delegateMap, enumTypeMap, classTypeMap, interfaceTypeMap);
                 if (mapped == null)
                 {
                     return null;
@@ -1733,6 +2142,45 @@ public class ClrArtifactBuilder
             EmitStoreElement(il, paramsElementType);
         }
 
+        return true;
+    }
+
+    private static bool EmitInterfaceCall(
+        IrValueId receiver,
+        InterfaceTypeSymbol receiverType,
+        string memberName,
+        IReadOnlyList<IrValueId> arguments,
+        IReadOnlyDictionary<IrValueId, VariableDefinition> valueLocals,
+        IReadOnlyDictionary<string, InterfaceRuntimeInfo> interfaceRuntimeMap,
+        ILProcessor il,
+        DiagnosticBag diagnostics)
+    {
+        if (!interfaceRuntimeMap.TryGetValue(receiverType.InterfaceName, out var interfaceRuntime))
+        {
+            diagnostics.Report(
+                Span.Empty,
+                $"phase-5 CLR backend could not resolve generated interface type '{receiverType.InterfaceName}'",
+                "IL001");
+            return false;
+        }
+
+        if (!interfaceRuntime.Methods.TryGetValue(memberName, out var interfaceMethod))
+        {
+            diagnostics.Report(
+                Span.Empty,
+                $"phase-5 CLR backend could not resolve interface method '{receiverType.InterfaceName}.{memberName}'",
+                "IL001");
+            return false;
+        }
+
+        il.Emit(OpCodes.Ldloc, valueLocals[receiver]);
+        il.Emit(OpCodes.Castclass, interfaceRuntime.Type);
+        foreach (var argument in arguments)
+        {
+            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
+        }
+
+        il.Emit(OpCodes.Callvirt, interfaceMethod);
         return true;
     }
 

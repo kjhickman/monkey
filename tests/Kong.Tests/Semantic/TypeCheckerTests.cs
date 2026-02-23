@@ -357,6 +357,46 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksInterfaceTypedVariableRuntimeValue()
+    {
+        var source = "class User { age: int; } interface IHasAge { fn Age(self) -> int; } impl IHasAge for User { fn Age(self) -> int { self.age; } } let user = new User(); let v: IHasAge = user;";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestTypeChecksInterfaceTypedFunctionParameterAndReturn()
+    {
+        var source = "interface IGreeter { fn Greet(self); } fn Use(x: IGreeter) -> IGreeter { x; }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestTypeChecksInterfaceTypedClassField()
+    {
+        var source = "interface IGreeter { fn Greet(self); } class Holder { inner: IGreeter; }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsPublicModifierInsideInterfaceImplMethod()
+    {
+        var source = "class User { } interface IGreeter { fn Greet(self); } impl IGreeter for User { public fn Greet(self) { } }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T137");
+    }
+
+    [Fact]
     public void TestReportsUnsupportedStaticClrMethodReturnType()
     {
         var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");

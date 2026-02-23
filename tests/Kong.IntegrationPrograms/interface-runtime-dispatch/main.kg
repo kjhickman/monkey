@@ -1,0 +1,40 @@
+import System;
+
+namespace Demo.InterfaceDispatch;
+
+class Counter {
+    value: int;
+}
+
+interface ICounter {
+    fn Increment(self, by: int) -> int;
+}
+
+impl Counter {
+    init(start: int) {
+        self.value = start;
+    }
+}
+
+impl ICounter for Counter {
+    fn Increment(self, by: int) -> int {
+        self.value = self.value + by;
+        self.value;
+    }
+}
+
+fn AddTwice(counter: ICounter, delta: int) -> int {
+    counter.Increment(delta);
+    counter.Increment(delta);
+}
+
+fn Main() {
+    let c = new Counter(5);
+    let i: ICounter = c;
+    let total: int = AddTwice(i, 4);
+    if (total == 13) {
+        Console.WriteLine("iface-ok");
+    } else {
+        Console.WriteLine("iface-bad");
+    }
+}

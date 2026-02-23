@@ -477,6 +477,15 @@ public class Parser
             Span = _curToken.Span,
         };
 
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            declaration.TypeParameters = ParseTypeParameterList();
+            if (declaration.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
+
         if (!ExpectPeek(TokenType.LeftParenthesis))
         {
             return null;
@@ -575,6 +584,15 @@ public class Parser
             Span = _curToken.Span,
         };
 
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            declaration.TypeParameters = ParseTypeParameterList();
+            if (declaration.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
+
         if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null;
@@ -669,6 +687,15 @@ public class Parser
             Span = _curToken.Span,
         };
 
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            declaration.TypeParameters = ParseTypeParameterList();
+            if (declaration.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
+
         if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null;
@@ -737,6 +764,15 @@ public class Parser
             Value = _curToken.Literal,
             Span = _curToken.Span,
         };
+
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            signature.TypeParameters = ParseTypeParameterList();
+            if (signature.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
 
         if (!ExpectPeek(TokenType.LeftParenthesis))
         {
@@ -963,6 +999,15 @@ public class Parser
             Value = _curToken.Literal,
             Span = _curToken.Span,
         };
+
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            declaration.TypeParameters = ParseTypeParameterList();
+            if (declaration.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
 
         if (!ExpectPeek(TokenType.LeftParenthesis))
         {

@@ -8,13 +8,19 @@ public class DefaultTypeMapper : ITypeMapper
 {
     private readonly IReadOnlyDictionary<string, TypeDefinition> _delegateTypeMap;
     private readonly IReadOnlyDictionary<string, TypeDefinition> _enumTypeMap;
+    private readonly IReadOnlyDictionary<string, TypeDefinition> _classTypeMap;
+    private readonly IReadOnlyDictionary<string, TypeDefinition> _interfaceTypeMap;
 
     public DefaultTypeMapper(
         IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
-        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null)
+        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null,
+        IReadOnlyDictionary<string, TypeDefinition>? classTypeMap = null,
+        IReadOnlyDictionary<string, TypeDefinition>? interfaceTypeMap = null)
     {
         _delegateTypeMap = delegateTypeMap;
         _enumTypeMap = enumTypeMap ?? new Dictionary<string, TypeDefinition>(StringComparer.Ordinal);
+        _classTypeMap = classTypeMap ?? new Dictionary<string, TypeDefinition>(StringComparer.Ordinal);
+        _interfaceTypeMap = interfaceTypeMap ?? new Dictionary<string, TypeDefinition>(StringComparer.Ordinal);
     }
 
     public TypeReference? TryMapKongType(
@@ -151,6 +157,27 @@ public class DefaultTypeMapper : ITypeMapper
             return null;
         }
 
+        if (kongType is ClassTypeSymbol classType)
+        {
+            if (_classTypeMap.TryGetValue(classType.ClassName, out var classDefinition))
+            {
+                return module.ImportReference(classDefinition);
+            }
+
+            diagnostics.Report(Span.Empty, $"CLR backend is missing generated class type for '{classType.ClassName}'", "IL001");
+            return null;
+        }
+
+        if (kongType is InterfaceTypeSymbol interfaceType)
+        {
+            if (_interfaceTypeMap.TryGetValue(interfaceType.InterfaceName, out var interfaceDefinition))
+            {
+                return module.ImportReference(interfaceDefinition);
+            }
+
+            return module.TypeSystem.Object;
+        }
+
         diagnostics.Report(Span.Empty, $"CLR backend does not support type '{kongType}'", "IL001");
         return null;
     }
@@ -199,6 +226,16 @@ public class DefaultTypeMapper : ITypeMapper
         }
 
         if (type is EnumTypeSymbol)
+        {
+            return true;
+        }
+
+        if (type is ClassTypeSymbol)
+        {
+            return true;
+        }
+
+        if (type is InterfaceTypeSymbol)
         {
             return true;
         }

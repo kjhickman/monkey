@@ -1311,6 +1311,51 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesGenericClassAndInterfaceDeclarations()
+    {
+        var input = "class Box<T> { value: T; } interface Mapper<TIn, TOut> { fn Map(self, value: TIn) -> TOut; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var classDeclaration = Assert.IsType<ClassDeclaration>(unit.Statements[0]);
+        Assert.Equal("Box", classDeclaration.Name.Value);
+        Assert.Single(classDeclaration.TypeParameters);
+        Assert.Equal("T", classDeclaration.TypeParameters[0].Value);
+
+        var interfaceDeclaration = Assert.IsType<InterfaceDeclaration>(unit.Statements[1]);
+        Assert.Equal("Mapper", interfaceDeclaration.Name.Value);
+        Assert.Equal(2, interfaceDeclaration.TypeParameters.Count);
+        Assert.Equal("TIn", interfaceDeclaration.TypeParameters[0].Value);
+        Assert.Equal("TOut", interfaceDeclaration.TypeParameters[1].Value);
+    }
+
+    [Fact]
+    public void TestParsesGenericFunctionAndMethods()
+    {
+        var input = "fn Identity<T>(value: T) -> T { value; } impl Box { fn Map<T>(self, value: T) -> T { value; } } interface Mapper { fn Map<T>(self, value: T) -> T; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var function = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        Assert.Single(function.TypeParameters);
+        Assert.Equal("T", function.TypeParameters[0].Value);
+
+        var impl = Assert.IsType<ImplBlock>(unit.Statements[1]);
+        var method = Assert.Single(impl.Methods);
+        Assert.Single(method.TypeParameters);
+        Assert.Equal("T", method.TypeParameters[0].Value);
+
+        var iface = Assert.IsType<InterfaceDeclaration>(unit.Statements[2]);
+        var signature = Assert.Single(iface.Methods);
+        Assert.Single(signature.TypeParameters);
+        Assert.Equal("T", signature.TypeParameters[0].Value);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

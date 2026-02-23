@@ -19,6 +19,8 @@ public sealed class IrProgram
     public IrFunction EntryPoint { get; set; } = null!;
     public List<IrFunction> Functions { get; } = [];
     public Dictionary<string, EnumDefinitionSymbol> EnumDefinitions { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, ClassDefinitionSymbol> ClassDefinitions { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, InterfaceDefinitionSymbol> InterfaceDefinitions { get; } = new(StringComparer.Ordinal);
 }
 
 public sealed class IrFunction
@@ -111,6 +113,21 @@ public sealed record IrInstanceCallVoid(
     IReadOnlyList<CallArgumentModifier> ArgumentModifiers,
     IReadOnlyList<IrLocalId?> ByRefLocals) : IrInstruction;
 
+public sealed record IrInterfaceCall(
+    IrValueId Destination,
+    IrValueId Receiver,
+    InterfaceTypeSymbol ReceiverType,
+    string MemberName,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
+public sealed record IrInterfaceCallVoid(
+    IrValueId Receiver,
+    InterfaceTypeSymbol ReceiverType,
+    string MemberName,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
 public sealed record IrStaticValueGet(
     IrValueId Destination,
     string MemberPath) : IrInstruction;
@@ -120,6 +137,12 @@ public sealed record IrInstanceValueGet(
     IrValueId Receiver,
     TypeSymbol ReceiverType,
     string MemberName) : IrInstruction;
+
+public sealed record IrInstanceValueSet(
+    IrValueId Receiver,
+    TypeSymbol ReceiverType,
+    string MemberName,
+    IrValueId Value) : IrInstruction;
 
 public sealed record IrCreateClosure(
     IrValueId Destination,

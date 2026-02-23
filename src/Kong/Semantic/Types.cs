@@ -251,6 +251,32 @@ public sealed record InterfaceTypeSymbol(string InterfaceName) : TypeSymbol
     public override string Name => InterfaceName;
 }
 
+public sealed record UserMethodSignature(
+    string Name,
+    IReadOnlyList<TypeSymbol> ParameterTypes,
+    TypeSymbol ReturnType,
+    bool IsPublic);
+
+public sealed record InterfaceMethodSignatureSymbol(
+    string Name,
+    IReadOnlyList<TypeSymbol> ParameterTypes,
+    TypeSymbol ReturnType);
+
+public sealed record InterfaceDefinitionSymbol(
+    string Name,
+    bool IsPublic,
+    IReadOnlyList<string> TypeParameters,
+    IReadOnlyDictionary<string, InterfaceMethodSignatureSymbol> Methods);
+
+public sealed record ClassDefinitionSymbol(
+    string Name,
+    bool IsPublic,
+    IReadOnlyList<string> TypeParameters,
+    IReadOnlyDictionary<string, TypeSymbol> Fields,
+    IReadOnlyDictionary<string, UserMethodSignature> Methods,
+    UserMethodSignature? Constructor,
+    IReadOnlyList<string> ImplementedInterfaces);
+
 public sealed record EnumVariantDefinition(string Name, IReadOnlyList<TypeSymbol> PayloadTypes, int Tag);
 
 public sealed record EnumDefinitionSymbol(

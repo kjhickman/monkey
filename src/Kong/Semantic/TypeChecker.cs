@@ -1,4 +1,5 @@
 using Kong.Common;
+using Kong.Lexing;
 using Kong.Parsing;
 
 namespace Kong.Semantic;
@@ -14,6 +15,8 @@ public class TypeCheckResult
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
+    public Dictionary<string, ClassDefinitionSymbol> ClassDefinitions { get; } = new(StringComparer.Ordinal);
+    public Dictionary<string, InterfaceDefinitionSymbol> InterfaceDefinitions { get; } = new(StringComparer.Ordinal);
     public Dictionary<string, EnumDefinitionSymbol> EnumDefinitions { get; } = new(StringComparer.Ordinal);
     public Dictionary<CallExpression, EnumVariantConstruction> ResolvedEnumVariantConstructions { get; } = [];
     public Dictionary<MatchExpression, MatchResolution> ResolvedMatches { get; } = [];
@@ -37,25 +40,16 @@ public sealed record MatchResolution(
     string EnumName,
     IReadOnlyList<MatchArmResolution> Arms);
 
-public sealed record UserMethodSignature(
-    string Name,
-    IReadOnlyList<TypeSymbol> ParameterTypes,
-    TypeSymbol ReturnType,
-    bool IsPublic);
-
-public sealed record InterfaceMethodSignatureSymbol(
-    string Name,
-    IReadOnlyList<TypeSymbol> ParameterTypes,
-    TypeSymbol ReturnType);
-
 public class TypeChecker
 {
     private sealed class ClassDefinition
     {
         public required string Name { get; init; }
         public bool IsPublic { get; init; }
+        public IReadOnlyList<string> TypeParameters { get; init; } = [];
         public Dictionary<string, TypeSymbol> Fields { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, UserMethodSignature> Methods { get; } = new(StringComparer.Ordinal);
+        public UserMethodSignature? Constructor { get; set; }
         public HashSet<string> ImplementedInterfaces { get; } = new(StringComparer.Ordinal);
     }
 
@@ -63,6 +57,7 @@ public class TypeChecker
     {
         public required string Name { get; init; }
         public bool IsPublic { get; init; }
+        public IReadOnlyList<string> TypeParameters { get; init; } = [];
         public Dictionary<string, InterfaceMethodSignatureSymbol> Methods { get; } = new(StringComparer.Ordinal);
     }
 
@@ -107,6 +102,8 @@ public class TypeChecker
         _interfaceDefinitions.Clear();
         _currentSelfTypes.Clear();
         _result.EnumDefinitions.Clear();
+        _result.ClassDefinitions.Clear();
+        _result.InterfaceDefinitions.Clear();
         _result.ResolvedEnumVariantConstructions.Clear();
         _result.ResolvedMatches.Clear();
         foreach (var declaration in externalEnumDeclarations)
@@ -118,6 +115,26 @@ public class TypeChecker
         PredeclareEnumDeclarations(unit);
         PredeclareClassAndInterfaceDeclarations(unit);
         PredeclareImplBlocks(unit);
+        foreach (var pair in _classDefinitions)
+        {
+            _result.ClassDefinitions[pair.Key] = new ClassDefinitionSymbol(
+                pair.Value.Name,
+                pair.Value.IsPublic,
+                pair.Value.TypeParameters,
+                new Dictionary<string, TypeSymbol>(pair.Value.Fields, StringComparer.Ordinal),
+                new Dictionary<string, UserMethodSignature>(pair.Value.Methods, StringComparer.Ordinal),
+                pair.Value.Constructor,
+                pair.Value.ImplementedInterfaces.ToList());
+        }
+
+        foreach (var pair in _interfaceDefinitions)
+        {
+            _result.InterfaceDefinitions[pair.Key] = new InterfaceDefinitionSymbol(
+                pair.Value.Name,
+                pair.Value.IsPublic,
+                pair.Value.TypeParameters,
+                new Dictionary<string, InterfaceMethodSignatureSymbol>(pair.Value.Methods, StringComparer.Ordinal));
+        }
         PredeclareFunctionDeclarations(unit);
 
         foreach (var statement in unit.Statements)
@@ -233,6 +250,7 @@ public class TypeChecker
             {
                 Name = declaration.Name.Value,
                 IsPublic = declaration.IsPublic,
+                TypeParameters = declaration.TypeParameters.Select(p => p.Value).ToList(),
             };
             _classDefinitions[declaration.Name.Value] = classDefinition;
         }
@@ -254,6 +272,7 @@ public class TypeChecker
             {
                 Name = declaration.Name.Value,
                 IsPublic = declaration.IsPublic,
+                TypeParameters = declaration.TypeParameters.Select(p => p.Value).ToList(),
             };
             _interfaceDefinitions[declaration.Name.Value] = interfaceDefinition;
         }
@@ -314,6 +333,34 @@ public class TypeChecker
                 continue;
             }
 
+            if (implBlock.Constructor != null)
+            {
+                var constructorParameters = new List<FunctionParameter>
+                {
+                    new()
+                    {
+                        Token = new Token(TokenType.Self, "self", implBlock.Constructor.Span),
+                        Name = "self",
+                        Span = implBlock.Constructor.Span,
+                    },
+                };
+                constructorParameters.AddRange(implBlock.Constructor.Parameters);
+
+                var constructorSignature = BindUserMethodSignatureCore(
+                    new Identifier
+                    {
+                        Token = implBlock.Constructor.Token,
+                        Value = "init",
+                        Span = implBlock.Constructor.Span,
+                    },
+                    constructorParameters,
+                    returnTypeAnnotation: null,
+                    implBlock.TypeName.Value,
+                    implBlock.Constructor.Span,
+                    isPublic: false);
+                classDefinition.Constructor = constructorSignature;
+            }
+
             foreach (var method in implBlock.Methods)
             {
                 var signature = BindUserMethodSignature(method, implBlock.TypeName.Value);
@@ -342,6 +389,13 @@ public class TypeChecker
             var implementedMethods = new Dictionary<string, UserMethodSignature>(StringComparer.Ordinal);
             foreach (var method in interfaceImplBlock.Methods)
             {
+                if (method.IsPublic)
+                {
+                    _result.Diagnostics.Report(method.Span,
+                        $"methods in 'impl {interfaceImplBlock.InterfaceName.Value} for {interfaceImplBlock.TypeName.Value}' are implicitly public; remove the 'public' modifier",
+                        "T137");
+                }
+
                 var signature = BindUserMethodSignature(method, interfaceImplBlock.TypeName.Value);
                 if (signature == null)
                 {
@@ -1560,7 +1614,35 @@ public class TypeChecker
 
     private TypeSymbol CheckNewExpression(NewExpression expression)
     {
-        var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
+        if (_namedTypeSymbols.TryGetValue(expression.TypePath, out var userType) && userType is ClassTypeSymbol classType)
+        {
+            var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
+            if (_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition))
+            {
+                var expectedParameters = classDefinition.Constructor?.ParameterTypes ?? [];
+                if (argumentTypes.Count != expectedParameters.Count)
+                {
+                    _result.Diagnostics.Report(expression.Span,
+                        $"wrong number of arguments for constructor '{classDefinition.Name}.init': expected {expectedParameters.Count}, got {argumentTypes.Count}",
+                        "T112");
+                    return classType;
+                }
+
+                for (var i = 0; i < argumentTypes.Count; i++)
+                {
+                    if (!IsAssignable(argumentTypes[i], expectedParameters[i]))
+                    {
+                        _result.Diagnostics.Report(expression.Arguments[i].Span,
+                            $"argument {i + 1} type mismatch for constructor '{classDefinition.Name}.init': expected '{expectedParameters[i]}', got '{argumentTypes[i]}'",
+                            "T113");
+                    }
+                }
+            }
+
+            return classType;
+        }
+
+        var clrArgumentTypes = expression.Arguments.Select(CheckExpression).ToList();
         if (!TryResolveImportedTypePath(expression.TypePath, out var resolvedTypePath, out var diagnostic))
         {
             _result.Diagnostics.Report(expression.Span, diagnostic, "T122");
@@ -1569,7 +1651,7 @@ public class TypeChecker
 
         if (!ConstructorClrResolver.TryResolve(
                 resolvedTypePath,
-                argumentTypes,
+                clrArgumentTypes,
                 out var binding,
                 out var resolutionError,
                 out var resolutionMessage))

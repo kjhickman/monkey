@@ -18,6 +18,10 @@ public class IrLowerer
     private readonly Dictionary<CallExpression, EnumVariantConstruction> _resolvedEnumVariantConstructions = [];
     private readonly Dictionary<MatchExpression, MatchResolution> _resolvedMatches = [];
     private readonly Dictionary<string, EnumDefinitionSymbol> _enumDefinitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ClassDefinitionSymbol> _classDefinitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, InterfaceDefinitionSymbol> _interfaceDefinitions = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _methodHelperNames = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _constructorHelperNames = new(StringComparer.Ordinal);
     private NameResolution? _nameResolution;
 
     private IrProgram _program = null!;
@@ -52,6 +56,10 @@ public class IrLowerer
         _resolvedEnumVariantConstructions.Clear();
         _resolvedMatches.Clear();
         _enumDefinitions.Clear();
+        _classDefinitions.Clear();
+        _interfaceDefinitions.Clear();
+        _methodHelperNames.Clear();
+        _constructorHelperNames.Clear();
         foreach (var pair in typeCheckResult.ExpressionTypes)
         {
             _expressionTypes[pair.Key] = pair.Value;
@@ -103,6 +111,16 @@ public class IrLowerer
             _enumDefinitions[pair.Key] = pair.Value;
         }
 
+        foreach (var pair in typeCheckResult.ClassDefinitions)
+        {
+            _classDefinitions[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.InterfaceDefinitions)
+        {
+            _interfaceDefinitions[pair.Key] = pair.Value;
+        }
+
         _result.Diagnostics.AddRange(typeCheckResult.Diagnostics);
         if (_result.Diagnostics.HasErrors)
         {
@@ -119,6 +137,21 @@ public class IrLowerer
         {
             _program.EnumDefinitions[pair.Key] = pair.Value;
         }
+
+        foreach (var pair in _classDefinitions)
+        {
+            _program.ClassDefinitions[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in _interfaceDefinitions)
+        {
+            _program.InterfaceDefinitions[pair.Key] = pair.Value;
+        }
+
+        if (!PrelowerTypeImplBlocks(unit))
+        {
+            return _result;
+        }
         if (!LowerFunctionBody(entryFunction, unit.Statements, isTopLevel: true))
         {
             return _result;
@@ -126,6 +159,32 @@ public class IrLowerer
 
         _result.Program = _program;
         return _result;
+    }
+
+    private bool PrelowerTypeImplBlocks(CompilationUnit unit)
+    {
+        foreach (var statement in unit.Statements)
+        {
+            switch (statement)
+            {
+                case ImplBlock implBlock:
+                    if (!LowerImplBlock(implBlock))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case InterfaceImplBlock interfaceImplBlock:
+                    if (!LowerInterfaceImplBlock(interfaceImplBlock))
+                    {
+                        return false;
+                    }
+
+                    break;
+            }
+        }
+
+        return true;
     }
 
     private bool LowerFunctionBody(
@@ -190,6 +249,14 @@ public class IrLowerer
                     }
                     break;
 
+                case MemberAssignmentStatement memberAssignmentStatement:
+                    if (!LowerMemberAssignmentStatement(memberAssignmentStatement))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -217,6 +284,14 @@ public class IrLowerer
                 case ImportStatement:
                 case NamespaceStatement:
                 case EnumDeclaration:
+                case ClassDeclaration:
+                case InterfaceDeclaration:
+                    break;
+
+                case ImplBlock implBlock:
+                    break;
+
+                case InterfaceImplBlock interfaceImplBlock:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -428,6 +503,167 @@ public class IrLowerer
         return true;
     }
 
+    private bool LowerMemberAssignmentStatement(MemberAssignmentStatement statement)
+    {
+        if (!TryGetExpressionType(statement.Target.Object, out var receiverType) || !IsSupportedRuntimeType(receiverType))
+        {
+            _result.Diagnostics.Report(statement.Target.Object.Span,
+                "phase-4 IR lowerer requires supported member assignment receiver type",
+                "IR001");
+            return false;
+        }
+
+        var receiverValue = LowerExpression(statement.Target.Object);
+        var value = LowerExpression(statement.Value);
+        if (receiverValue == null || value == null)
+        {
+            return false;
+        }
+
+        _currentBlock.Instructions.Add(new IrInstanceValueSet(
+            receiverValue.Value,
+            receiverType,
+            statement.Target.Member,
+            value.Value));
+        return true;
+    }
+
+    private bool LowerImplBlock(ImplBlock implBlock)
+    {
+        if (!_classDefinitions.TryGetValue(implBlock.TypeName.Value, out var classDefinition))
+        {
+            _result.Diagnostics.Report(implBlock.Span,
+                $"phase-4 IR lowerer missing class definition for '{implBlock.TypeName.Value}'",
+                "IR002");
+            return false;
+        }
+
+        if (implBlock.Constructor != null)
+        {
+            var constructorHelperName = $"__ctor_{classDefinition.Name}";
+            var constructorParameters = new List<FunctionParameter>
+            {
+                new()
+                {
+                    Token = new Kong.Lexing.Token(Kong.Lexing.TokenType.Self, "self", implBlock.Constructor.Span),
+                    Name = "self",
+                    Span = implBlock.Constructor.Span,
+                },
+            };
+            constructorParameters.AddRange(implBlock.Constructor.Parameters);
+
+            var constructorFunction = new FunctionLiteral
+            {
+                Token = new Kong.Lexing.Token(Kong.Lexing.TokenType.Function, "fn", implBlock.Constructor.Span),
+                Name = constructorHelperName,
+                Parameters = constructorParameters,
+                ReturnTypeAnnotation = new NamedType
+                {
+                    Token = new Kong.Lexing.Token(Kong.Lexing.TokenType.Identifier, "void", implBlock.Constructor.Span),
+                    Name = "void",
+                    Span = implBlock.Constructor.Span,
+                },
+                Body = implBlock.Constructor.Body,
+                Span = implBlock.Constructor.Span,
+            };
+
+            var constructorParameterTypes = new List<TypeSymbol> { new ClassTypeSymbol(classDefinition.Name) };
+            if (classDefinition.Constructor != null)
+            {
+                constructorParameterTypes.AddRange(classDefinition.Constructor.ParameterTypes);
+            }
+
+            var loweredConstructor = LowerFunctionLiteral(
+                constructorFunction,
+                constructorHelperName,
+                new FunctionTypeSymbol(constructorParameterTypes, TypeSymbols.Void));
+            if (loweredConstructor == null)
+            {
+                return false;
+            }
+
+            _constructorHelperNames[classDefinition.Name] = loweredConstructor.Value.FunctionName;
+        }
+
+        foreach (var method in implBlock.Methods)
+        {
+            if (!classDefinition.Methods.TryGetValue(method.Name.Value, out var methodSignature))
+            {
+                continue;
+            }
+
+            var helperName = $"__method_{classDefinition.Name}_{method.Name.Value}";
+            var parameterTypes = new List<TypeSymbol> { new ClassTypeSymbol(classDefinition.Name) };
+            parameterTypes.AddRange(methodSignature.ParameterTypes);
+            var loweredMethod = LowerFunctionLiteral(
+                new FunctionLiteral
+                {
+                    Token = method.Token,
+                    Name = helperName,
+                    Parameters = method.Parameters,
+                    ReturnTypeAnnotation = method.ReturnTypeAnnotation,
+                    Body = method.Body,
+                    Span = method.Span,
+                },
+                helperName,
+                new FunctionTypeSymbol(parameterTypes, methodSignature.ReturnType));
+            if (loweredMethod == null)
+            {
+                return false;
+            }
+
+            _methodHelperNames[$"{classDefinition.Name}.{method.Name.Value}"] = loweredMethod.Value.FunctionName;
+        }
+
+        return true;
+    }
+
+    private bool LowerInterfaceImplBlock(InterfaceImplBlock interfaceImplBlock)
+    {
+        if (!_classDefinitions.TryGetValue(interfaceImplBlock.TypeName.Value, out var classDefinition))
+        {
+            return true;
+        }
+
+        foreach (var method in interfaceImplBlock.Methods)
+        {
+            if (!classDefinition.Methods.TryGetValue(method.Name.Value, out var methodSignature))
+            {
+                continue;
+            }
+
+            var key = $"{classDefinition.Name}.{method.Name.Value}";
+            if (_methodHelperNames.ContainsKey(key))
+            {
+                continue;
+            }
+
+            var helperName = $"__method_{classDefinition.Name}_{method.Name.Value}_iface";
+            var parameterTypes = new List<TypeSymbol> { new ClassTypeSymbol(classDefinition.Name) };
+            parameterTypes.AddRange(methodSignature.ParameterTypes);
+            var loweredMethod = LowerFunctionLiteral(
+                new FunctionLiteral
+                {
+                    Token = method.Token,
+                    Name = helperName,
+                    Parameters = method.Parameters,
+                    ReturnTypeAnnotation = method.ReturnTypeAnnotation,
+                    Body = method.Body,
+                    Span = method.Span,
+                },
+                helperName,
+                new FunctionTypeSymbol(parameterTypes, methodSignature.ReturnType));
+            if (loweredMethod == null)
+            {
+                return false;
+            }
+
+            _methodHelperNames[key] = loweredMethod.Value.FunctionName;
+        }
+
+        return true;
+    }
+
     private bool LowerIndexAssignmentStatement(IndexAssignmentStatement statement)
     {
         if (!TryGetExpressionType(statement.Target.Left, out var leftType) || leftType is not ArrayTypeSymbol { ElementType: var elementType })
@@ -537,6 +773,13 @@ public class IrLowerer
                         return false;
                     }
                     break;
+
+                case MemberAssignmentStatement memberAssignmentStatement:
+                    if (!LowerMemberAssignmentStatement(memberAssignmentStatement))
+                    {
+                        return false;
+                    }
+                    break;
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -551,6 +794,11 @@ public class IrLowerer
                     return true;
                 case ImportStatement:
                 case NamespaceStatement:
+                case EnumDeclaration:
+                case ClassDeclaration:
+                case InterfaceDeclaration:
+                case ImplBlock:
+                case InterfaceImplBlock:
                     break;
                 case ReturnStatement returnStatement:
                     if (returnStatement.ReturnValue == null)
@@ -1299,6 +1547,13 @@ public class IrLowerer
                     }
                     break;
 
+                case MemberAssignmentStatement memberAssignmentStatement:
+                    if (!LowerMemberAssignmentStatement(memberAssignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -1308,6 +1563,11 @@ public class IrLowerer
 
                 case ImportStatement:
                 case NamespaceStatement:
+                case EnumDeclaration:
+                case ClassDeclaration:
+                case InterfaceDeclaration:
+                case ImplBlock:
+                case InterfaceImplBlock:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -1393,6 +1653,13 @@ public class IrLowerer
                     }
                     break;
 
+                case MemberAssignmentStatement memberAssignmentStatement:
+                    if (!LowerMemberAssignmentStatement(memberAssignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
                     {
@@ -1402,6 +1669,11 @@ public class IrLowerer
 
                 case ImportStatement:
                 case NamespaceStatement:
+                case EnumDeclaration:
+                case ClassDeclaration:
+                case InterfaceDeclaration:
+                case ImplBlock:
+                case InterfaceImplBlock:
                     break;
 
                 case ExpressionStatement { Expression: { } expression }:
@@ -1457,6 +1729,18 @@ public class IrLowerer
 
         if (callExpression.Function is MemberAccessExpression memberAccessExpression)
         {
+            if (_expressionTypes.TryGetValue(memberAccessExpression.Object, out var receiverTypeForUserCall) &&
+                receiverTypeForUserCall is ClassTypeSymbol classTypeForUserCall)
+            {
+                return LowerUserInstanceCallExpression(classTypeForUserCall, memberAccessExpression, callExpression, returnType);
+            }
+
+            if (_expressionTypes.TryGetValue(memberAccessExpression.Object, out var receiverTypeForInterfaceCall) &&
+                receiverTypeForInterfaceCall is InterfaceTypeSymbol interfaceTypeForInterfaceCall)
+            {
+                return LowerInterfaceCallExpression(interfaceTypeForInterfaceCall, memberAccessExpression, callExpression, returnType);
+            }
+
             if (_resolvedInstanceMethodMembers.ContainsKey(callExpression))
             {
                 return LowerInstanceCallExpression(memberAccessExpression, callExpression, returnType);
@@ -1622,6 +1906,12 @@ public class IrLowerer
 
     private IrValueId? LowerStaticValueAccessExpression(MemberAccessExpression memberAccessExpression)
     {
+        if (_expressionTypes.TryGetValue(memberAccessExpression.Object, out var receiverTypeForUserMember) &&
+            receiverTypeForUserMember is ClassTypeSymbol)
+        {
+            return LowerInstanceValueAccessExpression(memberAccessExpression);
+        }
+
         if (_resolvedInstanceValueMembers.ContainsKey(memberAccessExpression))
         {
             return LowerInstanceValueAccessExpression(memberAccessExpression);
@@ -1719,6 +2009,109 @@ public class IrLowerer
 
         var destination = AllocateValue(returnType);
         _currentBlock.Instructions.Add(new IrInstanceCall(destination, receiver.Value, receiverType, memberName, arguments, argumentTypes, argumentModifiers, byRefLocals));
+        return destination;
+    }
+
+    private IrValueId? LowerUserInstanceCallExpression(
+        ClassTypeSymbol receiverType,
+        MemberAccessExpression memberAccessExpression,
+        CallExpression callExpression,
+        TypeSymbol returnType)
+    {
+        if (!_methodHelperNames.TryGetValue($"{receiverType.ClassName}.{memberAccessExpression.Member}", out var helperName))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                $"phase-4 IR lowerer could not resolve method helper for '{receiverType.ClassName}.{memberAccessExpression.Member}'",
+                "IR002");
+            return null;
+        }
+
+        var receiver = LowerExpression(memberAccessExpression.Object);
+        if (receiver == null)
+        {
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(callExpression.Arguments.Count + 1)
+        {
+            receiver.Value,
+        };
+
+        foreach (var argument in callExpression.Arguments)
+        {
+            var value = LowerExpression(argument.Expression);
+            if (value == null)
+            {
+                return null;
+            }
+
+            arguments.Add(value.Value);
+        }
+
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrCallVoid(helperName, arguments));
+            return null;
+        }
+
+        var destination = AllocateValue(returnType);
+        _currentBlock.Instructions.Add(new IrCall(destination, helperName, arguments));
+        return destination;
+    }
+
+    private IrValueId? LowerInterfaceCallExpression(
+        InterfaceTypeSymbol receiverType,
+        MemberAccessExpression memberAccessExpression,
+        CallExpression callExpression,
+        TypeSymbol returnType)
+    {
+        var receiver = LowerExpression(memberAccessExpression.Object);
+        if (receiver == null)
+        {
+            return null;
+        }
+
+        var arguments = new List<IrValueId>(callExpression.Arguments.Count);
+        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
+        foreach (var argument in callExpression.Arguments)
+        {
+            if (!TryGetExpressionType(argument.Expression, out var argumentType) || !IsSupportedRuntimeType(argumentType))
+            {
+                _result.Diagnostics.Report(argument.Expression.Span,
+                    "phase-4 IR lowerer requires supported interface-call argument type",
+                    "IR001");
+                return null;
+            }
+
+            var value = LowerExpression(argument.Expression);
+            if (value == null)
+            {
+                return null;
+            }
+
+            arguments.Add(value.Value);
+            argumentTypes.Add(argumentType);
+        }
+
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrInterfaceCallVoid(
+                receiver.Value,
+                receiverType,
+                memberAccessExpression.Member,
+                arguments,
+                argumentTypes));
+            return null;
+        }
+
+        var destination = AllocateValue(returnType);
+        _currentBlock.Instructions.Add(new IrInterfaceCall(
+            destination,
+            receiver.Value,
+            receiverType,
+            memberAccessExpression.Member,
+            arguments,
+            argumentTypes));
         return destination;
     }
 
@@ -1884,6 +2277,29 @@ public class IrLowerer
         }
 
         var destination = AllocateValue(objectType);
+        if (objectType is ClassTypeSymbol classType)
+        {
+            _currentBlock.Instructions.Add(new IrNewObject(destination, objectType, [], []));
+            if (_constructorHelperNames.TryGetValue(classType.ClassName, out var constructorHelper))
+            {
+                var ctorArguments = new List<IrValueId>(arguments.Count + 1)
+                {
+                    destination,
+                };
+                ctorArguments.AddRange(arguments);
+                _currentBlock.Instructions.Add(new IrCallVoid(constructorHelper, ctorArguments));
+            }
+            else if (arguments.Count > 0)
+            {
+                _result.Diagnostics.Report(newExpression.Span,
+                    $"phase-4 IR lowerer constructor arguments were provided for class '{classType.ClassName}' but no init helper was found",
+                    "IR002");
+                return null;
+            }
+
+            return destination;
+        }
+
         _currentBlock.Instructions.Add(new IrNewObject(destination, objectType, arguments, argumentTypes));
         return destination;
     }
@@ -1970,6 +2386,8 @@ public class IrLowerer
                type == TypeSymbols.Decimal ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
+               type is ClassTypeSymbol ||
+               type is InterfaceTypeSymbol ||
                type is EnumTypeSymbol ||
                type is ClrNominalTypeSymbol ||
                type is ArrayTypeSymbol arrayType && IsSupportedArrayElementType(arrayType.ElementType) ||

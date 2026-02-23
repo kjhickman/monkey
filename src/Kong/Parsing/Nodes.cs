@@ -178,6 +178,7 @@ public class FunctionDeclaration : IStatement
     public Token Token { get; set; } // the 'fn' token
     public bool IsPublic { get; set; }
     public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
     public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
     public BlockStatement Body { get; set; } = null!;
@@ -194,6 +195,12 @@ public class FunctionDeclaration : IStatement
         }
         sb.Append("fn ");
         sb.Append(Name.String());
+        if (TypeParameters.Count > 0)
+        {
+            sb.Append('<');
+            sb.Append(string.Join(", ", TypeParameters.Select(p => p.String())));
+            sb.Append('>');
+        }
         sb.Append('(');
         sb.Append(string.Join(", ", paramStrings));
         sb.Append(')');
@@ -321,6 +328,7 @@ public class ClassDeclaration : IStatement
     public Token Token { get; set; } // the 'class' token
     public bool IsPublic { get; set; }
     public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
     public List<FieldDeclaration> Fields { get; set; } = [];
 
     public string TokenLiteral() => Token.Literal;
@@ -328,7 +336,10 @@ public class ClassDeclaration : IStatement
     public string String()
     {
         var visibility = IsPublic ? "public " : "";
-        return $"{visibility}class {Name.String()} {{ {string.Join(" ", Fields.Select(f => f.String()))} }}";
+        var typeParameters = TypeParameters.Count == 0
+            ? string.Empty
+            : $"<{string.Join(", ", TypeParameters.Select(p => p.String()))}>";
+        return $"{visibility}class {Name.String()}{typeParameters} {{ {string.Join(" ", Fields.Select(f => f.String()))} }}";
     }
 }
 
@@ -349,6 +360,7 @@ public class InterfaceDeclaration : IStatement
     public Token Token { get; set; } // the 'interface' token
     public bool IsPublic { get; set; }
     public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
     public List<InterfaceMethodSignature> Methods { get; set; } = [];
 
     public string TokenLiteral() => Token.Literal;
@@ -356,7 +368,10 @@ public class InterfaceDeclaration : IStatement
     public string String()
     {
         var visibility = IsPublic ? "public " : "";
-        return $"{visibility}interface {Name.String()} {{ {string.Join(" ", Methods.Select(m => m.String()))} }}";
+        var typeParameters = TypeParameters.Count == 0
+            ? string.Empty
+            : $"<{string.Join(", ", TypeParameters.Select(p => p.String()))}>";
+        return $"{visibility}interface {Name.String()}{typeParameters} {{ {string.Join(" ", Methods.Select(m => m.String()))} }}";
     }
 }
 
@@ -365,6 +380,7 @@ public class InterfaceMethodSignature : INode
     public Span Span { get; set; }
     public Token Token { get; set; } // the 'fn' token
     public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
     public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
 
@@ -373,7 +389,10 @@ public class InterfaceMethodSignature : INode
     public string String()
     {
         var returnType = ReturnTypeAnnotation == null ? string.Empty : $" -> {ReturnTypeAnnotation.String()}";
-        return $"fn {Name.String()}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType};";
+        var typeParameters = TypeParameters.Count == 0
+            ? string.Empty
+            : $"<{string.Join(", ", TypeParameters.Select(p => p.String()))}>";
+        return $"fn {Name.String()}{typeParameters}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType};";
     }
 }
 
@@ -395,6 +414,7 @@ public class MethodDeclaration : INode
     public Token Token { get; set; } // the 'fn' token
     public bool IsPublic { get; set; }
     public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
     public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
     public BlockStatement Body { get; set; } = null!;
@@ -405,7 +425,10 @@ public class MethodDeclaration : INode
     {
         var visibility = IsPublic ? "public " : "";
         var returnType = ReturnTypeAnnotation == null ? string.Empty : $" -> {ReturnTypeAnnotation.String()}";
-        return $"{visibility}fn {Name.String()}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType} {Body.String()}";
+        var typeParameters = TypeParameters.Count == 0
+            ? string.Empty
+            : $"<{string.Join(", ", TypeParameters.Select(p => p.String()))}>";
+        return $"{visibility}fn {Name.String()}{typeParameters}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType} {Body.String()}";
     }
 }
 
