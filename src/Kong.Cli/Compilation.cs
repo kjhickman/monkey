@@ -250,11 +250,17 @@ public static class Compilation
                     seenNamespace = true;
                     break;
                 default:
-                    if (!isRootFile && statement is not FunctionDeclaration && statement is not EnumDeclaration)
+                    if (!isRootFile &&
+                        statement is not FunctionDeclaration &&
+                        statement is not EnumDeclaration &&
+                        statement is not ClassDeclaration &&
+                        statement is not InterfaceDeclaration &&
+                        statement is not ImplBlock &&
+                        statement is not InterfaceImplBlock)
                     {
                         diagnostics.Report(
                             statement.Span,
-                            $"non-root modules may only declare top-level functions and enums in '{filePath}'",
+                            $"non-root modules may only declare top-level functions, enums, classes, interfaces, and impl blocks in '{filePath}'",
                             "CLI017");
                     }
 
@@ -298,6 +304,27 @@ public static class Compilation
                 ValidateBlock(functionDeclaration.Body, filePath, diagnostics);
                 break;
             case EnumDeclaration:
+            case ClassDeclaration:
+            case InterfaceDeclaration:
+                break;
+            case ImplBlock implBlock:
+                if (implBlock.Constructor != null)
+                {
+                    ValidateBlock(implBlock.Constructor.Body, filePath, diagnostics);
+                }
+
+                foreach (var method in implBlock.Methods)
+                {
+                    ValidateBlock(method.Body, filePath, diagnostics);
+                }
+
+                break;
+            case InterfaceImplBlock interfaceImplBlock:
+                foreach (var method in interfaceImplBlock.Methods)
+                {
+                    ValidateBlock(method.Body, filePath, diagnostics);
+                }
+
                 break;
             case BlockStatement blockStatement:
                 ValidateBlock(blockStatement, filePath, diagnostics);
@@ -312,6 +339,10 @@ public static class Compilation
                 ValidateExpression(indexAssignmentStatement.Target.Left, filePath, diagnostics);
                 ValidateExpression(indexAssignmentStatement.Target.Index, filePath, diagnostics);
                 ValidateExpression(indexAssignmentStatement.Value, filePath, diagnostics);
+                break;
+            case MemberAssignmentStatement memberAssignmentStatement:
+                ValidateExpression(memberAssignmentStatement.Target.Object, filePath, diagnostics);
+                ValidateExpression(memberAssignmentStatement.Value, filePath, diagnostics);
                 break;
             case ReturnStatement { ReturnValue: { } returnValue }:
                 ValidateExpression(returnValue, filePath, diagnostics);

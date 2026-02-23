@@ -11,7 +11,14 @@ public static class ProgramValidator
 
         foreach (var statement in unit.Statements)
         {
-            if (statement is FunctionDeclaration or EnumDeclaration or ImportStatement or NamespaceStatement)
+            if (statement is FunctionDeclaration or
+                EnumDeclaration or
+                ClassDeclaration or
+                InterfaceDeclaration or
+                ImplBlock or
+                InterfaceImplBlock or
+                ImportStatement or
+                NamespaceStatement)
             {
                 continue;
             }
@@ -64,6 +71,25 @@ public static class ProgramValidator
             {
                 ReportUnsupportedIfWithoutElse(declaration.Body, diagnostics);
             }
+            else if (statement is ImplBlock implBlock)
+            {
+                if (implBlock.Constructor != null)
+                {
+                    ReportUnsupportedIfWithoutElse(implBlock.Constructor.Body, diagnostics);
+                }
+
+                foreach (var method in implBlock.Methods)
+                {
+                    ReportUnsupportedIfWithoutElse(method.Body, diagnostics);
+                }
+            }
+            else if (statement is InterfaceImplBlock interfaceImplBlock)
+            {
+                foreach (var method in interfaceImplBlock.Methods)
+                {
+                    ReportUnsupportedIfWithoutElse(method.Body, diagnostics);
+                }
+            }
         }
 
         return diagnostics;
@@ -85,6 +111,10 @@ public static class ProgramValidator
                     ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Target.Left, diagnostics);
                     ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Target.Index, diagnostics);
                     ReportUnsupportedIfWithoutElse(indexAssignmentStatement.Value, diagnostics);
+                    break;
+                case MemberAssignmentStatement memberAssignmentStatement:
+                    ReportUnsupportedIfWithoutElse(memberAssignmentStatement.Target.Object, diagnostics);
+                    ReportUnsupportedIfWithoutElse(memberAssignmentStatement.Value, diagnostics);
                     break;
                 case ForInStatement forInStatement:
                     ReportUnsupportedIfWithoutElse(forInStatement.Iterable, diagnostics);

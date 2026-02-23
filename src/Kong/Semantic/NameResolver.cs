@@ -9,6 +9,7 @@ public enum NameSymbolKind
     Local,
     Parameter,
     EnumVariant,
+    Type,
 }
 
 public readonly record struct NameSymbol(string Name, NameSymbolKind Kind, Span DeclarationSpan, int FunctionDepth);
@@ -22,6 +23,8 @@ public class NameResolution
     public Dictionary<string, string> ImportedTypeAliases { get; } = [];
     public HashSet<string> ImportedNamespaces { get; } = [];
     public HashSet<NameSymbol> MutableSymbols { get; } = [];
+    public HashSet<string> DeclaredClasses { get; } = [];
+    public HashSet<string> DeclaredInterfaces { get; } = [];
     public string? FileNamespace { get; set; }
     public DiagnosticBag Diagnostics { get; } = new();
 
@@ -147,6 +150,24 @@ public class NameResolver
             }
         }
 
+        foreach (var statement in unit.Statements.OfType<ClassDeclaration>())
+        {
+            DeclareTypeName(statement.Name.Value, statement.Name.Span, isInterface: false);
+            if (_scope.TryLookupInCurrent(statement.Name.Value, out var symbol))
+            {
+                _result.IdentifierSymbols[statement.Name] = symbol;
+            }
+        }
+
+        foreach (var statement in unit.Statements.OfType<InterfaceDeclaration>())
+        {
+            DeclareTypeName(statement.Name.Value, statement.Name.Span, isInterface: true);
+            if (_scope.TryLookupInCurrent(statement.Name.Value, out var symbol))
+            {
+                _result.IdentifierSymbols[statement.Name] = symbol;
+            }
+        }
+
         foreach (var statement in unit.Statements)
         {
             if (statement is FunctionDeclaration functionDeclaration)
@@ -173,6 +194,26 @@ public class NameResolver
                     _result.IdentifierSymbols[variant.Name] = symbol;
                 }
             }
+        }
+    }
+
+    private void DeclareTypeName(string name, Span declarationSpan, bool isInterface)
+    {
+        if (_scope.TryLookupInCurrent(name, out _))
+        {
+            _result.Diagnostics.Report(declarationSpan, $"duplicate declaration of '{name}'", "N002");
+            return;
+        }
+
+        var symbol = new NameSymbol(name, NameSymbolKind.Type, declarationSpan, _scope.FunctionDepth);
+        _scope.Symbols[name] = symbol;
+        if (isInterface)
+        {
+            _result.DeclaredInterfaces.Add(name);
+        }
+        else
+        {
+            _result.DeclaredClasses.Add(name);
         }
     }
 
@@ -214,6 +255,9 @@ public class NameResolver
             case IndexAssignmentStatement indexAssignmentStatement:
                 ResolveIndexAssignmentStatement(indexAssignmentStatement);
                 break;
+            case MemberAssignmentStatement memberAssignmentStatement:
+                ResolveMemberAssignmentStatement(memberAssignmentStatement);
+                break;
             case ForInStatement forInStatement:
                 ResolveForInStatement(forInStatement);
                 break;
@@ -224,6 +268,14 @@ public class NameResolver
                 ResolveFunctionDeclaration(functionDeclaration);
                 break;
             case EnumDeclaration:
+            case ClassDeclaration:
+            case InterfaceDeclaration:
+                break;
+            case ImplBlock implBlock:
+                ResolveImplBlock(implBlock);
+                break;
+            case InterfaceImplBlock interfaceImplBlock:
+                ResolveInterfaceImplBlock(interfaceImplBlock);
                 break;
             case ReturnStatement returnStatement:
                 if (returnStatement.ReturnValue != null)
@@ -359,6 +411,12 @@ public class NameResolver
         ResolveExpression(statement.Value);
     }
 
+    private void ResolveMemberAssignmentStatement(MemberAssignmentStatement statement)
+    {
+        ResolveMemberAccessObject(statement.Target.Object);
+        ResolveExpression(statement.Value);
+    }
+
     private void ResolveForInStatement(ForInStatement statement)
     {
         ResolveExpression(statement.Iterable);
@@ -483,6 +541,88 @@ public class NameResolver
         ResolveBlockStatement(functionLiteral.Body);
 
         _functionStack.Pop();
+        LeaveScope();
+    }
+
+    private void ResolveImplBlock(ImplBlock implBlock)
+    {
+        if (!_result.DeclaredClasses.Contains(implBlock.TypeName.Value))
+        {
+            _result.Diagnostics.Report(implBlock.TypeName.Span,
+                $"impl target class '{implBlock.TypeName.Value}' is not declared",
+                "N011");
+        }
+
+        if (implBlock.Constructor != null)
+        {
+            ResolveConstructorDeclaration(implBlock.Constructor);
+        }
+
+        foreach (var method in implBlock.Methods)
+        {
+            ResolveMethodDeclaration(method);
+        }
+    }
+
+    private void ResolveInterfaceImplBlock(InterfaceImplBlock interfaceImplBlock)
+    {
+        if (!_result.DeclaredInterfaces.Contains(interfaceImplBlock.InterfaceName.Value))
+        {
+            _result.Diagnostics.Report(interfaceImplBlock.InterfaceName.Span,
+                $"impl interface '{interfaceImplBlock.InterfaceName.Value}' is not declared",
+                "N011");
+        }
+
+        if (!_result.DeclaredClasses.Contains(interfaceImplBlock.TypeName.Value))
+        {
+            _result.Diagnostics.Report(interfaceImplBlock.TypeName.Span,
+                $"impl target class '{interfaceImplBlock.TypeName.Value}' is not declared",
+                "N011");
+        }
+
+        foreach (var method in interfaceImplBlock.Methods)
+        {
+            ResolveMethodDeclaration(method);
+        }
+    }
+
+    private void ResolveConstructorDeclaration(ConstructorDeclaration declaration)
+    {
+        EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth + 1);
+        foreach (var parameter in declaration.Parameters)
+        {
+            if (_scope.TryLookupInCurrent(parameter.Name, out _))
+            {
+                _result.Diagnostics.Report(parameter.Span, $"duplicate declaration of '{parameter.Name}'", "N002");
+                continue;
+            }
+
+            var symbol = new NameSymbol(parameter.Name, NameSymbolKind.Parameter, parameter.Span, _scope.FunctionDepth);
+            _scope.Symbols[parameter.Name] = symbol;
+            _result.ParameterSymbols[parameter] = symbol;
+        }
+
+        ResolveBlockStatement(declaration.Body);
+        LeaveScope();
+    }
+
+    private void ResolveMethodDeclaration(MethodDeclaration declaration)
+    {
+        EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth + 1);
+        foreach (var parameter in declaration.Parameters)
+        {
+            if (_scope.TryLookupInCurrent(parameter.Name, out _))
+            {
+                _result.Diagnostics.Report(parameter.Span, $"duplicate declaration of '{parameter.Name}'", "N002");
+                continue;
+            }
+
+            var symbol = new NameSymbol(parameter.Name, NameSymbolKind.Parameter, parameter.Span, _scope.FunctionDepth);
+            _scope.Symbols[parameter.Name] = symbol;
+            _result.ParameterSymbols[parameter] = symbol;
+        }
+
+        ResolveBlockStatement(declaration.Body);
         LeaveScope();
     }
 

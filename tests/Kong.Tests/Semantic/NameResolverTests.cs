@@ -311,6 +311,31 @@ public class NameResolverTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "N006");
     }
 
+    [Fact]
+    public void TestResolvesClassInterfaceAndImplBodies()
+    {
+        var unit = Parse("namespace Test; class User { name: string; } interface IGreeter { fn Greet(self); } impl User { init(name: string) { self.name = name; } fn Greet(self) { self.name; } } impl IGreeter for User { fn Greet(self) { self.name; } }");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains("User", result.DeclaredClasses);
+        Assert.Contains("IGreeter", result.DeclaredInterfaces);
+    }
+
+    [Fact]
+    public void TestReportsImplTargetTypeNotDeclared()
+    {
+        var unit = Parse("namespace Test; impl Missing { fn A(self) { } }");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "N011");
+    }
+
     private static CompilationUnit Parse(string input)
     {
         var lexer = new Lexer(input);
