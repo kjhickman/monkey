@@ -161,6 +161,7 @@ public class FunctionDeclaration : IStatement
 {
     public Span Span { get; set; }
     public Token Token { get; set; } // the 'fn' token
+    public bool IsPublic { get; set; }
     public Identifier Name { get; set; } = null!;
     public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
@@ -172,6 +173,10 @@ public class FunctionDeclaration : IStatement
     {
         var sb = new StringBuilder();
         var paramStrings = Parameters.Select(p => p.String());
+        if (IsPublic)
+        {
+            sb.Append("public ");
+        }
         sb.Append("fn ");
         sb.Append(Name.String());
         sb.Append('(');

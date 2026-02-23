@@ -446,6 +446,22 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestPublicNamedFunctionDeclarationParsing()
+    {
+        var input = "public fn Add(x: int, y: int) -> int { x + y; }";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        Assert.True(declaration.IsPublic);
+        Assert.Equal("Add", declaration.Name.Value);
+        Assert.StartsWith("public fn Add(", declaration.String(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TestCallExpressionParsing()
     {
         var input = "add(1, 2 * 3, 4 + 5);";
@@ -1174,5 +1190,17 @@ public class ParserTests
         var diag = p.Diagnostics.All[0];
         Assert.NotEqual(Span.Empty, diag.Span);
         Assert.True(diag.Span.Start.Line > 0);
+    }
+
+    [Fact]
+    public void TestRejectsPublicKeywordOutsideTopLevelFunctionDeclaration()
+    {
+        var input = "fn Main() { public let x = 1; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        p.ParseCompilationUnit();
+
+        Assert.True(p.Diagnostics.HasErrors);
+        Assert.Contains(p.Diagnostics.All, d => d.Code == "P006");
     }
 }

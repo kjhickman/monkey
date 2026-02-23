@@ -196,6 +196,39 @@ public class BuildCommandIntegrationTests
     }
 
     [Fact]
+    public void TestBuildCommandReportsPrivateFunctionAccessAcrossNamespaces()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(tempDirectory);
+            Directory.CreateDirectory(workingDir);
+
+            var utilPath = Path.Combine(tempDirectory, "util.kg");
+            var mainPath = Path.Combine(tempDirectory, "main.kg");
+            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import Helpers; namespace App; fn Main() { Add(1, 2); }");
+
+            var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
+            Assert.Contains("[CLI019]", stdErr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void TestBuildCommandSupportsNamespaceImportFromAnotherKongFile()
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-module-test-{Guid.NewGuid():N}");
@@ -208,7 +241,7 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(utilPath, "namespace Util; public fn Add(x: int, y: int) -> int { x + y; }");
             File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
 
             var command = new BuildFile { File = mainPath };

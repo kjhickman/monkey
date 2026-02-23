@@ -466,10 +466,12 @@ public static class Compilation
 
         var functionDeclsByFile = new Dictionary<string, List<FunctionDeclaration>>(StringComparer.OrdinalIgnoreCase);
         var functionTypesByFile = new Dictionary<string, Dictionary<string, FunctionTypeSymbol>>(StringComparer.OrdinalIgnoreCase);
+        var namespaceByFile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var loadedUnit in loadedUnits)
         {
             var declarations = loadedUnit.Unit.Statements.OfType<FunctionDeclaration>().ToList();
             functionDeclsByFile[loadedUnit.FilePath] = declarations;
+            namespaceByFile[loadedUnit.FilePath] = loadedUnit.FileNamespace;
 
             var typeMap = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
             foreach (var declaration in declarations)
@@ -490,6 +492,7 @@ public static class Compilation
                 .Select(i => i.QualifiedName)
                 .ToHashSet(StringComparer.Ordinal);
             importedNamespaces.Add(loadedUnit.FileNamespace);
+            var calledFunctionNames = CollectDirectCallIdentifierNames(loadedUnit.Unit);
 
             var visibleModules = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var importedNamespace in importedNamespaces)
@@ -509,19 +512,58 @@ public static class Compilation
 
             var externalDeclarations = new List<FunctionDeclaration>();
             var externalFunctionTypes = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
+            var privateImportedFunctionNames = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var path in visibleModules)
             {
+                var isSameNamespace = namespaceByFile.TryGetValue(path, out var namespaceName) &&
+                    string.Equals(namespaceName, loadedUnit.FileNamespace, StringComparison.Ordinal);
+
                 if (functionDeclsByFile.TryGetValue(path, out var declarations))
                 {
-                    externalDeclarations.AddRange(declarations);
+                    if (isSameNamespace)
+                    {
+                        externalDeclarations.AddRange(declarations);
+                    }
+                    else
+                    {
+                        foreach (var declaration in declarations.Where(d => !d.IsPublic))
+                        {
+                            privateImportedFunctionNames.Add(declaration.Name.Value);
+                        }
+
+                        externalDeclarations.AddRange(declarations.Where(d => d.IsPublic));
+                    }
                 }
 
                 if (functionTypesByFile.TryGetValue(path, out var typeMap))
                 {
-                    foreach (var pair in typeMap)
+                    if (isSameNamespace)
                     {
-                        externalFunctionTypes[pair.Key] = pair.Value;
+                        foreach (var pair in typeMap)
+                        {
+                            externalFunctionTypes[pair.Key] = pair.Value;
+                        }
+                    }
+                    else
+                    {
+                        if (!functionDeclsByFile.TryGetValue(path, out var declarationsForVisibility))
+                        {
+                            continue;
+                        }
+
+                        var publicDeclarationNames = declarationsForVisibility
+                            .Where(d => d.IsPublic)
+                            .Select(d => d.Name.Value)
+                            .ToHashSet(StringComparer.Ordinal);
+
+                        foreach (var pair in typeMap)
+                        {
+                            if (publicDeclarationNames.Contains(pair.Key))
+                            {
+                                externalFunctionTypes[pair.Key] = pair.Value;
+                            }
+                        }
                     }
                 }
             }
@@ -530,7 +572,21 @@ public static class Compilation
             var names = resolver.Resolve(loadedUnit.Unit, externalDeclarations);
             if (names.Diagnostics.HasErrors)
             {
-                diagnostics = PrefixDiagnosticsWithFile(names.Diagnostics, loadedUnit.FilePath);
+                var visibilityDiagnostics = BuildVisibilityDiagnostics(
+                    names.Diagnostics,
+                    privateImportedFunctionNames,
+                    calledFunctionNames);
+
+                if (visibilityDiagnostics.Count == 0)
+                {
+                    diagnostics = PrefixDiagnosticsWithFile(names.Diagnostics, loadedUnit.FilePath);
+                    return false;
+                }
+
+                var combinedDiagnostics = new DiagnosticBag();
+                combinedDiagnostics.AddRange(names.Diagnostics);
+                combinedDiagnostics.AddRange(visibilityDiagnostics);
+                diagnostics = PrefixDiagnosticsWithFile(combinedDiagnostics, loadedUnit.FilePath);
                 return false;
             }
 
@@ -681,6 +737,177 @@ public static class Compilation
         }
 
         return prefixed;
+    }
+
+    private static DiagnosticBag BuildVisibilityDiagnostics(
+        DiagnosticBag source,
+        IReadOnlySet<string> privateImportedFunctionNames,
+        IReadOnlySet<string> calledFunctionNames)
+    {
+        var diagnostics = new DiagnosticBag();
+        foreach (var diagnostic in source.All)
+        {
+            if (diagnostic.Code != "N001")
+            {
+                continue;
+            }
+
+            if (!TryExtractUndefinedIdentifierName(diagnostic.Message, out var identifierName))
+            {
+                continue;
+            }
+
+            if (!privateImportedFunctionNames.Contains(identifierName) || !calledFunctionNames.Contains(identifierName))
+            {
+                continue;
+            }
+
+            diagnostics.Report(
+                diagnostic.Span,
+                $"function '{identifierName}' is private to its namespace; declare it as 'public fn' to access it from another namespace",
+                "CLI019");
+        }
+
+        return diagnostics;
+    }
+
+    private static bool TryExtractUndefinedIdentifierName(string message, out string name)
+    {
+        name = string.Empty;
+        const string prefix = "undefined variable '";
+        if (!message.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var endQuote = message.LastIndexOf("'", StringComparison.Ordinal);
+        if (endQuote <= prefix.Length)
+        {
+            return false;
+        }
+
+        name = message[prefix.Length..endQuote];
+        return name.Length > 0;
+    }
+
+    private static HashSet<string> CollectDirectCallIdentifierNames(CompilationUnit unit)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var statement in unit.Statements)
+        {
+            CollectDirectCallIdentifierNames(statement, names);
+        }
+
+        return names;
+    }
+
+    private static void CollectDirectCallIdentifierNames(IStatement statement, HashSet<string> names)
+    {
+        switch (statement)
+        {
+            case LetStatement { Value: { } value }:
+                CollectDirectCallIdentifierNames(value, names);
+                break;
+            case AssignmentStatement assignmentStatement:
+                CollectDirectCallIdentifierNames(assignmentStatement.Value, names);
+                break;
+            case IndexAssignmentStatement indexAssignmentStatement:
+                CollectDirectCallIdentifierNames(indexAssignmentStatement.Target.Left, names);
+                CollectDirectCallIdentifierNames(indexAssignmentStatement.Target.Index, names);
+                CollectDirectCallIdentifierNames(indexAssignmentStatement.Value, names);
+                break;
+            case ForInStatement forInStatement:
+                CollectDirectCallIdentifierNames(forInStatement.Iterable, names);
+                foreach (var nested in forInStatement.Body.Statements)
+                {
+                    CollectDirectCallIdentifierNames(nested, names);
+                }
+                break;
+            case FunctionDeclaration declaration:
+                foreach (var nested in declaration.Body.Statements)
+                {
+                    CollectDirectCallIdentifierNames(nested, names);
+                }
+                break;
+            case ReturnStatement { ReturnValue: { } returnValue }:
+                CollectDirectCallIdentifierNames(returnValue, names);
+                break;
+            case ExpressionStatement { Expression: { } expression }:
+                CollectDirectCallIdentifierNames(expression, names);
+                break;
+            case BlockStatement blockStatement:
+                foreach (var nested in blockStatement.Statements)
+                {
+                    CollectDirectCallIdentifierNames(nested, names);
+                }
+                break;
+        }
+    }
+
+    private static void CollectDirectCallIdentifierNames(IExpression expression, HashSet<string> names)
+    {
+        switch (expression)
+        {
+            case IfExpression ifExpression:
+                CollectDirectCallIdentifierNames(ifExpression.Condition, names);
+                foreach (var statement in ifExpression.Consequence.Statements)
+                {
+                    CollectDirectCallIdentifierNames(statement, names);
+                }
+
+                if (ifExpression.Alternative != null)
+                {
+                    foreach (var statement in ifExpression.Alternative.Statements)
+                    {
+                        CollectDirectCallIdentifierNames(statement, names);
+                    }
+                }
+                break;
+            case PrefixExpression prefixExpression:
+                CollectDirectCallIdentifierNames(prefixExpression.Right, names);
+                break;
+            case InfixExpression infixExpression:
+                CollectDirectCallIdentifierNames(infixExpression.Left, names);
+                CollectDirectCallIdentifierNames(infixExpression.Right, names);
+                break;
+            case FunctionLiteral functionLiteral:
+                foreach (var statement in functionLiteral.Body.Statements)
+                {
+                    CollectDirectCallIdentifierNames(statement, names);
+                }
+                break;
+            case CallExpression callExpression:
+                if (callExpression.Function is Identifier identifier)
+                {
+                    names.Add(identifier.Value);
+                }
+
+                CollectDirectCallIdentifierNames(callExpression.Function, names);
+                foreach (var argument in callExpression.Arguments)
+                {
+                    CollectDirectCallIdentifierNames(argument.Expression, names);
+                }
+                break;
+            case MemberAccessExpression memberAccessExpression:
+                CollectDirectCallIdentifierNames(memberAccessExpression.Object, names);
+                break;
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    CollectDirectCallIdentifierNames(element, names);
+                }
+                break;
+            case IndexExpression indexExpression:
+                CollectDirectCallIdentifierNames(indexExpression.Left, names);
+                CollectDirectCallIdentifierNames(indexExpression.Index, names);
+                break;
+            case NewExpression newExpression:
+                foreach (var argument in newExpression.Arguments)
+                {
+                    CollectDirectCallIdentifierNames(argument, names);
+                }
+                break;
+        }
     }
 
     public static bool ValidateProgramEntrypoint(

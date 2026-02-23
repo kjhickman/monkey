@@ -63,6 +63,7 @@ public enum TokenType
     Ref,
     For,
     In,
+    Public,
 }
 
 public record struct Token(TokenType Type, string Literal, Span Span = default)
@@ -86,6 +87,7 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "ref", TokenType.Ref },
         { "for", TokenType.For },
         { "in", TokenType.In },
+        { "public", TokenType.Public },
     };
 
     public static TokenType LookupIdentifier(string keyword)

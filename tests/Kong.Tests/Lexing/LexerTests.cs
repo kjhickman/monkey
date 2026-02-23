@@ -400,6 +400,32 @@ public class LexerTests
     }
 
     [Fact]
+    public void TestLexesPublicKeyword()
+    {
+        var input = "public fn Add() {}";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Public, "public"),
+            (TokenType.Function, "fn"),
+            (TokenType.Identifier, "Add"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
     public void TestLexesDoubleCharAndByteLiterals()
     {
         var input = "1.25; 'a'; 42b;";

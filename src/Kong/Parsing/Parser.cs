@@ -171,9 +171,19 @@ public class Parser
 
     private IStatement? ParseStatement()
     {
-        if (_blockDepth == 0 && CurTokenIs(TokenType.Function) && PeekTokenIs(TokenType.Identifier))
+        if (_blockDepth == 0 &&
+            ((CurTokenIs(TokenType.Function) && PeekTokenIs(TokenType.Identifier)) ||
+             (CurTokenIs(TokenType.Public) && PeekTokenIs(TokenType.Function))))
         {
             return ParseFunctionDeclaration();
+        }
+
+        if (CurTokenIs(TokenType.Public))
+        {
+            _diagnostics.Report(_curToken.Span,
+                "'public' is only allowed on top-level function declarations",
+                "P006");
+            return null;
         }
 
         return _curToken.Type switch
@@ -403,9 +413,26 @@ public class Parser
     private FunctionDeclaration? ParseFunctionDeclaration()
     {
         var startSpan = _curToken.Span;
+        var isPublic = false;
+
+        if (CurTokenIs(TokenType.Public))
+        {
+            isPublic = true;
+            NextToken();
+        }
+
+        if (!CurTokenIs(TokenType.Function))
+        {
+            _diagnostics.Report(_curToken.Span,
+                $"expected function declaration after visibility modifier, got {_curToken.Type}",
+                "P006");
+            return null;
+        }
+
         var declaration = new FunctionDeclaration
         {
             Token = _curToken,
+            IsPublic = isPublic,
         };
 
         if (!ExpectPeek(TokenType.Identifier))

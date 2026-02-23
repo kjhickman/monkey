@@ -283,7 +283,7 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(utilPath, "namespace Util; public fn Add(x: int, y: int) -> int { x + y; }");
             File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
@@ -326,8 +326,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Shared; fn Inc(x: int) -> int { x + 1; }");
-            File.WriteAllText(mathPath, "namespace Shared; fn Twice(x: int) -> int { x * 2; }");
+            File.WriteAllText(utilPath, "namespace Shared; public fn Inc(x: int) -> int { x + 1; }");
+            File.WriteAllText(mathPath, "namespace Shared; public fn Twice(x: int) -> int { x * 2; }");
             File.WriteAllText(mainPath, "import Shared; namespace App; fn Main() { Twice(Inc(20)); }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
@@ -359,6 +359,58 @@ public class RunCommandIntegrationTests
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
             Assert.Contains("[N001]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandReportsPrivateFunctionAccessAcrossNamespaces()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "import Helpers; namespace App; fn Main() { Add(1, 2); }");
+
+            var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stdout.Trim());
+            Assert.Contains("[CLI019]", stderr);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void TestRunCommandAllowsPrivateFunctionAccessWithinSameNamespaceAcrossFiles()
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-module-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+        var utilPath = Path.Combine(tempDirectory, "util.kg");
+        var mainPath = Path.Combine(tempDirectory, "main.kg");
+
+        try
+        {
+            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
+            File.WriteAllText(mainPath, "namespace Shared; fn Main() { Add(20, 22); }");
+
+            var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Equal(0, exitCode);
         }
         finally
         {
