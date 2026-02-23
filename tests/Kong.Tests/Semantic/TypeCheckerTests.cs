@@ -397,6 +397,46 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksGenericClassConstructorAndMethodCall()
+    {
+        var source = "class Box<T> { value: T; } impl Box { init(value: T) { self.value = value; } fn Get(self) -> T { self.value; } } let b: Box<int> = new Box<int>(42); let n: int = b.Get();";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestTypeChecksGenericInterfaceAssignmentAndDispatchTyping()
+    {
+        var source = "class Box<T> { value: T; } interface IGet<T> { fn Get(self) -> T; } impl Box { init(value: T) { self.value = value; } } impl IGet for Box { fn Get(self) -> T { self.value; } } let b: Box<int> = new Box<int>(7); let g: IGet<int> = b; let n: int = g.Get();";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestTypeChecksGenericFunctionInference()
+    {
+        var source = "fn Id<T>(value: T) -> T { value; } let n: int = Id(3);";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsGenericClassMissingTypeArgumentsInAnnotation()
+    {
+        var source = "class Box<T> { value: T; } let b: Box = new Box<int>(1);";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T001");
+    }
+
+    [Fact]
     public void TestReportsUnsupportedStaticClrMethodReturnType()
     {
         var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");

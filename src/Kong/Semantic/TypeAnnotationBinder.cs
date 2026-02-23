@@ -41,6 +41,22 @@ public static class TypeAnnotationBinder
                 return null;
             }
 
+            if (namedTypeSymbol is ClassTypeSymbol classType && classType.TypeArguments.Count > 0)
+            {
+                diagnostics.Report(namedType.Span,
+                    $"generic class '{namedType.Name}' requires {classType.TypeArguments.Count} type argument(s)",
+                    "T001");
+                return null;
+            }
+
+            if (namedTypeSymbol is InterfaceTypeSymbol interfaceType && interfaceType.TypeArguments.Count > 0)
+            {
+                diagnostics.Report(namedType.Span,
+                    $"generic interface '{namedType.Name}' requires {interfaceType.TypeArguments.Count} type argument(s)",
+                    "T001");
+                return null;
+            }
+
             return namedTypeSymbol;
         }
 
@@ -59,33 +75,83 @@ public static class TypeAnnotationBinder
             return null;
         }
 
-        if (genericTarget is not EnumTypeSymbol enumType)
+        if (genericTarget is EnumTypeSymbol enumType)
         {
-            diagnostics.Report(genericType.Span, $"type '{genericType.Name}' does not accept type arguments", "T001");
-            return null;
-        }
-
-        if (genericType.TypeArguments.Count != enumType.TypeArguments.Count)
-        {
-            diagnostics.Report(genericType.Span,
-                $"wrong number of type arguments for '{genericType.Name}': expected {enumType.TypeArguments.Count}, got {genericType.TypeArguments.Count}",
-                "T001");
-            return null;
-        }
-
-        var typeArguments = new List<TypeSymbol>(genericType.TypeArguments.Count);
-        foreach (var typeArgumentNode in genericType.TypeArguments)
-        {
-            var typeArgument = Bind(typeArgumentNode, diagnostics, namedTypes);
-            if (typeArgument == null)
+            if (genericType.TypeArguments.Count != enumType.TypeArguments.Count)
             {
+                diagnostics.Report(genericType.Span,
+                    $"wrong number of type arguments for '{genericType.Name}': expected {enumType.TypeArguments.Count}, got {genericType.TypeArguments.Count}",
+                    "T001");
                 return null;
             }
 
-            typeArguments.Add(typeArgument);
+            var typeArguments = new List<TypeSymbol>(genericType.TypeArguments.Count);
+            foreach (var typeArgumentNode in genericType.TypeArguments)
+            {
+                var typeArgument = Bind(typeArgumentNode, diagnostics, namedTypes);
+                if (typeArgument == null)
+                {
+                    return null;
+                }
+
+                typeArguments.Add(typeArgument);
+            }
+
+            return enumType with { TypeArguments = typeArguments };
         }
 
-        return enumType with { TypeArguments = typeArguments };
+        if (genericTarget is ClassTypeSymbol classType)
+        {
+            if (genericType.TypeArguments.Count != classType.TypeArguments.Count)
+            {
+                diagnostics.Report(genericType.Span,
+                    $"wrong number of type arguments for '{genericType.Name}': expected {classType.TypeArguments.Count}, got {genericType.TypeArguments.Count}",
+                    "T001");
+                return null;
+            }
+
+            var typeArguments = new List<TypeSymbol>(genericType.TypeArguments.Count);
+            foreach (var typeArgumentNode in genericType.TypeArguments)
+            {
+                var typeArgument = Bind(typeArgumentNode, diagnostics, namedTypes);
+                if (typeArgument == null)
+                {
+                    return null;
+                }
+
+                typeArguments.Add(typeArgument);
+            }
+
+            return new ClassTypeSymbol(classType.ClassName, typeArguments);
+        }
+
+        if (genericTarget is InterfaceTypeSymbol interfaceType)
+        {
+            if (genericType.TypeArguments.Count != interfaceType.TypeArguments.Count)
+            {
+                diagnostics.Report(genericType.Span,
+                    $"wrong number of type arguments for '{genericType.Name}': expected {interfaceType.TypeArguments.Count}, got {genericType.TypeArguments.Count}",
+                    "T001");
+                return null;
+            }
+
+            var typeArguments = new List<TypeSymbol>(genericType.TypeArguments.Count);
+            foreach (var typeArgumentNode in genericType.TypeArguments)
+            {
+                var typeArgument = Bind(typeArgumentNode, diagnostics, namedTypes);
+                if (typeArgument == null)
+                {
+                    return null;
+                }
+
+                typeArguments.Add(typeArgument);
+            }
+
+            return new InterfaceTypeSymbol(interfaceType.InterfaceName, typeArguments);
+        }
+
+        diagnostics.Report(genericType.Span, $"type '{genericType.Name}' does not accept type arguments", "T001");
+        return null;
     }
 
     private static TypeSymbol? BindArrayType(

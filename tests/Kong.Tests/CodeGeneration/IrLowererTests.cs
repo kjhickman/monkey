@@ -295,6 +295,20 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersGenericFunctionCall()
+    {
+        var source = "fn Id<T>(x: T) -> T { x; } let n: int = Id(42);";
+        var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck, names);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        Assert.Contains(lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions), i => i is IrCall { FunctionName: "Id" });
+    }
+
+    [Fact]
     public void TestLowersVarAssignment()
     {
         var source = "var x: int = 1; x = x + 1; x;";

@@ -243,7 +243,10 @@ public class TypeChecker
                 continue;
             }
 
-            var classType = new ClassTypeSymbol(declaration.Name.Value);
+            var classTypeParameters = declaration.TypeParameters
+                .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p.Value))
+                .ToList();
+            var classType = new ClassTypeSymbol(declaration.Name.Value, classTypeParameters);
             _namedTypeSymbols[declaration.Name.Value] = classType;
 
             var classDefinition = new ClassDefinition
@@ -265,7 +268,10 @@ public class TypeChecker
                 continue;
             }
 
-            var interfaceType = new InterfaceTypeSymbol(declaration.Name.Value);
+            var interfaceTypeParameters = declaration.TypeParameters
+                .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p.Value))
+                .ToList();
+            var interfaceType = new InterfaceTypeSymbol(declaration.Name.Value, interfaceTypeParameters);
             _namedTypeSymbols[declaration.Name.Value] = interfaceType;
 
             var interfaceDefinition = new InterfaceDefinition
@@ -294,7 +300,13 @@ public class TypeChecker
                     continue;
                 }
 
-                var fieldType = TypeAnnotationBinder.Bind(field.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+                var genericTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+                foreach (var typeParameter in declaration.TypeParameters)
+                {
+                    genericTypeBindings[typeParameter.Value] = new GenericParameterTypeSymbol(typeParameter.Value);
+                }
+
+                var fieldType = TypeAnnotationBinder.Bind(field.TypeAnnotation, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error;
                 classDefinition.Fields[field.Name.Value] = fieldType;
             }
         }
@@ -308,7 +320,13 @@ public class TypeChecker
 
             foreach (var method in declaration.Methods)
             {
-                var signature = BindInterfaceMethodSignature(method, declaration.Name.Value);
+                var genericTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+                foreach (var typeParameter in declaration.TypeParameters)
+                {
+                    genericTypeBindings[typeParameter.Value] = new GenericParameterTypeSymbol(typeParameter.Value);
+                }
+
+                var signature = BindInterfaceMethodSignature(method, declaration.Name.Value, genericTypeBindings);
                 if (signature == null)
                 {
                     continue;
@@ -346,6 +364,12 @@ public class TypeChecker
                 };
                 constructorParameters.AddRange(implBlock.Constructor.Parameters);
 
+                var classTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+                foreach (var typeParameter in classDefinition.TypeParameters)
+                {
+                    classTypeBindings[typeParameter] = new GenericParameterTypeSymbol(typeParameter);
+                }
+
                 var constructorSignature = BindUserMethodSignatureCore(
                     new Identifier
                     {
@@ -353,17 +377,25 @@ public class TypeChecker
                         Value = "init",
                         Span = implBlock.Constructor.Span,
                     },
+                    [],
                     constructorParameters,
-                    returnTypeAnnotation: null,
+                    null,
                     implBlock.TypeName.Value,
                     implBlock.Constructor.Span,
-                    isPublic: false);
+                    isPublic: false,
+                    namedTypes: classTypeBindings);
                 classDefinition.Constructor = constructorSignature;
             }
 
             foreach (var method in implBlock.Methods)
             {
-                var signature = BindUserMethodSignature(method, implBlock.TypeName.Value);
+                var classTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+                foreach (var typeParameter in classDefinition.TypeParameters)
+                {
+                    classTypeBindings[typeParameter] = new GenericParameterTypeSymbol(typeParameter);
+                }
+
+                var signature = BindUserMethodSignature(method, implBlock.TypeName.Value, classTypeBindings);
                 if (signature == null)
                 {
                     continue;
@@ -386,6 +418,14 @@ public class TypeChecker
                 continue;
             }
 
+            if (interfaceDefinition.TypeParameters.Count > 0 && classDefinition.TypeParameters.Count > 0 &&
+                interfaceDefinition.TypeParameters.Count != classDefinition.TypeParameters.Count)
+            {
+                _result.Diagnostics.Report(interfaceImplBlock.Span,
+                    $"impl '{interfaceDefinition.Name} for {classDefinition.Name}' has incompatible generic arity",
+                    "T133");
+            }
+
             var implementedMethods = new Dictionary<string, UserMethodSignature>(StringComparer.Ordinal);
             foreach (var method in interfaceImplBlock.Methods)
             {
@@ -396,7 +436,13 @@ public class TypeChecker
                         "T137");
                 }
 
-                var signature = BindUserMethodSignature(method, interfaceImplBlock.TypeName.Value);
+                var classTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+                foreach (var typeParameter in classDefinition.TypeParameters)
+                {
+                    classTypeBindings[typeParameter] = new GenericParameterTypeSymbol(typeParameter);
+                }
+
+                var signature = BindUserMethodSignature(method, interfaceImplBlock.TypeName.Value, classTypeBindings);
                 if (signature == null)
                 {
                     continue;
@@ -418,8 +464,21 @@ public class TypeChecker
                     continue;
                 }
 
-                if (signature.ParameterTypes.Count != interfaceMethod.ParameterTypes.Count ||
-                    !TypeEquals(signature.ReturnType, interfaceMethod.ReturnType))
+                var implTypeSubstitution = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+                var pairedTypeParameterCount = Math.Min(interfaceDefinition.TypeParameters.Count, classDefinition.TypeParameters.Count);
+                for (var typeParameterIndex = 0; typeParameterIndex < pairedTypeParameterCount; typeParameterIndex++)
+                {
+                    implTypeSubstitution[interfaceDefinition.TypeParameters[typeParameterIndex]] =
+                        new GenericParameterTypeSymbol(classDefinition.TypeParameters[typeParameterIndex]);
+                }
+
+                var expectedInterfaceParameterTypes = interfaceMethod.ParameterTypes
+                    .Select(p => SubstituteGenericParameters(p, implTypeSubstitution))
+                    .ToList();
+                var expectedInterfaceReturnType = SubstituteGenericParameters(interfaceMethod.ReturnType, implTypeSubstitution);
+
+                if (signature.ParameterTypes.Count != expectedInterfaceParameterTypes.Count ||
+                    !TypeEquals(signature.ReturnType, expectedInterfaceReturnType))
                 {
                     _result.Diagnostics.Report(method.Span,
                         $"method '{signature.Name}' in impl '{interfaceDefinition.Name} for {classDefinition.Name}' does not match interface signature",
@@ -429,7 +488,7 @@ public class TypeChecker
 
                 for (var i = 0; i < signature.ParameterTypes.Count; i++)
                 {
-                    if (!TypeEquals(signature.ParameterTypes[i], interfaceMethod.ParameterTypes[i]))
+                    if (!TypeEquals(signature.ParameterTypes[i], expectedInterfaceParameterTypes[i]))
                     {
                         _result.Diagnostics.Report(method.Span,
                             $"method '{signature.Name}' in impl '{interfaceDefinition.Name} for {classDefinition.Name}' does not match interface signature",
@@ -455,29 +514,34 @@ public class TypeChecker
         }
     }
 
-    private InterfaceMethodSignatureSymbol? BindInterfaceMethodSignature(InterfaceMethodSignature method, string interfaceName)
+    private InterfaceMethodSignatureSymbol? BindInterfaceMethodSignature(
+        InterfaceMethodSignature method,
+        string interfaceName,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes = null)
     {
-        var signature = BindUserMethodSignatureCore(method.Name, method.Parameters, method.ReturnTypeAnnotation, interfaceName, method.Span);
+        var signature = BindUserMethodSignatureCore(method.Name, method.TypeParameters, method.Parameters, method.ReturnTypeAnnotation, interfaceName, method.Span, namedTypes: namedTypes);
         if (signature == null)
         {
             return null;
         }
 
-        return new InterfaceMethodSignatureSymbol(signature.Name, signature.ParameterTypes, signature.ReturnType);
+        return new InterfaceMethodSignatureSymbol(signature.Name, signature.TypeParameters, signature.ParameterTypes, signature.ReturnType);
     }
 
-    private UserMethodSignature? BindUserMethodSignature(MethodDeclaration method, string className)
+    private UserMethodSignature? BindUserMethodSignature(MethodDeclaration method, string className, IReadOnlyDictionary<string, TypeSymbol>? namedTypes = null)
     {
-        return BindUserMethodSignatureCore(method.Name, method.Parameters, method.ReturnTypeAnnotation, className, method.Span, method.IsPublic);
+        return BindUserMethodSignatureCore(method.Name, method.TypeParameters, method.Parameters, method.ReturnTypeAnnotation, className, method.Span, method.IsPublic, namedTypes);
     }
 
     private UserMethodSignature? BindUserMethodSignatureCore(
         Identifier methodName,
+        IReadOnlyList<Identifier> typeParameters,
         IReadOnlyList<FunctionParameter> parameters,
         ITypeNode? returnTypeAnnotation,
         string receiverClassName,
         Span methodSpan,
-        bool isPublic = false)
+        bool isPublic = false,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes = null)
     {
         if (parameters.Count == 0 || !string.Equals(parameters[0].Name, "self", StringComparison.Ordinal))
         {
@@ -494,6 +558,17 @@ public class TypeChecker
                 "T134");
         }
 
+        var genericTypeBindings = namedTypes == null
+            ? new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal)
+            : new Dictionary<string, TypeSymbol>(namedTypes, StringComparer.Ordinal);
+
+        var methodTypeParameters = new List<string>(typeParameters.Count);
+        foreach (var typeParameter in typeParameters)
+        {
+            methodTypeParameters.Add(typeParameter.Value);
+            genericTypeBindings[typeParameter.Value] = new GenericParameterTypeSymbol(typeParameter.Value);
+        }
+
         var parameterTypes = new List<TypeSymbol>();
         for (var i = 1; i < parameters.Count; i++)
         {
@@ -507,14 +582,14 @@ public class TypeChecker
                 continue;
             }
 
-            parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
+            parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error);
         }
 
         var returnType = returnTypeAnnotation == null
             ? TypeSymbols.Void
-            : TypeAnnotationBinder.Bind(returnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+            : TypeAnnotationBinder.Bind(returnTypeAnnotation, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error;
 
-        return new UserMethodSignature(methodName.Value, parameterTypes, returnType, isPublic);
+        return new UserMethodSignature(methodName.Value, methodTypeParameters, parameterTypes, returnType, isPublic);
     }
 
     private void PredeclareFunctionDeclarations(CompilationUnit unit)
@@ -524,6 +599,12 @@ public class TypeChecker
             if (statement is not FunctionDeclaration declaration)
             {
                 continue;
+            }
+
+            var genericTypeBindings = new Dictionary<string, TypeSymbol>(_namedTypeSymbols, StringComparer.Ordinal);
+            foreach (var typeParameter in declaration.TypeParameters)
+            {
+                genericTypeBindings[typeParameter.Value] = new GenericParameterTypeSymbol(typeParameter.Value);
             }
 
             var parameterTypes = new List<TypeSymbol>(declaration.Parameters.Count);
@@ -538,12 +619,12 @@ public class TypeChecker
                     continue;
                 }
 
-                parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
+                parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error);
             }
 
             var returnType = declaration.ReturnTypeAnnotation == null
                 ? TypeSymbols.Void
-                : TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+                : TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, _result.Diagnostics, genericTypeBindings) ?? TypeSymbols.Error;
 
             var functionType = new FunctionTypeSymbol(parameterTypes, returnType);
             _result.DeclaredFunctionTypes[declaration] = functionType;
@@ -809,6 +890,9 @@ public class TypeChecker
             return;
         }
 
+        var classSubstitution = BuildTypeParameterSubstitution(classDefinition.TypeParameters, classType.TypeArguments);
+        fieldType = SubstituteGenericParameters(fieldType, classSubstitution);
+
         if (!IsAssignable(valueType, fieldType))
         {
             _result.Diagnostics.Report(statement.Value.Span,
@@ -850,11 +934,16 @@ public class TypeChecker
 
     private void CheckConstructorDeclaration(ConstructorDeclaration declaration, ClassDefinition classDefinition)
     {
-        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name));
+        var selfTypeArguments = classDefinition.TypeParameters
+            .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p))
+            .ToList();
+        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name, selfTypeArguments));
         try
         {
-            foreach (var parameter in declaration.Parameters)
+            var constructorParameterTypes = classDefinition.Constructor?.ParameterTypes ?? [];
+            for (var i = 0; i < declaration.Parameters.Count; i++)
             {
+                var parameter = declaration.Parameters[i];
                 if (parameter.TypeAnnotation == null)
                 {
                     _result.Diagnostics.Report(parameter.Span,
@@ -865,7 +954,9 @@ public class TypeChecker
 
                 if (_names.ParameterSymbols.TryGetValue(parameter, out var parameterSymbol))
                 {
-                    _symbolTypes[parameterSymbol] = TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+                    _symbolTypes[parameterSymbol] = i < constructorParameterTypes.Count
+                        ? constructorParameterTypes[i]
+                        : TypeSymbols.Error;
                 }
             }
 
@@ -885,13 +976,16 @@ public class TypeChecker
         var parameterTypes = methodSignature?.ParameterTypes ?? [];
         var returnType = methodSignature?.ReturnType ?? TypeSymbols.Error;
 
-        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name));
+        var selfTypeArguments = classDefinition.TypeParameters
+            .Select(p => (TypeSymbol)new GenericParameterTypeSymbol(p))
+            .ToList();
+        _currentSelfTypes.Push(new ClassTypeSymbol(classDefinition.Name, selfTypeArguments));
         try
         {
             if (declaration.Parameters.Count > 0 &&
                 _names.ParameterSymbols.TryGetValue(declaration.Parameters[0], out var selfParameterSymbol))
             {
-                _symbolTypes[selfParameterSymbol] = new ClassTypeSymbol(classDefinition.Name);
+                _symbolTypes[selfParameterSymbol] = new ClassTypeSymbol(classDefinition.Name, selfTypeArguments);
             }
 
             for (var i = 1; i < declaration.Parameters.Count && i - 1 < parameterTypes.Count; i++)
@@ -1361,17 +1455,37 @@ public class TypeChecker
             return fn.ReturnType;
         }
 
+        var callParameterTypes = fn.ParameterTypes;
+        var callReturnType = fn.ReturnType;
+        if (fn.ParameterTypes.Any(ContainsGenericParameters) || ContainsGenericParameters(fn.ReturnType))
+        {
+            var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+            for (var i = 0; i < argumentTypes.Count; i++)
+            {
+                if (!TryInferGenericType(fn.ParameterTypes[i], argumentTypes[i], inference))
+                {
+                    _result.Diagnostics.Report(expression.Span,
+                        "cannot infer generic function type arguments from call arguments",
+                        "T130");
+                    return TypeSymbols.Error;
+                }
+            }
+
+            callParameterTypes = fn.ParameterTypes.Select(p => SubstituteGenericParameters(p, inference)).ToList();
+            callReturnType = SubstituteGenericParameters(fn.ReturnType, inference);
+        }
+
         for (var i = 0; i < argumentTypes.Count; i++)
         {
-            if (!IsAssignable(argumentTypes[i], fn.ParameterTypes[i]))
+            if (!IsAssignable(argumentTypes[i], callParameterTypes[i]))
             {
                 _result.Diagnostics.Report(expression.Arguments[i].Span,
-                    $"argument {i + 1} type mismatch: expected '{fn.ParameterTypes[i]}', got '{argumentTypes[i]}'",
+                    $"argument {i + 1} type mismatch: expected '{callParameterTypes[i]}', got '{argumentTypes[i]}'",
                     "T113");
             }
         }
 
-        return fn.ReturnType;
+        return callReturnType;
     }
 
     private TypeSymbol CheckEnumVariantConstructorCall(
@@ -1521,6 +1635,19 @@ public class TypeChecker
         return substitution;
     }
 
+    private static Dictionary<string, TypeSymbol> BuildTypeParameterSubstitution(
+        IReadOnlyList<string> typeParameters,
+        IReadOnlyList<TypeSymbol> typeArguments)
+    {
+        var substitution = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        for (var i = 0; i < typeParameters.Count && i < typeArguments.Count; i++)
+        {
+            substitution[typeParameters[i]] = typeArguments[i];
+        }
+
+        return substitution;
+    }
+
     private static TypeSymbol SubstituteGenericParameters(TypeSymbol type, IReadOnlyDictionary<string, TypeSymbol> substitution)
     {
         if (type is GenericParameterTypeSymbol genericParameter)
@@ -1546,6 +1673,18 @@ public class TypeChecker
         {
             var args = enumType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
             return new EnumTypeSymbol(enumType.EnumName, args);
+        }
+
+        if (type is ClassTypeSymbol classType)
+        {
+            var args = classType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new ClassTypeSymbol(classType.ClassName, args);
+        }
+
+        if (type is InterfaceTypeSymbol interfaceType)
+        {
+            var args = interfaceType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new InterfaceTypeSymbol(interfaceType.InterfaceName, args);
         }
 
         return type;
@@ -1612,14 +1751,146 @@ public class TypeChecker
         return TypeEquals(template, actual);
     }
 
+    private static bool TryInstantiateGenericMethodSignature(
+        IReadOnlyList<string> methodTypeParameters,
+        IReadOnlyList<TypeSymbol> methodParameterTypes,
+        TypeSymbol methodReturnType,
+        IReadOnlyList<TypeSymbol> argumentTypes,
+        out IReadOnlyList<TypeSymbol> instantiatedParameterTypes,
+        out TypeSymbol instantiatedReturnType)
+    {
+        instantiatedParameterTypes = methodParameterTypes;
+        instantiatedReturnType = methodReturnType;
+
+        if (methodTypeParameters.Count == 0)
+        {
+            return true;
+        }
+
+        if (methodParameterTypes.Count != argumentTypes.Count)
+        {
+            return false;
+        }
+
+        var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        for (var i = 0; i < methodParameterTypes.Count; i++)
+        {
+            if (!TryInferGenericType(methodParameterTypes[i], argumentTypes[i], inference))
+            {
+                return false;
+            }
+        }
+
+        foreach (var typeParameter in methodTypeParameters)
+        {
+            if (!inference.ContainsKey(typeParameter))
+            {
+                return false;
+            }
+        }
+
+        instantiatedParameterTypes = methodParameterTypes
+            .Select(p => SubstituteGenericParameters(p, inference))
+            .ToList();
+        instantiatedReturnType = SubstituteGenericParameters(methodReturnType, inference);
+        return true;
+    }
+
+    private static bool ContainsGenericParameters(TypeSymbol type)
+    {
+        if (type is GenericParameterTypeSymbol)
+        {
+            return true;
+        }
+
+        if (type is ArrayTypeSymbol arrayType)
+        {
+            return ContainsGenericParameters(arrayType.ElementType);
+        }
+
+        if (type is FunctionTypeSymbol functionType)
+        {
+            return functionType.ParameterTypes.Any(ContainsGenericParameters) ||
+                   ContainsGenericParameters(functionType.ReturnType);
+        }
+
+        if (type is EnumTypeSymbol enumType)
+        {
+            return enumType.TypeArguments.Any(ContainsGenericParameters);
+        }
+
+        if (type is ClassTypeSymbol classType)
+        {
+            return classType.TypeArguments.Any(ContainsGenericParameters);
+        }
+
+        if (type is InterfaceTypeSymbol interfaceType)
+        {
+            return interfaceType.TypeArguments.Any(ContainsGenericParameters);
+        }
+
+        return false;
+    }
+
     private TypeSymbol CheckNewExpression(NewExpression expression)
     {
         if (_namedTypeSymbols.TryGetValue(expression.TypePath, out var userType) && userType is ClassTypeSymbol classType)
         {
+            if (expression.TypeArguments.Count > 0)
+            {
+                var genericTypeNode = new GenericType
+                {
+                    Token = expression.Token,
+                    Name = expression.TypePath,
+                    TypeArguments = expression.TypeArguments,
+                    Span = expression.Span,
+                };
+
+                var boundClassType = TypeAnnotationBinder.Bind(genericTypeNode, _result.Diagnostics, _namedTypeSymbols);
+                if (boundClassType is ClassTypeSymbol boundConcreteClass)
+                {
+                    classType = boundConcreteClass;
+                }
+            }
+
             var argumentTypes = expression.Arguments.Select(CheckExpression).ToList();
             if (_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition))
             {
-                var expectedParameters = classDefinition.Constructor?.ParameterTypes ?? [];
+                if (classType.TypeArguments.Count > 0 && classType.TypeArguments.All(t => t is GenericParameterTypeSymbol))
+                {
+                    var constructorTemplateParameters = classDefinition.Constructor?.ParameterTypes ?? [];
+                    if (constructorTemplateParameters.Count == argumentTypes.Count)
+                    {
+                        var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+                        for (var i = 0; i < constructorTemplateParameters.Count; i++)
+                        {
+                            _ = TryInferGenericType(constructorTemplateParameters[i], argumentTypes[i], inference);
+                        }
+
+                        var inferredClassArguments = new List<TypeSymbol>(classDefinition.TypeParameters.Count);
+                        var allInferred = true;
+                        foreach (var typeParameter in classDefinition.TypeParameters)
+                        {
+                            if (!inference.TryGetValue(typeParameter, out var inferred))
+                            {
+                                allInferred = false;
+                                break;
+                            }
+
+                            inferredClassArguments.Add(inferred);
+                        }
+
+                        if (allInferred)
+                        {
+                            classType = new ClassTypeSymbol(classType.ClassName, inferredClassArguments);
+                        }
+                    }
+                }
+
+                var classSubstitution = BuildTypeParameterSubstitution(classDefinition.TypeParameters, classType.TypeArguments);
+                var expectedParameters = classDefinition.Constructor?.ParameterTypes
+                    .Select(p => SubstituteGenericParameters(p, classSubstitution))
+                    .ToList() ?? [];
                 if (argumentTypes.Count != expectedParameters.Count)
                 {
                     _result.Diagnostics.Report(expression.Span,
@@ -1768,7 +2039,8 @@ public class TypeChecker
             return true;
         }
 
-        valueType = fieldType;
+        var classSubstitution = BuildTypeParameterSubstitution(classDefinition.TypeParameters, classType.TypeArguments);
+        valueType = SubstituteGenericParameters(fieldType, classSubstitution);
 
         return true;
     }
@@ -1793,26 +2065,39 @@ public class TypeChecker
                 if (_interfaceDefinitions.TryGetValue(interfaceType.InterfaceName, out var interfaceDefinition) &&
                     interfaceDefinition.Methods.TryGetValue(memberAccessExpression.Member, out var interfaceMethod))
                 {
-                    if (argumentTypes.Count != interfaceMethod.ParameterTypes.Count)
+                    var interfaceSubstitution = BuildTypeParameterSubstitution(interfaceDefinition.TypeParameters, interfaceType.TypeArguments);
+                    var interfaceMethodParameterTypes = interfaceMethod.ParameterTypes
+                        .Select(p => SubstituteGenericParameters(p, interfaceSubstitution))
+                        .ToList();
+                    var interfaceMethodReturnType = SubstituteGenericParameters(interfaceMethod.ReturnType, interfaceSubstitution);
+                    if (!TryInstantiateGenericMethodSignature(interfaceMethod.TypeParameters, interfaceMethodParameterTypes, interfaceMethodReturnType, argumentTypes, out var expectedParameterTypes, out var concreteReturnType))
                     {
                         _result.Diagnostics.Report(memberAccessExpression.Span,
-                            $"wrong number of arguments for method '{interfaceMethod.Name}': expected {interfaceMethod.ParameterTypes.Count}, got {argumentTypes.Count}",
+                            $"cannot infer generic type arguments for method '{interfaceMethod.Name}'",
+                            "T130");
+                        return true;
+                    }
+
+                    if (argumentTypes.Count != expectedParameterTypes.Count)
+                    {
+                        _result.Diagnostics.Report(memberAccessExpression.Span,
+                            $"wrong number of arguments for method '{interfaceMethod.Name}': expected {expectedParameterTypes.Count}, got {argumentTypes.Count}",
                             "T112");
-                        returnType = interfaceMethod.ReturnType;
+                        returnType = concreteReturnType;
                         return true;
                     }
 
                     for (var i = 0; i < argumentTypes.Count; i++)
                     {
-                        if (!IsAssignable(argumentTypes[i], interfaceMethod.ParameterTypes[i]))
+                        if (!IsAssignable(argumentTypes[i], expectedParameterTypes[i]))
                         {
                             _result.Diagnostics.Report(memberAccessExpression.Span,
-                                $"argument {i + 1} type mismatch for method '{interfaceMethod.Name}': expected '{interfaceMethod.ParameterTypes[i]}', got '{argumentTypes[i]}'",
+                                $"argument {i + 1} type mismatch for method '{interfaceMethod.Name}': expected '{expectedParameterTypes[i]}', got '{argumentTypes[i]}'",
                                 "T113");
                         }
                     }
 
-                    returnType = interfaceMethod.ReturnType;
+                    returnType = concreteReturnType;
                     return true;
                 }
             }
@@ -1836,26 +2121,39 @@ public class TypeChecker
             return true;
         }
 
-        if (argumentTypes.Count != methodSignature.ParameterTypes.Count)
+        var classSubstitution = BuildTypeParameterSubstitution(classDefinition.TypeParameters, classType.TypeArguments);
+        var classMethodParameterTypes = methodSignature.ParameterTypes
+            .Select(p => SubstituteGenericParameters(p, classSubstitution))
+            .ToList();
+        var classMethodReturnType = SubstituteGenericParameters(methodSignature.ReturnType, classSubstitution);
+        if (!TryInstantiateGenericMethodSignature(methodSignature.TypeParameters, classMethodParameterTypes, classMethodReturnType, argumentTypes, out var expectedClassParameterTypes, out var concreteClassReturnType))
         {
             _result.Diagnostics.Report(memberAccessExpression.Span,
-                $"wrong number of arguments for method '{methodSignature.Name}': expected {methodSignature.ParameterTypes.Count}, got {argumentTypes.Count}",
+                $"cannot infer generic type arguments for method '{methodSignature.Name}'",
+                "T130");
+            return true;
+        }
+
+        if (argumentTypes.Count != expectedClassParameterTypes.Count)
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                $"wrong number of arguments for method '{methodSignature.Name}': expected {expectedClassParameterTypes.Count}, got {argumentTypes.Count}",
                 "T112");
-            returnType = methodSignature.ReturnType;
+            returnType = concreteClassReturnType;
             return true;
         }
 
         for (var i = 0; i < argumentTypes.Count; i++)
         {
-            if (!IsAssignable(argumentTypes[i], methodSignature.ParameterTypes[i]))
+            if (!IsAssignable(argumentTypes[i], expectedClassParameterTypes[i]))
             {
                 _result.Diagnostics.Report(memberAccessExpression.Span,
-                    $"argument {i + 1} type mismatch for method '{methodSignature.Name}': expected '{methodSignature.ParameterTypes[i]}', got '{argumentTypes[i]}'",
+                    $"argument {i + 1} type mismatch for method '{methodSignature.Name}': expected '{expectedClassParameterTypes[i]}', got '{argumentTypes[i]}'",
                     "T113");
             }
         }
 
-        returnType = methodSignature.ReturnType;
+        returnType = concreteClassReturnType;
         return true;
     }
 
@@ -2286,8 +2584,33 @@ public class TypeChecker
 
         if (source is ClassTypeSymbol classType && target is InterfaceTypeSymbol interfaceType)
         {
-            return _classDefinitions.TryGetValue(classType.ClassName, out var classDefinition) &&
-                   classDefinition.ImplementedInterfaces.Contains(interfaceType.InterfaceName);
+            if (!_classDefinitions.TryGetValue(classType.ClassName, out var classDefinition) ||
+                !classDefinition.ImplementedInterfaces.Contains(interfaceType.InterfaceName))
+            {
+                return false;
+            }
+
+            if (interfaceType.TypeArguments.Count == 0)
+            {
+                return true;
+            }
+
+            if (_interfaceDefinitions.TryGetValue(interfaceType.InterfaceName, out var interfaceDefinition) &&
+                interfaceDefinition.TypeParameters.Count == classType.TypeArguments.Count &&
+                interfaceType.TypeArguments.Count == classType.TypeArguments.Count)
+            {
+                for (var i = 0; i < interfaceType.TypeArguments.Count; i++)
+                {
+                    if (!TypeEquals(interfaceType.TypeArguments[i], classType.TypeArguments[i]))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         return TypeEquals(source, target);
@@ -2349,6 +2672,44 @@ public class TypeChecker
             for (var i = 0; i < leftEnum.TypeArguments.Count; i++)
             {
                 if (!TypeEquals(leftEnum.TypeArguments[i], rightEnum.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClassTypeSymbol leftClass && right is ClassTypeSymbol rightClass)
+        {
+            if (!string.Equals(leftClass.ClassName, rightClass.ClassName, StringComparison.Ordinal) ||
+                leftClass.TypeArguments.Count != rightClass.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClass.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClass.TypeArguments[i], rightClass.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is InterfaceTypeSymbol leftInterface && right is InterfaceTypeSymbol rightInterface)
+        {
+            if (!string.Equals(leftInterface.InterfaceName, rightInterface.InterfaceName, StringComparison.Ordinal) ||
+                leftInterface.TypeArguments.Count != rightInterface.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
                 {
                     return false;
                 }

@@ -895,20 +895,44 @@ public class ClrArtifactBuilder
                         break;
 
                     case IrCall call:
-                        foreach (var argument in call.Arguments)
+                    {
+                        if (methodMap.TryGetValue(call.FunctionName, out var targetMethod) &&
+                            functionMap.TryGetValue(call.FunctionName, out var calledFunction) &&
+                            function.ValueTypes.TryGetValue(call.Destination, out var callDestinationType))
                         {
-                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
-                        }
+                            if (calledFunction.Parameters.Count != call.Arguments.Count)
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend argument count mismatch for function '{call.FunctionName}'",
+                                    "IL001");
+                                return false;
+                            }
 
-                        if (methodMap.TryGetValue(call.FunctionName, out var targetMethod))
-                        {
+                            for (var i = 0; i < call.Arguments.Count; i++)
+                            {
+                                if (!function.ValueTypes.TryGetValue(call.Arguments[i], out var sourceType))
+                                {
+                                    diagnostics.Report(Span.Empty,
+                                        "phase-5 CLR backend missing source type for function call argument",
+                                        "IL001");
+                                    return false;
+                                }
+
+                                EmitArgumentWithConversion(il, valueLocals[call.Arguments[i]], sourceType, calledFunction.Parameters[i].Type, module, diagnostics, typeMapper);
+                            }
+
                             il.Emit(OpCodes.Call, targetMethod);
+                            if (!EmitClassFieldLoadConversion(calledFunction.ReturnType, callDestinationType, il, module, diagnostics, typeMapper))
+                            {
+                                return false;
+                            }
                             il.Emit(OpCodes.Stloc, valueLocals[call.Destination]);
                             break;
                         }
 
                         diagnostics.Report(Span.Empty, $"phase-5 CLR backend could not resolve function '{call.FunctionName}'", "IL001");
                         return false;
+                    }
 
                     case IrStaticCall staticCall:
                     {
@@ -949,13 +973,30 @@ public class ClrArtifactBuilder
                     }
 
                     case IrCallVoid callVoid:
-                        foreach (var argument in callVoid.Arguments)
+                        if (methodMap.TryGetValue(callVoid.FunctionName, out var targetVoidMethod) &&
+                            functionMap.TryGetValue(callVoid.FunctionName, out var calledVoidFunction))
                         {
-                            il.Emit(OpCodes.Ldloc, valueLocals[argument]);
-                        }
+                            if (calledVoidFunction.Parameters.Count != callVoid.Arguments.Count)
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend argument count mismatch for function '{callVoid.FunctionName}'",
+                                    "IL001");
+                                return false;
+                            }
 
-                        if (methodMap.TryGetValue(callVoid.FunctionName, out var targetVoidMethod))
-                        {
+                            for (var i = 0; i < callVoid.Arguments.Count; i++)
+                            {
+                                if (!function.ValueTypes.TryGetValue(callVoid.Arguments[i], out var sourceType))
+                                {
+                                    diagnostics.Report(Span.Empty,
+                                        "phase-5 CLR backend missing source type for function call argument",
+                                        "IL001");
+                                    return false;
+                                }
+
+                                EmitArgumentWithConversion(il, valueLocals[callVoid.Arguments[i]], sourceType, calledVoidFunction.Parameters[i].Type, module, diagnostics, typeMapper);
+                            }
+
                             il.Emit(OpCodes.Call, targetVoidMethod);
                             break;
                         }
@@ -1069,6 +1110,27 @@ public class ClrArtifactBuilder
 
                     case IrInterfaceCall interfaceCall:
                     {
+                        if (!function.ValueTypes.TryGetValue(interfaceCall.Destination, out var interfaceDestinationType))
+                        {
+                            diagnostics.Report(Span.Empty,
+                                "phase-5 CLR backend missing destination type for interface call",
+                                "IL001");
+                            return false;
+                        }
+
+                        if (!interfaceRuntimeMap.TryGetValue(interfaceCall.ReceiverType.InterfaceName, out var interfaceRuntime) ||
+                            !interfaceRuntime.Definition.Methods.TryGetValue(interfaceCall.MemberName, out var interfaceMethodDefinition))
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend missing interface method metadata '{interfaceCall.ReceiverType.InterfaceName}.{interfaceCall.MemberName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        var interfaceSubstitution = BuildTypeParameterSubstitution(interfaceRuntime.Definition.TypeParameters, interfaceCall.ReceiverType.TypeArguments);
+                        _ = interfaceSubstitution;
+                        var interfaceReturnType = interfaceMethodDefinition.ReturnType;
+
                         if (!EmitInterfaceCall(
                                 interfaceCall.Receiver,
                                 interfaceCall.ReceiverType,
@@ -1078,6 +1140,11 @@ public class ClrArtifactBuilder
                                 interfaceRuntimeMap,
                                 il,
                                 diagnostics))
+                        {
+                            return false;
+                        }
+
+                        if (!EmitClassFieldLoadConversion(interfaceReturnType, interfaceDestinationType, il, module, diagnostics, typeMapper))
                         {
                             return false;
                         }
@@ -1137,7 +1204,8 @@ public class ClrArtifactBuilder
                         if (instanceValueGet.ReceiverType is ClassTypeSymbol classReceiverType)
                         {
                             if (!classRuntimeMap.TryGetValue(classReceiverType.ClassName, out var classRuntime) ||
-                                !classRuntime.Fields.TryGetValue(instanceValueGet.MemberName, out var classField))
+                                !classRuntime.Fields.TryGetValue(instanceValueGet.MemberName, out var classField) ||
+                                !classRuntime.Definition.Fields.TryGetValue(instanceValueGet.MemberName, out var classFieldType))
                             {
                                 diagnostics.Report(Span.Empty,
                                     $"phase-5 CLR backend could not resolve class field '{classReceiverType.ClassName}.{instanceValueGet.MemberName}'",
@@ -1145,8 +1213,20 @@ public class ClrArtifactBuilder
                                 return false;
                             }
 
+                            if (!function.ValueTypes.TryGetValue(instanceValueGet.Destination, out var destinationType))
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    "phase-5 CLR backend missing destination type for class field load",
+                                    "IL001");
+                                return false;
+                            }
+
                             il.Emit(OpCodes.Ldloc, valueLocals[instanceValueGet.Receiver]);
                             il.Emit(OpCodes.Ldfld, classField);
+                            if (!EmitClassFieldLoadConversion(classFieldType, destinationType, il, module, diagnostics, typeMapper))
+                            {
+                                return false;
+                            }
                             il.Emit(OpCodes.Stloc, valueLocals[instanceValueGet.Destination]);
                             break;
                         }
@@ -1188,7 +1268,8 @@ public class ClrArtifactBuilder
                         if (instanceValueSet.ReceiverType is ClassTypeSymbol classReceiverType)
                         {
                             if (!classRuntimeMap.TryGetValue(classReceiverType.ClassName, out var classRuntime) ||
-                                !classRuntime.Fields.TryGetValue(instanceValueSet.MemberName, out var classField))
+                                !classRuntime.Fields.TryGetValue(instanceValueSet.MemberName, out var classField) ||
+                                !classRuntime.Definition.Fields.TryGetValue(instanceValueSet.MemberName, out var classFieldType))
                             {
                                 diagnostics.Report(Span.Empty,
                                     $"phase-5 CLR backend could not resolve class field '{classReceiverType.ClassName}.{instanceValueSet.MemberName}'",
@@ -1196,8 +1277,20 @@ public class ClrArtifactBuilder
                                 return false;
                             }
 
+                            if (!function.ValueTypes.TryGetValue(instanceValueSet.Value, out var sourceValueType))
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    "phase-5 CLR backend missing source type for class field store",
+                                    "IL001");
+                                return false;
+                            }
+
                             il.Emit(OpCodes.Ldloc, valueLocals[instanceValueSet.Receiver]);
                             il.Emit(OpCodes.Ldloc, valueLocals[instanceValueSet.Value]);
+                            if (!EmitClassFieldStoreConversion(sourceValueType, classFieldType, il, module, diagnostics, typeMapper))
+                            {
+                                return false;
+                            }
                             il.Emit(OpCodes.Stfld, classField);
                             break;
                         }
@@ -1697,6 +1790,11 @@ public class ClrArtifactBuilder
             }
 
             return module.ImportReference(typeDefinition);
+        }
+
+        if (type is GenericParameterTypeSymbol)
+        {
+            return module.TypeSystem.Object;
         }
 
         if (type is EnumTypeSymbol enumType && enumTypeMap != null && enumTypeMap.TryGetValue(enumType.EnumName, out var enumTypeDefinition))
@@ -2241,6 +2339,70 @@ public class ClrArtifactBuilder
         return true;
     }
 
+    private static bool EmitClassFieldLoadConversion(
+        TypeSymbol sourceType,
+        TypeSymbol targetType,
+        ILProcessor il,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        if (TypeEquals(sourceType, targetType))
+        {
+            return true;
+        }
+
+        if (sourceType is GenericParameterTypeSymbol)
+        {
+            var targetClrType = MapType(targetType, module, diagnostics, typeMapper);
+            if (targetClrType == null)
+            {
+                return false;
+            }
+
+            if (targetClrType.IsValueType)
+            {
+                il.Emit(OpCodes.Unbox_Any, targetClrType);
+            }
+            else
+            {
+                il.Emit(OpCodes.Castclass, targetClrType);
+            }
+        }
+
+        return true;
+    }
+
+    private static bool EmitClassFieldStoreConversion(
+        TypeSymbol sourceType,
+        TypeSymbol targetType,
+        ILProcessor il,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        if (TypeEquals(sourceType, targetType))
+        {
+            return true;
+        }
+
+        if (targetType is GenericParameterTypeSymbol)
+        {
+            var sourceClrType = MapType(sourceType, module, diagnostics, typeMapper);
+            if (sourceClrType == null)
+            {
+                return false;
+            }
+
+            if (sourceClrType.IsValueType)
+            {
+                il.Emit(OpCodes.Box, sourceClrType);
+            }
+        }
+
+        return true;
+    }
+
     private static void EmitArgumentWithConversion(ILProcessor il, VariableDefinition local, TypeSymbol sourceType, TypeSymbol targetType)
     {
         il.Emit(OpCodes.Ldloc, local);
@@ -2286,6 +2448,32 @@ public class ClrArtifactBuilder
         if (targetType == TypeSymbols.Char)
         {
             il.Emit(OpCodes.Conv_U2);
+        }
+    }
+
+    private static void EmitArgumentWithConversion(
+        ILProcessor il,
+        VariableDefinition local,
+        TypeSymbol sourceType,
+        TypeSymbol targetType,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        EmitArgumentWithConversion(il, local, sourceType, targetType);
+
+        if (TypeEquals(sourceType, targetType))
+        {
+            return;
+        }
+
+        if (targetType is GenericParameterTypeSymbol)
+        {
+            var sourceClrType = MapType(sourceType, module, diagnostics, typeMapper);
+            if (sourceClrType != null && sourceClrType.IsValueType)
+            {
+                il.Emit(OpCodes.Box, sourceClrType);
+            }
         }
     }
 
@@ -2508,6 +2696,61 @@ public class ClrArtifactBuilder
         return result;
     }
 
+    private static Dictionary<string, TypeSymbol> BuildTypeParameterSubstitution(
+        IReadOnlyList<string> typeParameters,
+        IReadOnlyList<TypeSymbol> typeArguments)
+    {
+        var substitution = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        for (var i = 0; i < typeParameters.Count && i < typeArguments.Count; i++)
+        {
+            substitution[typeParameters[i]] = typeArguments[i];
+        }
+
+        return substitution;
+    }
+
+    private static TypeSymbol SubstituteGenericParameters(TypeSymbol type, IReadOnlyDictionary<string, TypeSymbol> substitution)
+    {
+        if (type is GenericParameterTypeSymbol genericParameter)
+        {
+            return substitution.TryGetValue(genericParameter.ParameterName, out var concrete)
+                ? concrete
+                : type;
+        }
+
+        if (type is ArrayTypeSymbol arrayType)
+        {
+            return new ArrayTypeSymbol(SubstituteGenericParameters(arrayType.ElementType, substitution));
+        }
+
+        if (type is FunctionTypeSymbol functionType)
+        {
+            var parameterTypes = functionType.ParameterTypes.Select(p => SubstituteGenericParameters(p, substitution)).ToList();
+            var returnType = SubstituteGenericParameters(functionType.ReturnType, substitution);
+            return new FunctionTypeSymbol(parameterTypes, returnType);
+        }
+
+        if (type is EnumTypeSymbol enumType)
+        {
+            var args = enumType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new EnumTypeSymbol(enumType.EnumName, args);
+        }
+
+        if (type is ClassTypeSymbol classType)
+        {
+            var args = classType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new ClassTypeSymbol(classType.ClassName, args);
+        }
+
+        if (type is InterfaceTypeSymbol interfaceType)
+        {
+            var args = interfaceType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new InterfaceTypeSymbol(interfaceType.InterfaceName, args);
+        }
+
+        return type;
+    }
+
     private static bool TypeEquals(TypeSymbol left, TypeSymbol right)
     {
         if (ReferenceEquals(left, right))
@@ -2518,6 +2761,82 @@ public class ClrArtifactBuilder
         if (left is ArrayTypeSymbol leftArray && right is ArrayTypeSymbol rightArray)
         {
             return TypeEquals(leftArray.ElementType, rightArray.ElementType);
+        }
+
+        if (left is FunctionTypeSymbol leftFunction && right is FunctionTypeSymbol rightFunction)
+        {
+            if (!TypeEquals(leftFunction.ReturnType, rightFunction.ReturnType) ||
+                leftFunction.ParameterTypes.Count != rightFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
+            {
+                if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is EnumTypeSymbol leftEnum && right is EnumTypeSymbol rightEnum)
+        {
+            if (!string.Equals(leftEnum.EnumName, rightEnum.EnumName, StringComparison.Ordinal) ||
+                leftEnum.TypeArguments.Count != rightEnum.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftEnum.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftEnum.TypeArguments[i], rightEnum.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClassTypeSymbol leftClass && right is ClassTypeSymbol rightClass)
+        {
+            if (!string.Equals(leftClass.ClassName, rightClass.ClassName, StringComparison.Ordinal) ||
+                leftClass.TypeArguments.Count != rightClass.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClass.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClass.TypeArguments[i], rightClass.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is InterfaceTypeSymbol leftInterface && right is InterfaceTypeSymbol rightInterface)
+        {
+            if (!string.Equals(leftInterface.InterfaceName, rightInterface.InterfaceName, StringComparison.Ordinal) ||
+                leftInterface.TypeArguments.Count != rightInterface.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         return left == right;

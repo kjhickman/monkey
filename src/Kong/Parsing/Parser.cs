@@ -2043,6 +2043,16 @@ public class Parser
 
         expression.TypePath = string.Join('.', segments);
 
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            NextToken();
+            expression.TypeArguments = ParseTypeArgumentList();
+            if (expression.TypeArguments.Count == 0)
+            {
+                return null!;
+            }
+        }
+
         if (!ExpectPeek(TokenType.LeftParenthesis))
         {
             return null!;

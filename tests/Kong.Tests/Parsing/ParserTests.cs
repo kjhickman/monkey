@@ -1356,6 +1356,24 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesGenericNewExpressionTypeArguments()
+    {
+        var input = "fn Main() { let b = new Box<int>(1); }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var main = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        var letStatement = Assert.IsType<LetStatement>(main.Body.Statements[0]);
+        var newExpression = Assert.IsType<NewExpression>(letStatement.Value);
+        Assert.Equal("Box", newExpression.TypePath);
+        Assert.Single(newExpression.TypeArguments);
+        var argumentType = Assert.IsType<NamedType>(newExpression.TypeArguments[0]);
+        Assert.Equal("int", argumentType.Name);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

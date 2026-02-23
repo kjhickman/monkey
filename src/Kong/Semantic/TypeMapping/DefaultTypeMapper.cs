@@ -146,6 +146,11 @@ public class DefaultTypeMapper : ITypeMapper
             return module.ImportReference(typeDefinition);
         }
 
+        if (kongType is GenericParameterTypeSymbol)
+        {
+            return module.TypeSystem.Object;
+        }
+
         if (kongType is EnumTypeSymbol enumType)
         {
             if (_enumTypeMap.TryGetValue(enumType.EnumName, out var enumDefinition))
@@ -221,6 +226,11 @@ public class DefaultTypeMapper : ITypeMapper
         }
 
         if (type is ClrNominalTypeSymbol)
+        {
+            return true;
+        }
+
+        if (type is GenericParameterTypeSymbol)
         {
             return true;
         }

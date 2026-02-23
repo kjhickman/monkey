@@ -831,6 +831,7 @@ public class NewExpression : IExpression
     public Span Span { get; set; }
     public Token Token { get; set; } // the 'new' token
     public string TypePath { get; set; } = "";
+    public List<ITypeNode> TypeArguments { get; set; } = [];
     public List<IExpression> Arguments { get; set; } = [];
 
     public string TokenLiteral() => Token.Literal;
@@ -838,6 +839,9 @@ public class NewExpression : IExpression
     public string String()
     {
         var args = Arguments.Select(a => a.String());
-        return $"new {TypePath}({string.Join(", ", args)})";
+        var typeArguments = TypeArguments.Count == 0
+            ? string.Empty
+            : $"<{string.Join(", ", TypeArguments.Select(t => t.String()))}>";
+        return $"new {TypePath}{typeArguments}({string.Join(", ", args)})";
     }
 }

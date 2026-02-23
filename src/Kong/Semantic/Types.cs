@@ -241,24 +241,40 @@ public sealed record GenericParameterTypeSymbol(string ParameterName) : TypeSymb
     public override string Name => ParameterName;
 }
 
-public sealed record ClassTypeSymbol(string ClassName) : TypeSymbol
+public sealed record ClassTypeSymbol(string ClassName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol
 {
-    public override string Name => ClassName;
+    public ClassTypeSymbol(string className)
+        : this(className, [])
+    {
+    }
+
+    public override string Name => TypeArguments.Count == 0
+        ? ClassName
+        : $"{ClassName}<{string.Join(", ", TypeArguments)}>";
 }
 
-public sealed record InterfaceTypeSymbol(string InterfaceName) : TypeSymbol
+public sealed record InterfaceTypeSymbol(string InterfaceName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol
 {
-    public override string Name => InterfaceName;
+    public InterfaceTypeSymbol(string interfaceName)
+        : this(interfaceName, [])
+    {
+    }
+
+    public override string Name => TypeArguments.Count == 0
+        ? InterfaceName
+        : $"{InterfaceName}<{string.Join(", ", TypeArguments)}>";
 }
 
 public sealed record UserMethodSignature(
     string Name,
+    IReadOnlyList<string> TypeParameters,
     IReadOnlyList<TypeSymbol> ParameterTypes,
     TypeSymbol ReturnType,
     bool IsPublic);
 
 public sealed record InterfaceMethodSignatureSymbol(
     string Name,
+    IReadOnlyList<string> TypeParameters,
     IReadOnlyList<TypeSymbol> ParameterTypes,
     TypeSymbol ReturnType);
 

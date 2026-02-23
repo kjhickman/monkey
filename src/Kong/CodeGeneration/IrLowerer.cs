@@ -2386,6 +2386,7 @@ public class IrLowerer
                type == TypeSymbols.Decimal ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
+               type is GenericParameterTypeSymbol ||
                type is ClassTypeSymbol ||
                type is InterfaceTypeSymbol ||
                type is EnumTypeSymbol ||
@@ -2454,6 +2455,44 @@ public class IrLowerer
             for (var i = 0; i < leftEnum.TypeArguments.Count; i++)
             {
                 if (!TypeEquals(leftEnum.TypeArguments[i], rightEnum.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClassTypeSymbol leftClass && right is ClassTypeSymbol rightClass)
+        {
+            if (!string.Equals(leftClass.ClassName, rightClass.ClassName, StringComparison.Ordinal) ||
+                leftClass.TypeArguments.Count != rightClass.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClass.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClass.TypeArguments[i], rightClass.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is InterfaceTypeSymbol leftInterface && right is InterfaceTypeSymbol rightInterface)
+        {
+            if (!string.Equals(leftInterface.InterfaceName, rightInterface.InterfaceName, StringComparison.Ordinal) ||
+                leftInterface.TypeArguments.Count != rightInterface.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
                 {
                     return false;
                 }
