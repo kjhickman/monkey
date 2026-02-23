@@ -426,6 +426,67 @@ public class LexerTests
     }
 
     [Fact]
+    public void TestLexesEnumKeyword()
+    {
+        var input = "enum Result { Ok, Err }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Enum, "enum"),
+            (TokenType.Identifier, "Result"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Identifier, "Ok"),
+            (TokenType.Comma, ","),
+            (TokenType.Identifier, "Err"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
+    public void TestLexesMatchKeyword()
+    {
+        var input = "match (x) { Ok(v) => { v; } }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Match, "match"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.Identifier, "x"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Identifier, "Ok"),
+            (TokenType.LeftParenthesis, "("),
+            (TokenType.Identifier, "v"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.Assign, "="),
+            (TokenType.GreaterThan, ">"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Identifier, "v"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
     public void TestLexesDoubleCharAndByteLiterals()
     {
         var input = "1.25; 'a'; 42b;";

@@ -1,0 +1,32 @@
+import Demo.Results;
+import System;
+
+namespace Demo.App;
+
+fn Main() {
+    let a: Result = Ok(42);
+    let b: Result = Err("boom");
+    let s: Status = Done();
+    let ax: int = Unwrap(a);
+    let bx: int = Unwrap(b);
+    let sx: int = ScoreStatus(s);
+    if (ax == 42 && bx == -1 && sx == 1) {
+        Console.WriteLine("enum-ok");
+    } else {
+        Console.WriteLine("enum-bad");
+    }
+}
+
+fn Unwrap(value: Result) -> int {
+    match (value) {
+        Ok(n) => { n; },
+        Err(msg) => { -1; },
+    };
+}
+
+fn ScoreStatus(value: Status) -> int {
+    match (value) {
+        Todo() => { 0; },
+        Done() => { 1; },
+    };
+}

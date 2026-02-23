@@ -121,6 +121,25 @@ public class ControlFlowAnalyzer
             return new FlowState(AlwaysReturns: consequence.AlwaysReturns && alternative.AlwaysReturns);
         }
 
+        if (expression is MatchExpression matchExpression)
+        {
+            if (matchExpression.Arms.Count == 0)
+            {
+                return new FlowState(AlwaysReturns: false);
+            }
+
+            foreach (var arm in matchExpression.Arms)
+            {
+                var armFlow = AnalyzeBlock(arm.Body, diagnostics);
+                if (!armFlow.AlwaysReturns)
+                {
+                    return new FlowState(AlwaysReturns: false);
+                }
+            }
+
+            return new FlowState(AlwaysReturns: true);
+        }
+
         return new FlowState(AlwaysReturns: false);
     }
 

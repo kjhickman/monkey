@@ -250,11 +250,11 @@ public static class Compilation
                     seenNamespace = true;
                     break;
                 default:
-                    if (!isRootFile && statement is not FunctionDeclaration)
+                    if (!isRootFile && statement is not FunctionDeclaration && statement is not EnumDeclaration)
                     {
                         diagnostics.Report(
                             statement.Span,
-                            $"non-root modules may only declare top-level functions in '{filePath}'",
+                            $"non-root modules may only declare top-level functions and enums in '{filePath}'",
                             "CLI017");
                     }
 
@@ -296,6 +296,8 @@ public static class Compilation
         {
             case FunctionDeclaration functionDeclaration:
                 ValidateBlock(functionDeclaration.Body, filePath, diagnostics);
+                break;
+            case EnumDeclaration:
                 break;
             case BlockStatement blockStatement:
                 ValidateBlock(blockStatement, filePath, diagnostics);
@@ -345,6 +347,14 @@ public static class Compilation
                 if (ifExpression.Alternative != null)
                 {
                     ValidateBlock(ifExpression.Alternative, filePath, diagnostics);
+                }
+
+                break;
+            case MatchExpression matchExpression:
+                ValidateExpression(matchExpression.Target, filePath, diagnostics);
+                foreach (var arm in matchExpression.Arms)
+                {
+                    ValidateBlock(arm.Body, filePath, diagnostics);
                 }
 
                 break;
@@ -466,11 +476,13 @@ public static class Compilation
 
         var functionDeclsByFile = new Dictionary<string, List<FunctionDeclaration>>(StringComparer.OrdinalIgnoreCase);
         var functionTypesByFile = new Dictionary<string, Dictionary<string, FunctionTypeSymbol>>(StringComparer.OrdinalIgnoreCase);
+        var enumDeclsByFile = new Dictionary<string, List<EnumDeclaration>>(StringComparer.OrdinalIgnoreCase);
         var namespaceByFile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var loadedUnit in loadedUnits)
         {
             var declarations = loadedUnit.Unit.Statements.OfType<FunctionDeclaration>().ToList();
             functionDeclsByFile[loadedUnit.FilePath] = declarations;
+            enumDeclsByFile[loadedUnit.FilePath] = loadedUnit.Unit.Statements.OfType<EnumDeclaration>().ToList();
             namespaceByFile[loadedUnit.FilePath] = loadedUnit.FileNamespace;
 
             var typeMap = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
@@ -511,6 +523,7 @@ public static class Compilation
             visibleModules.Remove(loadedUnit.FilePath);
 
             var externalDeclarations = new List<FunctionDeclaration>();
+            var externalEnumDeclarations = new List<EnumDeclaration>();
             var externalFunctionTypes = new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
             var privateImportedFunctionNames = new HashSet<string>(StringComparer.Ordinal);
 
@@ -566,10 +579,15 @@ public static class Compilation
                         }
                     }
                 }
+
+                if (enumDeclsByFile.TryGetValue(path, out var enumDeclarations))
+                {
+                    externalEnumDeclarations.AddRange(enumDeclarations);
+                }
             }
 
             var resolver = new NameResolver();
-            var names = resolver.Resolve(loadedUnit.Unit, externalDeclarations);
+            var names = resolver.Resolve(loadedUnit.Unit, externalDeclarations, externalEnumDeclarations);
             if (names.Diagnostics.HasErrors)
             {
                 var visibilityDiagnostics = BuildVisibilityDiagnostics(
@@ -591,7 +609,7 @@ public static class Compilation
             }
 
             var checker = new TypeChecker();
-            var typeCheck = checker.Check(loadedUnit.Unit, names, externalFunctionTypes);
+            var typeCheck = checker.Check(loadedUnit.Unit, names, externalFunctionTypes, externalEnumDeclarations);
             if (typeCheck.Diagnostics.HasErrors)
             {
                 diagnostics = PrefixDiagnosticsWithFile(typeCheck.Diagnostics, loadedUnit.FilePath);
@@ -717,6 +735,21 @@ public static class Compilation
             foreach (var pair in module.TypeCheck.DeclaredFunctionTypes)
             {
                 combined.DeclaredFunctionTypes[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.EnumDefinitions)
+            {
+                combined.EnumDefinitions[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.ResolvedEnumVariantConstructions)
+            {
+                combined.ResolvedEnumVariantConstructions[pair.Key] = pair.Value;
+            }
+
+            foreach (var pair in module.TypeCheck.ResolvedMatches)
+            {
+                combined.ResolvedMatches[pair.Key] = pair.Value;
             }
         }
 

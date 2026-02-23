@@ -64,6 +64,8 @@ public enum TokenType
     For,
     In,
     Public,
+    Enum,
+    Match,
 }
 
 public record struct Token(TokenType Type, string Literal, Span Span = default)
@@ -88,6 +90,8 @@ public record struct Token(TokenType Type, string Literal, Span Span = default)
         { "for", TokenType.For },
         { "in", TokenType.In },
         { "public", TokenType.Public },
+        { "enum", TokenType.Enum },
+        { "match", TokenType.Match },
     };
 
     public static TokenType LookupIdentifier(string keyword)

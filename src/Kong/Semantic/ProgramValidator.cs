@@ -11,7 +11,7 @@ public static class ProgramValidator
 
         foreach (var statement in unit.Statements)
         {
-            if (statement is FunctionDeclaration or ImportStatement or NamespaceStatement)
+            if (statement is FunctionDeclaration or EnumDeclaration or ImportStatement or NamespaceStatement)
             {
                 continue;
             }
@@ -134,6 +134,13 @@ public static class ProgramValidator
                 break;
             case FunctionLiteral functionLiteral:
                 ReportUnsupportedIfWithoutElse(functionLiteral.Body, diagnostics);
+                break;
+            case MatchExpression matchExpression:
+                ReportUnsupportedIfWithoutElse(matchExpression.Target, diagnostics);
+                foreach (var arm in matchExpression.Arms)
+                {
+                    ReportUnsupportedIfWithoutElse(arm.Body, diagnostics);
+                }
                 break;
             case CallExpression callExpression:
                 ReportUnsupportedIfWithoutElse(callExpression.Function, diagnostics);

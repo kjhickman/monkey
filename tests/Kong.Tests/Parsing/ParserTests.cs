@@ -1178,6 +1178,60 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesEnumDeclarationWithPayloadVariants()
+    {
+        var input = "enum Result { Ok(int), Err(string) }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var declaration = Assert.IsType<EnumDeclaration>(unit.Statements[0]);
+        Assert.Equal("Result", declaration.Name.Value);
+        Assert.Equal(2, declaration.Variants.Count);
+        Assert.Equal("Ok", declaration.Variants[0].Name.Value);
+        Assert.Equal("Err", declaration.Variants[1].Name.Value);
+
+        var okPayload = Assert.IsType<NamedType>(declaration.Variants[0].PayloadTypes[0]);
+        Assert.Equal("int", okPayload.Name);
+        var errPayload = Assert.IsType<NamedType>(declaration.Variants[1].PayloadTypes[0]);
+        Assert.Equal("string", errPayload.Name);
+    }
+
+    [Fact]
+    public void TestParsesGenericTypeAnnotation()
+    {
+        var input = "enum Result<T, E> { Ok(T), Err(E) } fn Main() { let r: Result<int, string> = Ok(42); }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var main = Assert.IsType<FunctionDeclaration>(unit.Statements[1]);
+        var letStatement = Assert.IsType<LetStatement>(main.Body.Statements[0]);
+        var genericType = Assert.IsType<GenericType>(letStatement.TypeAnnotation);
+        Assert.Equal("Result", genericType.Name);
+        Assert.Equal(2, genericType.TypeArguments.Count);
+    }
+
+    [Fact]
+    public void TestParsesMatchExpression()
+    {
+        var input = "fn Main() { let x: int = match (Ok(1)) { Ok(v) => { v; }, Err(e) => { 0; } }; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var main = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
+        var letStatement = Assert.IsType<LetStatement>(main.Body.Statements[0]);
+        var matchExpression = Assert.IsType<MatchExpression>(letStatement.Value);
+        Assert.Equal(2, matchExpression.Arms.Count);
+        Assert.Equal("Ok", matchExpression.Arms[0].VariantName.Value);
+        Assert.Equal("Err", matchExpression.Arms[1].VariantName.Value);
+    }
+
+    [Fact]
     public void TestParserErrorIncludesPosition()
     {
         var input = "let = 5;";

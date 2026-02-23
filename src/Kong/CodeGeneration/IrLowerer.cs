@@ -15,6 +15,9 @@ public class IrLowerer
     private readonly Dictionary<LetStatement, TypeSymbol> _variableTypes = [];
     private readonly Dictionary<FunctionDeclaration, FunctionTypeSymbol> _declaredFunctionTypes = [];
     private readonly Dictionary<string, FunctionTypeSymbol> _declaredFunctionTypesByName = [];
+    private readonly Dictionary<CallExpression, EnumVariantConstruction> _resolvedEnumVariantConstructions = [];
+    private readonly Dictionary<MatchExpression, MatchResolution> _resolvedMatches = [];
+    private readonly Dictionary<string, EnumDefinitionSymbol> _enumDefinitions = new(StringComparer.Ordinal);
     private NameResolution? _nameResolution;
 
     private IrProgram _program = null!;
@@ -46,6 +49,9 @@ public class IrLowerer
         _variableTypes.Clear();
         _declaredFunctionTypes.Clear();
         _declaredFunctionTypesByName.Clear();
+        _resolvedEnumVariantConstructions.Clear();
+        _resolvedMatches.Clear();
+        _enumDefinitions.Clear();
         foreach (var pair in typeCheckResult.ExpressionTypes)
         {
             _expressionTypes[pair.Key] = pair.Value;
@@ -82,6 +88,21 @@ public class IrLowerer
             _declaredFunctionTypesByName[pair.Key.Name.Value] = pair.Value;
         }
 
+        foreach (var pair in typeCheckResult.ResolvedEnumVariantConstructions)
+        {
+            _resolvedEnumVariantConstructions[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedMatches)
+        {
+            _resolvedMatches[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.EnumDefinitions)
+        {
+            _enumDefinitions[pair.Key] = pair.Value;
+        }
+
         _result.Diagnostics.AddRange(typeCheckResult.Diagnostics);
         if (_result.Diagnostics.HasErrors)
         {
@@ -94,6 +115,10 @@ public class IrLowerer
             ReturnType = TypeSymbols.Int,
         };
         _program = new IrProgram { EntryPoint = entryFunction };
+        foreach (var pair in _enumDefinitions)
+        {
+            _program.EnumDefinitions[pair.Key] = pair.Value;
+        }
         if (!LowerFunctionBody(entryFunction, unit.Statements, isTopLevel: true))
         {
             return _result;
@@ -191,6 +216,7 @@ public class IrLowerer
 
                 case ImportStatement:
                 case NamespaceStatement:
+                case EnumDeclaration:
                     break;
 
                 case ReturnStatement returnStatement:
@@ -922,6 +948,9 @@ public class IrLowerer
             case IfExpression ifExpression:
                 return LowerIfExpression(ifExpression);
 
+            case MatchExpression matchExpression:
+                return LowerMatchExpression(matchExpression);
+
             case CallExpression callExpression:
                 return LowerCallExpression(callExpression);
 
@@ -1070,6 +1099,143 @@ public class IrLowerer
         _currentBlock = mergeBlock;
         var destination = AllocateValue(resultType);
         _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal));
+        return destination;
+    }
+
+    private IrValueId? LowerMatchExpression(MatchExpression matchExpression)
+    {
+        if (!_resolvedMatches.TryGetValue(matchExpression, out var matchResolution))
+        {
+            _result.Diagnostics.Report(matchExpression.Span,
+                "phase-4 IR lowerer requires resolved enum match metadata",
+                "IR001");
+            return null;
+        }
+
+        if (!TryGetExpressionType(matchExpression, out var resultType) || !IsSupportedRuntimeType(resultType))
+        {
+            _result.Diagnostics.Report(matchExpression.Span,
+                "phase-4 IR lowerer requires supported match-expression result type",
+                "IR001");
+            return null;
+        }
+
+        var enumValue = LowerExpression(matchExpression.Target);
+        if (enumValue == null)
+        {
+            return null;
+        }
+
+        var tagValue = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrGetEnumTag(tagValue, enumValue.Value, matchResolution.EnumName));
+
+        var armBlocks = new List<IrBlock>(matchResolution.Arms.Count);
+        for (var i = 0; i < matchResolution.Arms.Count; i++)
+        {
+            armBlocks.Add(NewBlock());
+        }
+
+        var failBlock = NewBlock();
+        var mergeBlock = NewBlock();
+        var resultLocal = resultType == TypeSymbols.Void ? (IrLocalId?)null : AllocateAnonymousLocal(resultType);
+
+        for (var i = 0; i < matchResolution.Arms.Count; i++)
+        {
+            var arm = matchResolution.Arms[i];
+            var constTag = AllocateValue(TypeSymbols.Int);
+            _currentBlock.Instructions.Add(new IrConstInt(constTag, arm.Tag));
+
+            var compare = AllocateValue(TypeSymbols.Bool);
+            _currentBlock.Instructions.Add(new IrBinary(compare, IrBinaryOperator.Equal, tagValue, constTag));
+
+            var nextBlock = i == matchResolution.Arms.Count - 1 ? failBlock : NewBlock();
+            _currentBlock.Terminator = new IrBranch(compare, armBlocks[i].Id, nextBlock.Id);
+            _currentBlock = nextBlock;
+        }
+
+        var previousLocals = _localsByName.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        for (var i = 0; i < matchResolution.Arms.Count; i++)
+        {
+            _currentBlock = armBlocks[i];
+            var armNode = matchExpression.Arms[i];
+            var armResolution = matchResolution.Arms[i];
+            _localsByName.Clear();
+            foreach (var pair in previousLocals)
+            {
+                _localsByName[pair.Key] = pair.Value;
+            }
+
+            for (var payloadIndex = 0; payloadIndex < armResolution.PayloadTypes.Count; payloadIndex++)
+            {
+                var bindingName = armNode.Bindings[payloadIndex].Value;
+                var bindingType = armResolution.PayloadTypes[payloadIndex];
+                var payloadValue = AllocateValue(bindingType);
+                _currentBlock.Instructions.Add(new IrGetEnumPayload(
+                    payloadValue,
+                    enumValue.Value,
+                    matchResolution.EnumName,
+                    payloadIndex,
+                    bindingType));
+                var local = AllocateNamedLocal(bindingName, bindingType);
+                _currentBlock.Instructions.Add(new IrStoreLocal(local, payloadValue));
+            }
+
+            if (resultType == TypeSymbols.Void)
+            {
+                var terminated = LowerVoidBranchBlock(armNode.Body, mergeBlock.Id);
+                if (terminated == null)
+                {
+                    _localsByName.Clear();
+                    foreach (var pair in previousLocals)
+                    {
+                        _localsByName[pair.Key] = pair.Value;
+                    }
+
+                    return null;
+                }
+
+                if (!terminated.Value)
+                {
+                    _currentBlock.Terminator = new IrJump(mergeBlock.Id);
+                }
+            }
+            else
+            {
+                var armValue = LowerBlockResultExpression(armNode.Body, resultType);
+                if (armValue == null || resultLocal == null)
+                {
+                    _localsByName.Clear();
+                    foreach (var pair in previousLocals)
+                    {
+                        _localsByName[pair.Key] = pair.Value;
+                    }
+
+                    return null;
+                }
+
+                _currentBlock.Instructions.Add(new IrStoreLocal(resultLocal.Value, armValue.Value));
+                _currentBlock.Terminator = new IrJump(mergeBlock.Id);
+            }
+        }
+
+        _localsByName.Clear();
+        foreach (var pair in previousLocals)
+        {
+            _localsByName[pair.Key] = pair.Value;
+        }
+
+        _currentBlock = failBlock;
+        _currentBlock.Terminator = new IrJump(mergeBlock.Id);
+
+        if (resultType == TypeSymbols.Void)
+        {
+            _currentBlock = mergeBlock;
+            return null;
+        }
+
+        _currentBlock = mergeBlock;
+        var destination = AllocateValue(resultType);
+        _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal!.Value));
         return destination;
     }
 
@@ -1297,6 +1463,34 @@ public class IrLowerer
             }
 
             return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
+        }
+
+        if (callExpression.Function is Identifier enumIdentifier &&
+            _resolvedEnumVariantConstructions.TryGetValue(callExpression, out var enumConstruction))
+        {
+            _ = enumIdentifier;
+            var enumArguments = new List<IrValueId>(callExpression.Arguments.Count);
+            foreach (var argument in callExpression.Arguments)
+            {
+                var value = LowerExpression(argument.Expression);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                enumArguments.Add(value.Value);
+            }
+
+            var enumDestination = AllocateValue(returnType);
+            _currentBlock.Instructions.Add(new IrConstructEnum(
+                enumDestination,
+                enumConstruction.EnumName,
+                enumConstruction.VariantName,
+                enumConstruction.Tag,
+                enumConstruction.MaxPayloadArity,
+                enumArguments,
+                enumConstruction.PayloadTypes));
+            return enumDestination;
         }
 
         if (callExpression.Function is Identifier identifier &&
@@ -1776,6 +1970,7 @@ public class IrLowerer
                type == TypeSymbols.Decimal ||
                type == TypeSymbols.Bool ||
                type == TypeSymbols.String ||
+               type is EnumTypeSymbol ||
                type is ClrNominalTypeSymbol ||
                type is ArrayTypeSymbol arrayType && IsSupportedArrayElementType(arrayType.ElementType) ||
                type is FunctionTypeSymbol functionType &&
@@ -1822,6 +2017,25 @@ public class IrLowerer
             for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
             {
                 if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is EnumTypeSymbol leftEnum && right is EnumTypeSymbol rightEnum)
+        {
+            if (!string.Equals(leftEnum.EnumName, rightEnum.EnumName, StringComparison.Ordinal) ||
+                leftEnum.TypeArguments.Count != rightEnum.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftEnum.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftEnum.TypeArguments[i], rightEnum.TypeArguments[i]))
                 {
                     return false;
                 }

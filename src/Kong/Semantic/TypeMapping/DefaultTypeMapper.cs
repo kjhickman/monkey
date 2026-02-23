@@ -7,10 +7,14 @@ using Kong.Semantic;
 public class DefaultTypeMapper : ITypeMapper
 {
     private readonly IReadOnlyDictionary<string, TypeDefinition> _delegateTypeMap;
+    private readonly IReadOnlyDictionary<string, TypeDefinition> _enumTypeMap;
 
-    public DefaultTypeMapper(IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+    public DefaultTypeMapper(
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
+        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null)
     {
         _delegateTypeMap = delegateTypeMap;
+        _enumTypeMap = enumTypeMap ?? new Dictionary<string, TypeDefinition>(StringComparer.Ordinal);
     }
 
     public TypeReference? TryMapKongType(
@@ -136,6 +140,17 @@ public class DefaultTypeMapper : ITypeMapper
             return module.ImportReference(typeDefinition);
         }
 
+        if (kongType is EnumTypeSymbol enumType)
+        {
+            if (_enumTypeMap.TryGetValue(enumType.EnumName, out var enumDefinition))
+            {
+                return module.ImportReference(enumDefinition);
+            }
+
+            diagnostics.Report(Span.Empty, $"CLR backend is missing generated enum type for '{enumType.EnumName}'", "IL001");
+            return null;
+        }
+
         diagnostics.Report(Span.Empty, $"CLR backend does not support type '{kongType}'", "IL001");
         return null;
     }
@@ -179,6 +194,11 @@ public class DefaultTypeMapper : ITypeMapper
         }
 
         if (type is ClrNominalTypeSymbol)
+        {
+            return true;
+        }
+
+        if (type is EnumTypeSymbol)
         {
             return true;
         }

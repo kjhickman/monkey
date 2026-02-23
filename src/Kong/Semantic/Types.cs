@@ -229,6 +229,23 @@ public sealed record FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes
     public override string Name => $"fn({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
 }
 
+public sealed record EnumTypeSymbol(string EnumName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol
+{
+    public override string Name => TypeArguments.Count == 0
+        ? EnumName
+        : $"{EnumName}<{string.Join(", ", TypeArguments)}>";
+}
+
+public sealed record EnumVariantDefinition(string Name, IReadOnlyList<TypeSymbol> PayloadTypes, int Tag);
+
+public sealed record EnumDefinitionSymbol(
+    string Name,
+    IReadOnlyList<string> TypeParameters,
+    IReadOnlyList<EnumVariantDefinition> Variants)
+{
+    public int MaxPayloadArity => Variants.Count == 0 ? 0 : Variants.Max(v => v.PayloadTypes.Count);
+}
+
 public sealed record ClrNominalTypeSymbol(string ClrTypeFullName) : TypeSymbol
 {
     public override string Name => ClrTypeFullName;

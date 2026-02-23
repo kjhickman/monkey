@@ -30,6 +30,12 @@ public class ClrArtifactBuilder
         TypeReference DelegateType,
         MethodReference DelegateCtor);
 
+    private sealed record EnumRuntimeInfo(
+        TypeDefinition Type,
+        MethodDefinition Constructor,
+        FieldDefinition TagField,
+        IReadOnlyList<FieldDefinition> PayloadFields);
+
     public ClrArtifactBuildResult BuildArtifact(
         CompilationUnit unit,
         TypeCheckResult typeCheckResult,
@@ -138,6 +144,11 @@ public class ClrArtifactBuilder
         var nonRootIndex = 0;
         foreach (var (module, program) in loweredPrograms)
         {
+            foreach (var pair in program.EnumDefinitions)
+            {
+                combinedProgram.EnumDefinitions[pair.Key] = pair.Value;
+            }
+
             var functions = program.Functions;
             if (!module.IsRootModule)
             {
@@ -227,6 +238,52 @@ public class ClrArtifactBuilder
         }
     }
 
+    private static Dictionary<string, EnumRuntimeInfo>? BuildEnumRuntimeMap(
+        IReadOnlyDictionary<string, EnumDefinitionSymbol> enumDefinitions,
+        ModuleDefinition module,
+        TypeDefinition programType,
+        DiagnosticBag diagnostics)
+    {
+        var map = new Dictionary<string, EnumRuntimeInfo>(StringComparer.Ordinal);
+        foreach (var pair in enumDefinitions.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            var enumDefinition = pair.Value;
+            var enumType = new TypeDefinition(
+                "Kong.Generated",
+                $"__enum_{enumDefinition.Name}",
+                CecilTypeAttributes.NestedPublic | CecilTypeAttributes.Class | CecilTypeAttributes.Sealed,
+                module.TypeSystem.Object);
+            programType.NestedTypes.Add(enumType);
+
+            var ctor = new MethodDefinition(
+                ".ctor",
+                CecilMethodAttributes.Public | CecilMethodAttributes.HideBySig | CecilMethodAttributes.SpecialName | CecilMethodAttributes.RTSpecialName,
+                module.TypeSystem.Void);
+            enumType.Methods.Add(ctor);
+
+            var tagField = new FieldDefinition("__tag", CecilFieldAttributes.Public, module.TypeSystem.Int32);
+            enumType.Fields.Add(tagField);
+
+            var payloadFields = new List<FieldDefinition>(enumDefinition.MaxPayloadArity);
+            for (var i = 0; i < enumDefinition.MaxPayloadArity; i++)
+            {
+                var payloadField = new FieldDefinition($"__value{i}", CecilFieldAttributes.Public, module.TypeSystem.Object);
+                enumType.Fields.Add(payloadField);
+                payloadFields.Add(payloadField);
+            }
+
+            var objectCtor = module.ImportReference(typeof(object).GetConstructor(Type.EmptyTypes)!);
+            var ctorIl = ctor.Body.GetILProcessor();
+            ctorIl.Emit(OpCodes.Ldarg_0);
+            ctorIl.Emit(OpCodes.Call, objectCtor);
+            ctorIl.Emit(OpCodes.Ret);
+
+            map[enumDefinition.Name] = new EnumRuntimeInfo(enumType, ctor, tagField, payloadFields);
+        }
+
+        return map;
+    }
+
     private static byte[]? EmitAssembly(IrProgram program, DiagnosticBag diagnostics)
     {
         var assemblyName = new AssemblyNameDefinition("Kong.Generated", new Version(1, 0, 0, 0));
@@ -243,13 +300,19 @@ public class ClrArtifactBuilder
         var allFunctions = new List<IrFunction> { program.EntryPoint };
         allFunctions.AddRange(program.Functions);
         var functionMap = allFunctions.ToDictionary(f => f.Name, f => f);
-        var delegateTypeMap = BuildDelegateTypeMap(allFunctions, module, programType, diagnostics);
-        if (delegateTypeMap == null)
+        var enumRuntimeMap = BuildEnumRuntimeMap(program.EnumDefinitions, module, programType, diagnostics);
+        if (enumRuntimeMap == null)
         {
             return null;
         }
 
-        var typeMapper = new DefaultTypeMapper(delegateTypeMap);
+        var enumTypeMap = enumRuntimeMap.ToDictionary(pair => pair.Key, pair => pair.Value.Type, StringComparer.Ordinal);
+        var delegateTypeMap = BuildDelegateTypeMap(allFunctions, module, programType, diagnostics, enumTypeMap);
+        if (delegateTypeMap == null)
+        {
+            return null;
+        }
+        var typeMapper = new DefaultTypeMapper(delegateTypeMap, enumTypeMap);
 
         var methodMap = new Dictionary<string, MethodDefinition>();
         foreach (var function in allFunctions)
@@ -325,7 +388,7 @@ public class ClrArtifactBuilder
 
         foreach (var function in allFunctions)
         {
-            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, module, diagnostics, delegateTypeMap, typeMapper))
+            if (!EmitFunction(function, methodMap[function.Name], methodMap, functionMap, displayClassMap, enumRuntimeMap, module, diagnostics, delegateTypeMap, typeMapper))
             {
                 return null;
             }
@@ -342,6 +405,7 @@ public class ClrArtifactBuilder
         IReadOnlyDictionary<string, MethodDefinition> methodMap,
         IReadOnlyDictionary<string, IrFunction> functionMap,
         IReadOnlyDictionary<string, DisplayClassInfo> displayClassMap,
+        IReadOnlyDictionary<string, EnumRuntimeInfo> enumRuntimeMap,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
         IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
@@ -899,7 +963,7 @@ public class ClrArtifactBuilder
 
                     case IrNewArray newArray:
                     {
-                        var arrayElementClrType = MapType(newArray.ElementType, module, diagnostics, delegateTypeMap);
+                        var arrayElementClrType = MapType(newArray.ElementType, module, diagnostics, typeMapper);
                         if (arrayElementClrType == null)
                         {
                             return false;
@@ -966,6 +1030,115 @@ public class ClrArtifactBuilder
                         break;
                     }
 
+                    case IrConstructEnum constructEnum:
+                    {
+                        if (!enumRuntimeMap.TryGetValue(constructEnum.EnumName, out var enumRuntime))
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend could not resolve generated enum type '{constructEnum.EnumName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        if (constructEnum.Arguments.Count != constructEnum.ArgumentTypes.Count)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend enum constructor argument metadata mismatch for '{constructEnum.EnumName}.{constructEnum.VariantName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Newobj, enumRuntime.Constructor);
+                        il.Emit(OpCodes.Dup);
+                        il.Emit(OpCodes.Ldc_I4, constructEnum.Tag);
+                        il.Emit(OpCodes.Stfld, enumRuntime.TagField);
+
+                        for (var i = 0; i < constructEnum.Arguments.Count; i++)
+                        {
+                            if (i >= enumRuntime.PayloadFields.Count)
+                            {
+                                diagnostics.Report(Span.Empty,
+                                    $"phase-5 CLR backend enum payload slot overflow for '{constructEnum.EnumName}.{constructEnum.VariantName}'",
+                                    "IL001");
+                                return false;
+                            }
+
+                            var argumentType = constructEnum.ArgumentTypes[i];
+                            var clrArgumentType = MapType(argumentType, module, diagnostics, typeMapper);
+                            if (clrArgumentType == null)
+                            {
+                                return false;
+                            }
+
+                            il.Emit(OpCodes.Dup);
+                            il.Emit(OpCodes.Ldloc, valueLocals[constructEnum.Arguments[i]]);
+                            if (clrArgumentType.IsValueType)
+                            {
+                                il.Emit(OpCodes.Box, clrArgumentType);
+                            }
+
+                            il.Emit(OpCodes.Stfld, enumRuntime.PayloadFields[i]);
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[constructEnum.Destination]);
+                        break;
+                    }
+
+                    case IrGetEnumTag getEnumTag:
+                    {
+                        if (!enumRuntimeMap.TryGetValue(getEnumTag.EnumName, out var enumRuntime))
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend could not resolve generated enum type '{getEnumTag.EnumName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[getEnumTag.EnumValue]);
+                        il.Emit(OpCodes.Ldfld, enumRuntime.TagField);
+                        il.Emit(OpCodes.Stloc, valueLocals[getEnumTag.Destination]);
+                        break;
+                    }
+
+                    case IrGetEnumPayload getEnumPayload:
+                    {
+                        if (!enumRuntimeMap.TryGetValue(getEnumPayload.EnumName, out var enumRuntime))
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend could not resolve generated enum type '{getEnumPayload.EnumName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        if (getEnumPayload.PayloadIndex < 0 || getEnumPayload.PayloadIndex >= enumRuntime.PayloadFields.Count)
+                        {
+                            diagnostics.Report(Span.Empty,
+                                $"phase-5 CLR backend enum payload index out of range for '{getEnumPayload.EnumName}'",
+                                "IL001");
+                            return false;
+                        }
+
+                        var clrPayloadType = MapType(getEnumPayload.PayloadType, module, diagnostics, typeMapper);
+                        if (clrPayloadType == null)
+                        {
+                            return false;
+                        }
+
+                        il.Emit(OpCodes.Ldloc, valueLocals[getEnumPayload.EnumValue]);
+                        il.Emit(OpCodes.Ldfld, enumRuntime.PayloadFields[getEnumPayload.PayloadIndex]);
+                        if (clrPayloadType.IsValueType)
+                        {
+                            il.Emit(OpCodes.Unbox_Any, clrPayloadType);
+                        }
+                        else
+                        {
+                            il.Emit(OpCodes.Castclass, clrPayloadType);
+                        }
+
+                        il.Emit(OpCodes.Stloc, valueLocals[getEnumPayload.Destination]);
+                        break;
+                    }
+
                     default:
                         diagnostics.Report(Span.Empty, "phase-4 CLR backend encountered unsupported IR instruction", "IL001");
                         return false;
@@ -1018,7 +1191,8 @@ public class ClrArtifactBuilder
         TypeSymbol type,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
-        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap,
+        IReadOnlyDictionary<string, TypeDefinition>? enumTypeMap = null)
     {
         if (type == TypeSymbols.Int)
         {
@@ -1107,7 +1281,7 @@ public class ClrArtifactBuilder
 
         if (type is ArrayTypeSymbol arrayType)
         {
-            var mappedElement = MapType(arrayType.ElementType, module, diagnostics, delegateTypeMap);
+            var mappedElement = MapType(arrayType.ElementType, module, diagnostics, delegateTypeMap, enumTypeMap);
             return mappedElement == null ? null : new Mono.Cecil.ArrayType(mappedElement);
         }
 
@@ -1133,6 +1307,11 @@ public class ClrArtifactBuilder
             return module.ImportReference(typeDefinition);
         }
 
+        if (type is EnumTypeSymbol enumType && enumTypeMap != null && enumTypeMap.TryGetValue(enumType.EnumName, out var enumTypeDefinition))
+        {
+            return module.ImportReference(enumTypeDefinition);
+        }
+
         diagnostics.Report(Span.Empty, $"phase-4 CLR backend does not support type '{type}'", "IL001");
         return null;
     }
@@ -1150,7 +1329,8 @@ public class ClrArtifactBuilder
         IReadOnlyList<IrFunction> functions,
         ModuleDefinition module,
         TypeDefinition programType,
-        DiagnosticBag diagnostics)
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeDefinition> enumTypeMap)
     {
         var functionTypes = new Dictionary<string, FunctionTypeSymbol>();
         foreach (var function in functions)
@@ -1199,7 +1379,7 @@ public class ClrArtifactBuilder
             ctor.Parameters.Add(new ParameterDefinition(module.TypeSystem.IntPtr));
             delegateType.Methods.Add(ctor);
 
-            var returnType = MapType(functionType.ReturnType, module, diagnostics, delegateMap);
+            var returnType = MapType(functionType.ReturnType, module, diagnostics, delegateMap, enumTypeMap);
             if (returnType == null)
             {
                 return null;
@@ -1215,7 +1395,7 @@ public class ClrArtifactBuilder
 
             foreach (var parameterType in functionType.ParameterTypes)
             {
-                var mapped = MapType(parameterType, module, diagnostics, delegateMap);
+                var mapped = MapType(parameterType, module, diagnostics, delegateMap, enumTypeMap);
                 if (mapped == null)
                 {
                     return null;

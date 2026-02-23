@@ -68,6 +68,7 @@ public class Parser
             { TokenType.Minus, ParsePrefixExpression },
             { TokenType.LeftParenthesis, ParseGroupedExpression },
             { TokenType.If, ParseIfExpression },
+            { TokenType.Match, ParseMatchExpression },
             { TokenType.LeftBracket, ParseArrayLiteral },
             { TokenType.New, ParseNewExpression },
         };
@@ -173,8 +174,14 @@ public class Parser
     {
         if (_blockDepth == 0 &&
             ((CurTokenIs(TokenType.Function) && PeekTokenIs(TokenType.Identifier)) ||
-             (CurTokenIs(TokenType.Public) && PeekTokenIs(TokenType.Function))))
+             (CurTokenIs(TokenType.Public) && PeekTokenIs(TokenType.Function)) ||
+             (CurTokenIs(TokenType.Enum) && PeekTokenIs(TokenType.Identifier))))
         {
+            if (CurTokenIs(TokenType.Enum))
+            {
+                return ParseEnumDeclaration();
+            }
+
             return ParseFunctionDeclaration();
         }
 
@@ -190,6 +197,7 @@ public class Parser
         {
             TokenType.Import => ParseImportStatement(),
             TokenType.Namespace => ParseNamespaceStatement(),
+            TokenType.Enum => ParseEnumDeclaration(),
             TokenType.Let => ParseLetStatement(),
             TokenType.Var => ParseVarStatement(),
             TokenType.For => ParseForInStatement(),
@@ -485,6 +493,201 @@ public class Parser
         return declaration;
     }
 
+    private EnumDeclaration? ParseEnumDeclaration()
+    {
+        var startSpan = _curToken.Span;
+        var declaration = new EnumDeclaration
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        declaration.Name = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (PeekTokenIs(TokenType.LessThan))
+        {
+            declaration.TypeParameters = ParseTypeParameterList();
+            if (declaration.TypeParameters.Count == 0)
+            {
+                return null;
+            }
+        }
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        declaration.Variants = ParseEnumVariants();
+        if (declaration.Variants.Count == 0 && !CurTokenIs(TokenType.RightBrace))
+        {
+            return null;
+        }
+
+        declaration.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return declaration;
+    }
+
+    private List<Identifier> ParseTypeParameterList()
+    {
+        var parameters = new List<Identifier>();
+
+        if (!ExpectPeek(TokenType.LessThan))
+        {
+            return [];
+        }
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return [];
+        }
+
+        parameters.Add(new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        });
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return [];
+            }
+
+            parameters.Add(new Identifier
+            {
+                Token = _curToken,
+                Value = _curToken.Literal,
+                Span = _curToken.Span,
+            });
+        }
+
+        if (!ExpectPeek(TokenType.GreaterThan))
+        {
+            return [];
+        }
+
+        return parameters;
+    }
+
+    private List<EnumVariant> ParseEnumVariants()
+    {
+        var variants = new List<EnumVariant>();
+
+        if (PeekTokenIs(TokenType.RightBrace))
+        {
+            NextToken();
+            return variants;
+        }
+
+        while (true)
+        {
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return [];
+            }
+
+            var variantStart = _curToken.Span;
+            var variant = new EnumVariant
+            {
+                Token = _curToken,
+                Name = new Identifier
+                {
+                    Token = _curToken,
+                    Value = _curToken.Literal,
+                    Span = _curToken.Span,
+                },
+            };
+
+            if (PeekTokenIs(TokenType.LeftParenthesis))
+            {
+                NextToken();
+                variant.PayloadTypes = ParseVariantPayloadTypes();
+                if (variant.PayloadTypes.Count == 0 && !CurTokenIs(TokenType.RightParenthesis))
+                {
+                    return [];
+                }
+            }
+
+            variant.Span = new Span(variantStart.Start, _curToken.Span.End);
+            variants.Add(variant);
+
+            if (PeekTokenIs(TokenType.Comma))
+            {
+                NextToken();
+                if (PeekTokenIs(TokenType.RightBrace))
+                {
+                    NextToken();
+                    break;
+                }
+
+                continue;
+            }
+
+            if (!ExpectPeek(TokenType.RightBrace))
+            {
+                return [];
+            }
+
+            break;
+        }
+
+        return variants;
+    }
+
+    private List<ITypeNode> ParseVariantPayloadTypes()
+    {
+        var payloadTypes = new List<ITypeNode>();
+
+        if (PeekTokenIs(TokenType.RightParenthesis))
+        {
+            NextToken();
+            return payloadTypes;
+        }
+
+        NextToken();
+        var firstPayloadType = ParseTypeNode();
+        if (firstPayloadType == null)
+        {
+            return [];
+        }
+
+        payloadTypes.Add(firstPayloadType);
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            NextToken();
+
+            var nextPayloadType = ParseTypeNode();
+            if (nextPayloadType == null)
+            {
+                return [];
+            }
+
+            payloadTypes.Add(nextPayloadType);
+        }
+
+        if (!ExpectPeek(TokenType.RightParenthesis))
+        {
+            return [];
+        }
+
+        return payloadTypes;
+    }
+
     private LetStatement? ParseLetStatement()
     {
         var startSpan = _curToken.Span;
@@ -610,12 +813,68 @@ public class Parser
             return null;
         }
 
-        return new NamedType
+        var identifierToken = _curToken;
+        var startSpan = _curToken.Span;
+        var typeName = _curToken.Literal;
+        if (!PeekTokenIs(TokenType.LessThan))
         {
-            Token = _curToken,
-            Name = _curToken.Literal,
-            Span = _curToken.Span,
+            return new NamedType
+            {
+                Token = _curToken,
+                Name = typeName,
+                Span = startSpan,
+            };
+        }
+
+        NextToken();
+        var typeArguments = ParseTypeArgumentList();
+        if (typeArguments.Count == 0)
+        {
+            return null;
+        }
+
+        return new GenericType
+        {
+            Token = identifierToken,
+            Name = typeName,
+            TypeArguments = typeArguments,
+            Span = new Span(startSpan.Start, _curToken.Span.End),
         };
+    }
+
+    private List<ITypeNode> ParseTypeArgumentList()
+    {
+        var typeArguments = new List<ITypeNode>();
+
+        NextToken();
+        var firstType = ParseTypeNode();
+        if (firstType == null)
+        {
+            return [];
+        }
+
+        typeArguments.Add(firstType);
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            NextToken();
+
+            var nextType = ParseTypeNode();
+            if (nextType == null)
+            {
+                return [];
+            }
+
+            typeArguments.Add(nextType);
+        }
+
+        if (!ExpectPeek(TokenType.GreaterThan))
+        {
+            return [];
+        }
+
+        return typeArguments;
     }
 
     private ITypeNode? ParseFunctionTypeNode()
@@ -991,6 +1250,136 @@ public class Parser
         expression.Span = new Span(startSpan.Start, expression.Alternative.Span.End);
 
         return expression;
+    }
+
+    private IExpression ParseMatchExpression()
+    {
+        var startSpan = _curToken.Span;
+        var expression = new MatchExpression
+        {
+            Token = _curToken,
+        };
+
+        if (!ExpectPeek(TokenType.LeftParenthesis))
+        {
+            return null!;
+        }
+
+        NextToken();
+        expression.Target = ParseExpression(Precedence.Lowest)!;
+
+        if (!ExpectPeek(TokenType.RightParenthesis) || !ExpectPeek(TokenType.LeftBrace))
+        {
+            return null!;
+        }
+
+        while (!PeekTokenIs(TokenType.RightBrace))
+        {
+            var arm = ParseMatchArm();
+            if (arm == null)
+            {
+                return null!;
+            }
+
+            expression.Arms.Add(arm);
+
+            if (PeekTokenIs(TokenType.Comma))
+            {
+                NextToken();
+            }
+        }
+
+        if (!ExpectPeek(TokenType.RightBrace))
+        {
+            return null!;
+        }
+
+        expression.Span = new Span(startSpan.Start, _curToken.Span.End);
+        return expression;
+    }
+
+    private MatchArm? ParseMatchArm()
+    {
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        var variantToken = _curToken;
+        var arm = new MatchArm
+        {
+            Token = variantToken,
+            VariantName = new Identifier
+            {
+                Token = variantToken,
+                Value = variantToken.Literal,
+                Span = variantToken.Span,
+            },
+        };
+
+        if (PeekTokenIs(TokenType.LeftParenthesis))
+        {
+            NextToken();
+            arm.Bindings = ParseMatchArmBindings();
+            if (arm.Bindings.Count == 0 && !CurTokenIs(TokenType.RightParenthesis))
+            {
+                return null;
+            }
+        }
+
+        if (!ExpectPeek(TokenType.Assign) || !ExpectPeek(TokenType.GreaterThan) || !ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        arm.Body = ParseBlockStatement();
+        arm.Span = new Span(variantToken.Span.Start, arm.Body.Span.End);
+        return arm;
+    }
+
+    private List<Identifier> ParseMatchArmBindings()
+    {
+        var bindings = new List<Identifier>();
+        if (PeekTokenIs(TokenType.RightParenthesis))
+        {
+            NextToken();
+            return bindings;
+        }
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return [];
+        }
+
+        bindings.Add(new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        });
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            if (!ExpectPeek(TokenType.Identifier))
+            {
+                return [];
+            }
+
+            bindings.Add(new Identifier
+            {
+                Token = _curToken,
+                Value = _curToken.Literal,
+                Span = _curToken.Span,
+            });
+        }
+
+        if (!ExpectPeek(TokenType.RightParenthesis))
+        {
+            return [];
+        }
+
+        return bindings;
     }
 
     private IExpression ParseCallExpression(IExpression function)

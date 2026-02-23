@@ -228,6 +228,64 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksEnumVariantConstructorCall()
+    {
+        var source = "enum Result { Ok(int), Err(string) } let r: Result = Ok(42);";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var letStatement = Assert.IsType<LetStatement>(unit.Statements[2]);
+        var call = Assert.IsType<CallExpression>(letStatement.Value);
+        Assert.True(result.ExpressionTypes.TryGetValue(call, out var callType));
+        Assert.Equal(new EnumTypeSymbol("Result", []), callType);
+        Assert.True(result.ResolvedEnumVariantConstructions.ContainsKey(call));
+    }
+
+    [Fact]
+    public void TestReportsEnumVariantConstructorArgumentMismatch()
+    {
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok(\"nope\");");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
+    }
+
+    [Fact]
+    public void TestReportsEnumVariantIdentifierWithoutConstructorCall()
+    {
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok;");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T128");
+    }
+
+    [Fact]
+    public void TestTypeChecksEnumMatchExpression()
+    {
+        var source = "enum Result { Ok(int), Err(string) } let v: Result = Ok(1); let x: int = match (v) { Ok(n) => { n; }, Err(msg) => { 0; } };";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var letX = Assert.IsType<LetStatement>(unit.Statements[3]);
+        var match = Assert.IsType<MatchExpression>(letX.Value);
+        Assert.Equal(TypeSymbols.Int, result.ExpressionTypes[match]);
+        Assert.True(result.ResolvedMatches.ContainsKey(match));
+    }
+
+    [Fact]
+    public void TestReportsNonExhaustiveEnumMatchExpression()
+    {
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } let v: Result = Ok(1); let x: int = match (v) { Ok(n) => { n; } };");
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T131");
+    }
+
+    [Fact]
     public void TestReportsUnsupportedStaticClrMethodReturnType()
     {
         var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");

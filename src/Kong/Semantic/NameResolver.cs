@@ -8,6 +8,7 @@ public enum NameSymbolKind
     Global,
     Local,
     Parameter,
+    EnumVariant,
 }
 
 public readonly record struct NameSymbol(string Name, NameSymbolKind Kind, Span DeclarationSpan, int FunctionDepth);
@@ -67,15 +68,16 @@ public class NameResolver
 
     public NameResolution Resolve(CompilationUnit unit)
     {
-        return Resolve(unit, []);
+        return Resolve(unit, [], []);
     }
 
     public NameResolution Resolve(
         CompilationUnit unit,
-        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations)
+        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations,
+        IReadOnlyList<EnumDeclaration> externalEnumDeclarations)
     {
         _scope = new Scope(parent: null, isGlobalRoot: true, functionDepth: 0);
-        PredeclareTopLevelFunctions(unit, externalFunctionDeclarations);
+        PredeclareTopLevelDeclarations(unit, externalFunctionDeclarations, externalEnumDeclarations);
 
         var seenNamespace = false;
         var seenDeclaration = false;
@@ -127,26 +129,49 @@ public class NameResolver
         return _result;
     }
 
-    private void PredeclareTopLevelFunctions(
+    private void PredeclareTopLevelDeclarations(
         CompilationUnit unit,
-        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations)
+        IReadOnlyList<FunctionDeclaration> externalFunctionDeclarations,
+        IReadOnlyList<EnumDeclaration> externalEnumDeclarations)
     {
         foreach (var external in externalFunctionDeclarations)
         {
             DeclareTopLevelFunction(external.Name.Value, external.Name.Span);
         }
 
+        foreach (var externalEnum in externalEnumDeclarations)
+        {
+            foreach (var variant in externalEnum.Variants)
+            {
+                DeclareEnumVariant(variant.Name.Value, variant.Name.Span);
+            }
+        }
+
         foreach (var statement in unit.Statements)
         {
-            if (statement is not FunctionDeclaration functionDeclaration)
+            if (statement is FunctionDeclaration functionDeclaration)
+            {
+                DeclareTopLevelFunction(functionDeclaration.Name.Value, functionDeclaration.Name.Span);
+                if (_scope.TryLookupInCurrent(functionDeclaration.Name.Value, out var symbol))
+                {
+                    _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
+                }
+
+                continue;
+            }
+
+            if (statement is not EnumDeclaration enumDeclaration)
             {
                 continue;
             }
 
-            DeclareTopLevelFunction(functionDeclaration.Name.Value, functionDeclaration.Name.Span);
-            if (_scope.TryLookupInCurrent(functionDeclaration.Name.Value, out var symbol))
+            foreach (var variant in enumDeclaration.Variants)
             {
-                _result.IdentifierSymbols[functionDeclaration.Name] = symbol;
+                DeclareEnumVariant(variant.Name.Value, variant.Name.Span);
+                if (_scope.TryLookupInCurrent(variant.Name.Value, out var symbol))
+                {
+                    _result.IdentifierSymbols[variant.Name] = symbol;
+                }
             }
         }
     }
@@ -162,6 +187,18 @@ public class NameResolver
         var symbol = new NameSymbol(name, NameSymbolKind.Global, declarationSpan, _scope.FunctionDepth);
         _scope.Symbols[name] = symbol;
         _result.GlobalFunctionNames.Add(name);
+    }
+
+    private void DeclareEnumVariant(string name, Span declarationSpan)
+    {
+        if (_scope.TryLookupInCurrent(name, out _))
+        {
+            _result.Diagnostics.Report(declarationSpan, $"duplicate declaration of '{name}'", "N002");
+            return;
+        }
+
+        var symbol = new NameSymbol(name, NameSymbolKind.EnumVariant, declarationSpan, _scope.FunctionDepth);
+        _scope.Symbols[name] = symbol;
     }
 
     private void ResolveStatement(IStatement statement)
@@ -185,6 +222,8 @@ public class NameResolver
                 break;
             case FunctionDeclaration functionDeclaration:
                 ResolveFunctionDeclaration(functionDeclaration);
+                break;
+            case EnumDeclaration:
                 break;
             case ReturnStatement returnStatement:
                 if (returnStatement.ReturnValue != null)
@@ -365,6 +404,13 @@ public class NameResolver
                     ResolveBlockStatement(ifExpression.Alternative);
                 }
                 break;
+            case MatchExpression matchExpression:
+                ResolveExpression(matchExpression.Target);
+                foreach (var arm in matchExpression.Arms)
+                {
+                    ResolveMatchArm(arm);
+                }
+                break;
             case FunctionLiteral functionLiteral:
                 ResolveFunctionLiteral(functionLiteral);
                 break;
@@ -437,6 +483,26 @@ public class NameResolver
         ResolveBlockStatement(functionLiteral.Body);
 
         _functionStack.Pop();
+        LeaveScope();
+    }
+
+    private void ResolveMatchArm(MatchArm arm)
+    {
+        EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth);
+        foreach (var binding in arm.Bindings)
+        {
+            if (_scope.TryLookupInCurrent(binding.Value, out _))
+            {
+                _result.Diagnostics.Report(binding.Span, $"duplicate declaration of '{binding.Value}'", "N002");
+                continue;
+            }
+
+            var symbol = new NameSymbol(binding.Value, NameSymbolKind.Local, binding.Span, _scope.FunctionDepth);
+            _scope.Symbols[binding.Value] = symbol;
+            _result.IdentifierSymbols[binding] = symbol;
+        }
+
+        ResolveBlockStatement(arm.Body);
         LeaveScope();
     }
 

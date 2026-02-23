@@ -5,18 +5,25 @@ namespace Kong.Semantic;
 
 public static class TypeAnnotationBinder
 {
-    public static TypeSymbol? Bind(ITypeNode typeNode, DiagnosticBag diagnostics)
+    public static TypeSymbol? Bind(
+        ITypeNode typeNode,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes = null)
     {
         return typeNode switch
         {
-            NamedType namedType => BindNamedType(namedType, diagnostics),
-            ArrayType arrayType => BindArrayType(arrayType, diagnostics),
-            FunctionType functionType => BindFunctionType(functionType, diagnostics),
+            NamedType namedType => BindNamedType(namedType, diagnostics, namedTypes),
+            GenericType genericType => BindGenericType(genericType, diagnostics, namedTypes),
+            ArrayType arrayType => BindArrayType(arrayType, diagnostics, namedTypes),
+            FunctionType functionType => BindFunctionType(functionType, diagnostics, namedTypes),
             _ => BindUnknownType(typeNode, diagnostics),
         };
     }
 
-    private static TypeSymbol? BindNamedType(NamedType namedType, DiagnosticBag diagnostics)
+    private static TypeSymbol? BindNamedType(
+        NamedType namedType,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes)
     {
         var type = TypeSymbols.TryGetPrimitive(namedType.Name);
         if (type != null)
@@ -24,13 +31,53 @@ public static class TypeAnnotationBinder
             return type;
         }
 
+        if (namedTypes != null && namedTypes.TryGetValue(namedType.Name, out var namedTypeSymbol))
+        {
+            return namedTypeSymbol;
+        }
+
         diagnostics.Report(namedType.Span, $"unknown type '{namedType.Name}'", "T001");
         return null;
     }
 
-    private static TypeSymbol? BindArrayType(ArrayType arrayType, DiagnosticBag diagnostics)
+    private static TypeSymbol? BindGenericType(
+        GenericType genericType,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes)
     {
-        var elementType = Bind(arrayType.ElementType, diagnostics);
+        if (namedTypes == null || !namedTypes.TryGetValue(genericType.Name, out var genericTarget))
+        {
+            diagnostics.Report(genericType.Span, $"unknown generic type '{genericType.Name}'", "T001");
+            return null;
+        }
+
+        if (genericTarget is not EnumTypeSymbol enumType)
+        {
+            diagnostics.Report(genericType.Span, $"type '{genericType.Name}' does not accept type arguments", "T001");
+            return null;
+        }
+
+        var typeArguments = new List<TypeSymbol>(genericType.TypeArguments.Count);
+        foreach (var typeArgumentNode in genericType.TypeArguments)
+        {
+            var typeArgument = Bind(typeArgumentNode, diagnostics, namedTypes);
+            if (typeArgument == null)
+            {
+                return null;
+            }
+
+            typeArguments.Add(typeArgument);
+        }
+
+        return enumType with { TypeArguments = typeArguments };
+    }
+
+    private static TypeSymbol? BindArrayType(
+        ArrayType arrayType,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes)
+    {
+        var elementType = Bind(arrayType.ElementType, diagnostics, namedTypes);
         if (elementType == null)
         {
             return null;
@@ -39,12 +86,15 @@ public static class TypeAnnotationBinder
         return new ArrayTypeSymbol(elementType);
     }
 
-    private static TypeSymbol? BindFunctionType(FunctionType functionType, DiagnosticBag diagnostics)
+    private static TypeSymbol? BindFunctionType(
+        FunctionType functionType,
+        DiagnosticBag diagnostics,
+        IReadOnlyDictionary<string, TypeSymbol>? namedTypes)
     {
         var parameterTypes = new List<TypeSymbol>(functionType.ParameterTypes.Count);
         foreach (var parameterTypeNode in functionType.ParameterTypes)
         {
-            var parameterType = Bind(parameterTypeNode, diagnostics);
+            var parameterType = Bind(parameterTypeNode, diagnostics, namedTypes);
             if (parameterType == null)
             {
                 return null;
@@ -53,7 +103,7 @@ public static class TypeAnnotationBinder
             parameterTypes.Add(parameterType);
         }
 
-        var returnType = Bind(functionType.ReturnType, diagnostics);
+        var returnType = Bind(functionType.ReturnType, diagnostics, namedTypes);
         if (returnType == null)
         {
             return null;

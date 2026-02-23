@@ -1,0 +1,11 @@
+namespace Demo.Results;
+
+enum Result {
+    Ok(int),
+    Err(string),
+}
+
+enum Status {
+    Todo,
+    Done,
+}

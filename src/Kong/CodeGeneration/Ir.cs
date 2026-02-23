@@ -18,6 +18,7 @@ public sealed class IrProgram
 {
     public IrFunction EntryPoint { get; set; } = null!;
     public List<IrFunction> Functions { get; } = [];
+    public Dictionary<string, EnumDefinitionSymbol> EnumDefinitions { get; } = new(StringComparer.Ordinal);
 }
 
 public sealed class IrFunction
@@ -147,6 +148,27 @@ public sealed record IrNewObject(
     TypeSymbol ObjectType,
     IReadOnlyList<IrValueId> Arguments,
     IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
+public sealed record IrConstructEnum(
+    IrValueId Destination,
+    string EnumName,
+    string VariantName,
+    int Tag,
+    int MaxPayloadArity,
+    IReadOnlyList<IrValueId> Arguments,
+    IReadOnlyList<TypeSymbol> ArgumentTypes) : IrInstruction;
+
+public sealed record IrGetEnumTag(
+    IrValueId Destination,
+    IrValueId EnumValue,
+    string EnumName) : IrInstruction;
+
+public sealed record IrGetEnumPayload(
+    IrValueId Destination,
+    IrValueId EnumValue,
+    string EnumName,
+    int PayloadIndex,
+    TypeSymbol PayloadType) : IrInstruction;
 
 public abstract record IrTerminator;
 

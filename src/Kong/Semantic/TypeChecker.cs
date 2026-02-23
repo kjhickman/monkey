@@ -14,8 +14,28 @@ public class TypeCheckResult
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
     public Dictionary<FunctionDeclaration, FunctionTypeSymbol> DeclaredFunctionTypes { get; } = [];
+    public Dictionary<string, EnumDefinitionSymbol> EnumDefinitions { get; } = new(StringComparer.Ordinal);
+    public Dictionary<CallExpression, EnumVariantConstruction> ResolvedEnumVariantConstructions { get; } = [];
+    public Dictionary<MatchExpression, MatchResolution> ResolvedMatches { get; } = [];
     public DiagnosticBag Diagnostics { get; } = new();
 }
+
+public sealed record EnumVariantConstruction(
+    string EnumName,
+    string VariantName,
+    int Tag,
+    int MaxPayloadArity,
+    IReadOnlyList<TypeSymbol> PayloadTypes);
+
+public sealed record MatchArmResolution(
+    string VariantName,
+    int Tag,
+    IReadOnlyList<TypeSymbol> PayloadTypes,
+    IReadOnlyList<NameSymbol> BindingSymbols);
+
+public sealed record MatchResolution(
+    string EnumName,
+    IReadOnlyList<MatchArmResolution> Arms);
 
 public class TypeChecker
 {
@@ -27,20 +47,42 @@ public class TypeChecker
     private IReadOnlyDictionary<string, FunctionTypeSymbol> _externalFunctionTypes =
         new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal);
     private readonly ControlFlowAnalyzer _controlFlowAnalyzer = new();
+    private readonly List<EnumDeclaration> _externalEnumDeclarations = [];
+    private readonly Dictionary<string, EnumTypeSymbol> _enumTypes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (EnumDefinitionSymbol Enum, EnumVariantDefinition Variant)> _variantSymbols = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, TypeSymbol> _namedTypeSymbols = new(StringComparer.Ordinal);
 
     public TypeCheckResult Check(CompilationUnit unit, NameResolution names)
     {
-        return Check(unit, names, new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal));
+        return Check(
+            unit,
+            names,
+            new Dictionary<string, FunctionTypeSymbol>(StringComparer.Ordinal),
+            []);
     }
 
     public TypeCheckResult Check(
         CompilationUnit unit,
         NameResolution names,
-        IReadOnlyDictionary<string, FunctionTypeSymbol> externalFunctionTypes)
+        IReadOnlyDictionary<string, FunctionTypeSymbol> externalFunctionTypes,
+        IReadOnlyList<EnumDeclaration> externalEnumDeclarations)
     {
         _names = names;
         _externalFunctionTypes = externalFunctionTypes;
+        _externalEnumDeclarations.Clear();
+        _enumTypes.Clear();
+        _variantSymbols.Clear();
+        _namedTypeSymbols.Clear();
+        _result.EnumDefinitions.Clear();
+        _result.ResolvedEnumVariantConstructions.Clear();
+        _result.ResolvedMatches.Clear();
+        foreach (var declaration in externalEnumDeclarations)
+        {
+            _externalEnumDeclarations.Add(declaration);
+        }
+
         _result.Diagnostics.AddRange(names.Diagnostics);
+        PredeclareEnumDeclarations(unit);
         PredeclareFunctionDeclarations(unit);
 
         foreach (var statement in unit.Statements)
@@ -49,6 +91,84 @@ public class TypeChecker
         }
 
         return _result;
+    }
+
+    private void PredeclareEnumDeclarations(CompilationUnit unit)
+    {
+        foreach (var external in _externalEnumDeclarations)
+        {
+            _enumTypes[external.Name.Value] = new EnumTypeSymbol(external.Name.Value, []);
+            _namedTypeSymbols[external.Name.Value] = _enumTypes[external.Name.Value];
+        }
+
+        var allDeclarations = _externalEnumDeclarations.Concat(unit.Statements.OfType<EnumDeclaration>()).ToList();
+        foreach (var declaration in allDeclarations)
+        {
+            if (_enumTypes.ContainsKey(declaration.Name.Value))
+            {
+                if (_externalEnumDeclarations.Contains(declaration))
+                {
+                    continue;
+                }
+
+                _result.Diagnostics.Report(declaration.Name.Span,
+                    $"duplicate enum declaration '{declaration.Name.Value}'",
+                    "T128");
+                continue;
+            }
+
+            if (declaration.TypeParameters.Count > 0)
+            {
+                _result.Diagnostics.Report(declaration.Name.Span,
+                    $"generic enum declarations are not implemented yet for '{declaration.Name.Value}'",
+                    "T129");
+            }
+
+            _enumTypes[declaration.Name.Value] = new EnumTypeSymbol(declaration.Name.Value, []);
+            _namedTypeSymbols[declaration.Name.Value] = _enumTypes[declaration.Name.Value];
+        }
+
+        foreach (var declaration in allDeclarations)
+        {
+            if (!_enumTypes.TryGetValue(declaration.Name.Value, out _))
+            {
+                continue;
+            }
+
+            var variants = new List<EnumVariantDefinition>(declaration.Variants.Count);
+            var seenVariants = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < declaration.Variants.Count; i++)
+            {
+                var variant = declaration.Variants[i];
+                if (!seenVariants.Add(variant.Name.Value))
+                {
+                    _result.Diagnostics.Report(variant.Name.Span,
+                        $"duplicate enum variant '{variant.Name.Value}' in enum '{declaration.Name.Value}'",
+                        "T128");
+                    continue;
+                }
+
+                var payloadTypes = new List<TypeSymbol>(variant.PayloadTypes.Count);
+                foreach (var payloadTypeNode in variant.PayloadTypes)
+                {
+                    payloadTypes.Add(TypeAnnotationBinder.Bind(payloadTypeNode, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
+                }
+
+                variants.Add(new EnumVariantDefinition(variant.Name.Value, payloadTypes, i));
+            }
+
+            var enumDefinition = new EnumDefinitionSymbol(declaration.Name.Value, [], variants);
+            _result.EnumDefinitions[declaration.Name.Value] = enumDefinition;
+            RegisterVariantSymbols(enumDefinition);
+        }
+    }
+
+    private void RegisterVariantSymbols(EnumDefinitionSymbol enumDefinition)
+    {
+        foreach (var variant in enumDefinition.Variants)
+        {
+            _variantSymbols[variant.Name] = (enumDefinition, variant);
+        }
     }
 
     private void PredeclareFunctionDeclarations(CompilationUnit unit)
@@ -72,12 +192,12 @@ public class TypeChecker
                     continue;
                 }
 
-                parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error);
+                parameterTypes.Add(TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error);
             }
 
             var returnType = declaration.ReturnTypeAnnotation == null
                 ? TypeSymbols.Void
-                : TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error;
+                : TypeAnnotationBinder.Bind(declaration.ReturnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
 
             var functionType = new FunctionTypeSymbol(parameterTypes, returnType);
             _result.DeclaredFunctionTypes[declaration] = functionType;
@@ -113,6 +233,8 @@ public class TypeChecker
                 break;
             case FunctionDeclaration functionDeclaration:
                 CheckFunctionDeclaration(functionDeclaration);
+                break;
+            case EnumDeclaration:
                 break;
             case ReturnStatement returnStatement:
                 CheckReturnStatement(returnStatement);
@@ -164,7 +286,7 @@ public class TypeChecker
         }
         else
         {
-            declaredType = TypeAnnotationBinder.Bind(statement.TypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error;
+            declaredType = TypeAnnotationBinder.Bind(statement.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
             if (!IsAssignable(initializerType, declaredType))
             {
                 _result.Diagnostics.Report(statement.Span,
@@ -360,6 +482,7 @@ public class TypeChecker
             PrefixExpression prefixExpression => CheckPrefixExpression(prefixExpression),
             InfixExpression infixExpression => CheckInfixExpression(infixExpression),
             IfExpression ifExpression => CheckIfExpression(ifExpression),
+            MatchExpression matchExpression => CheckMatchExpression(matchExpression),
             FunctionLiteral functionLiteral => CheckFunctionLiteral(functionLiteral),
             CallExpression callExpression => CheckCallExpression(callExpression),
             MemberAccessExpression memberAccessExpression => CheckMemberAccessExpression(memberAccessExpression),
@@ -377,6 +500,14 @@ public class TypeChecker
     {
         if (!_names.IdentifierSymbols.TryGetValue(identifier, out var symbol))
         {
+            return TypeSymbols.Error;
+        }
+
+        if (symbol.Kind == NameSymbolKind.EnumVariant)
+        {
+            _result.Diagnostics.Report(identifier.Span,
+                $"enum variant '{identifier.Value}' must be called like '{identifier.Value}(...)'",
+                "T128");
             return TypeSymbols.Error;
         }
 
@@ -472,6 +603,112 @@ public class TypeChecker
         return TypeSymbols.Error;
     }
 
+    private TypeSymbol CheckMatchExpression(MatchExpression expression)
+    {
+        var targetType = CheckExpression(expression.Target);
+        if (targetType is not EnumTypeSymbol enumType)
+        {
+            if (targetType != TypeSymbols.Error)
+            {
+                _result.Diagnostics.Report(expression.Target.Span,
+                    $"match target must be an enum value, got '{targetType}'",
+                    "T130");
+            }
+
+            return TypeSymbols.Error;
+        }
+
+        if (!_result.EnumDefinitions.TryGetValue(enumType.EnumName, out var enumDefinition))
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"unknown enum type '{enumType.EnumName}' in match expression",
+                "T130");
+            return TypeSymbols.Error;
+        }
+
+        if (expression.Arms.Count == 0)
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"match expression for enum '{enumDefinition.Name}' must declare at least one arm",
+                "T131");
+            return TypeSymbols.Error;
+        }
+
+        var seenVariants = new HashSet<string>(StringComparer.Ordinal);
+        var resolvedArms = new List<MatchArmResolution>(expression.Arms.Count);
+        var armTypes = new List<TypeSymbol>(expression.Arms.Count);
+
+        foreach (var arm in expression.Arms)
+        {
+            var variant = enumDefinition.Variants.FirstOrDefault(v => string.Equals(v.Name, arm.VariantName.Value, StringComparison.Ordinal));
+            if (variant == null)
+            {
+                _result.Diagnostics.Report(arm.VariantName.Span,
+                    $"unknown enum variant '{arm.VariantName.Value}' for enum '{enumDefinition.Name}'",
+                    "T130");
+                continue;
+            }
+
+            if (!seenVariants.Add(variant.Name))
+            {
+                _result.Diagnostics.Report(arm.VariantName.Span,
+                    $"duplicate match arm for enum variant '{variant.Name}'",
+                    "T131");
+                continue;
+            }
+
+            if (arm.Bindings.Count != variant.PayloadTypes.Count)
+            {
+                _result.Diagnostics.Report(arm.Span,
+                    $"match arm '{variant.Name}' expects {variant.PayloadTypes.Count} binding(s), got {arm.Bindings.Count}",
+                    "T131");
+                continue;
+            }
+
+            var bindingSymbols = new List<NameSymbol>(arm.Bindings.Count);
+            for (var i = 0; i < arm.Bindings.Count; i++)
+            {
+                var binding = arm.Bindings[i];
+                if (_names.IdentifierSymbols.TryGetValue(binding, out var bindingSymbol))
+                {
+                    _symbolTypes[bindingSymbol] = variant.PayloadTypes[i];
+                    bindingSymbols.Add(bindingSymbol);
+                }
+            }
+
+            var armType = CheckBlockExpressionType(arm.Body);
+            armTypes.Add(armType);
+            resolvedArms.Add(new MatchArmResolution(variant.Name, variant.Tag, variant.PayloadTypes, bindingSymbols));
+        }
+
+        if (seenVariants.Count != enumDefinition.Variants.Count)
+        {
+            _result.Diagnostics.Report(expression.Span,
+                $"match expression for enum '{enumDefinition.Name}' is not exhaustive",
+                "T131");
+        }
+
+        if (armTypes.Count == 0)
+        {
+            return TypeSymbols.Error;
+        }
+
+        var resultType = armTypes[0];
+        for (var i = 1; i < armTypes.Count; i++)
+        {
+            if (!AreCompatible(resultType, armTypes[i]))
+            {
+                _result.Diagnostics.Report(expression.Span,
+                    $"match arms must have matching types, got '{resultType}' and '{armTypes[i]}'",
+                    "T110");
+                return TypeSymbols.Error;
+            }
+        }
+
+        _result.ResolvedMatches[expression] = new MatchResolution(enumDefinition.Name, resolvedArms);
+        return resultType;
+    }
+
     private TypeSymbol CheckBlockExpressionType(BlockStatement block)
     {
         TypeSymbol? lastType = null;
@@ -508,7 +745,7 @@ public class TypeChecker
         }
         else
         {
-            returnType = TypeAnnotationBinder.Bind(functionLiteral.ReturnTypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error;
+            returnType = TypeAnnotationBinder.Bind(functionLiteral.ReturnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
         }
 
         var functionType = new FunctionTypeSymbol(parameterTypes, returnType);
@@ -556,7 +793,7 @@ public class TypeChecker
             return TypeSymbols.Error;
         }
 
-        return TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics) ?? TypeSymbols.Error;
+        return TypeAnnotationBinder.Bind(parameter.TypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
     }
 
     private TypeSymbol CheckCallExpression(CallExpression expression)
@@ -581,6 +818,43 @@ public class TypeChecker
             _result.Diagnostics.Report(expression.Span,
                 "out/ref modifiers are supported only for CLR interop method calls",
                 "T122");
+        }
+
+        if (expression.Function is Identifier identifier &&
+            _names.IdentifierSymbols.TryGetValue(identifier, out var symbol) &&
+            symbol.Kind == NameSymbolKind.EnumVariant &&
+            _variantSymbols.TryGetValue(symbol.Name, out var variantBinding))
+        {
+            var expectedPayloadTypes = variantBinding.Variant.PayloadTypes;
+            if (argumentTypes.Count != expectedPayloadTypes.Count)
+            {
+                _result.Diagnostics.Report(
+                    expression.Span,
+                    $"wrong number of arguments for enum variant '{variantBinding.Variant.Name}': expected {expectedPayloadTypes.Count}, got {argumentTypes.Count}",
+                    "T112");
+                return new EnumTypeSymbol(variantBinding.Enum.Name, []);
+            }
+
+            for (var i = 0; i < expectedPayloadTypes.Count; i++)
+            {
+                if (!IsAssignable(argumentTypes[i], expectedPayloadTypes[i]))
+                {
+                    _result.Diagnostics.Report(
+                        expression.Arguments[i].Span,
+                        $"argument {i + 1} type mismatch for enum variant '{variantBinding.Variant.Name}': expected '{expectedPayloadTypes[i]}', got '{argumentTypes[i]}'",
+                        "T113");
+                }
+            }
+
+            _result.ResolvedEnumVariantConstructions[expression] = new EnumVariantConstruction(
+                variantBinding.Enum.Name,
+                variantBinding.Variant.Name,
+                variantBinding.Variant.Tag,
+                variantBinding.Enum.MaxPayloadArity,
+                variantBinding.Variant.PayloadTypes);
+            return _namedTypeSymbols.TryGetValue(variantBinding.Enum.Name, out var enumType)
+                ? enumType
+                : new EnumTypeSymbol(variantBinding.Enum.Name, []);
         }
 
         var functionType = CheckExpression(expression.Function);
@@ -1170,6 +1444,25 @@ public class TypeChecker
             for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
             {
                 if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is EnumTypeSymbol leftEnum && right is EnumTypeSymbol rightEnum)
+        {
+            if (!string.Equals(leftEnum.EnumName, rightEnum.EnumName, StringComparison.Ordinal) ||
+                leftEnum.TypeArguments.Count != rightEnum.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftEnum.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftEnum.TypeArguments[i], rightEnum.TypeArguments[i]))
                 {
                     return false;
                 }

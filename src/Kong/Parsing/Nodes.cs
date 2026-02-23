@@ -251,6 +251,55 @@ public class NamespaceStatement : IStatement
     public string String() => $"namespace {QualifiedName};";
 }
 
+public class EnumDeclaration : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'enum' token
+    public Identifier Name { get; set; } = null!;
+    public List<Identifier> TypeParameters { get; set; } = [];
+    public List<EnumVariant> Variants { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var sb = new StringBuilder();
+        sb.Append("enum ");
+        sb.Append(Name.String());
+        if (TypeParameters.Count > 0)
+        {
+            sb.Append('<');
+            sb.Append(string.Join(", ", TypeParameters.Select(p => p.String())));
+            sb.Append('>');
+        }
+
+        sb.Append(" { ");
+        sb.Append(string.Join(", ", Variants.Select(v => v.String())));
+        sb.Append(" }");
+        return sb.ToString();
+    }
+}
+
+public class EnumVariant : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the variant identifier token
+    public Identifier Name { get; set; } = null!;
+    public List<ITypeNode> PayloadTypes { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        if (PayloadTypes.Count == 0)
+        {
+            return Name.String();
+        }
+
+        return $"{Name.String()}({string.Join(", ", PayloadTypes.Select(t => t.String()))})";
+    }
+}
+
 public class ForInStatement : IStatement
 {
     public Span Span { get; set; }
@@ -374,6 +423,40 @@ public class IfExpression : IExpression
     }
 }
 
+public class MatchArm : INode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the variant identifier token
+    public Identifier VariantName { get; set; } = null!;
+    public List<Identifier> Bindings { get; set; } = [];
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var bindingText = Bindings.Count == 0
+            ? ""
+            : $"({string.Join(", ", Bindings.Select(b => b.String()))})";
+        return $"{VariantName.String()}{bindingText} => {Body.String()}";
+    }
+}
+
+public class MatchExpression : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'match' token
+    public IExpression Target { get; set; } = null!;
+    public List<MatchArm> Arms { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"match ({Target.String()}) {{ {string.Join(", ", Arms.Select(a => a.String()))} }}";
+    }
+}
+
 public class BlockStatement : IStatement
 {
     public Span Span { get; set; }
@@ -435,6 +518,17 @@ public class NamedType : ITypeNode
 
     public string TokenLiteral() => Token.Literal;
     public string String() => Name;
+}
+
+public class GenericType : ITypeNode
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the base type identifier token
+    public string Name { get; set; } = "";
+    public List<ITypeNode> TypeArguments { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"{Name}<{string.Join(", ", TypeArguments.Select(t => t.String()))}>";
 }
 
 public class ArrayType : ITypeNode
