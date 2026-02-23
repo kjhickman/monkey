@@ -174,6 +174,9 @@ public class NameResolver
             case AssignmentStatement assignmentStatement:
                 ResolveAssignmentStatement(assignmentStatement);
                 break;
+            case ForInStatement forInStatement:
+                ResolveForInStatement(forInStatement);
+                break;
             case FunctionDeclaration functionDeclaration:
                 ResolveFunctionDeclaration(functionDeclaration);
                 break;
@@ -302,6 +305,19 @@ public class NameResolver
     {
         ResolveIdentifier(statement.Name);
         ResolveExpression(statement.Value);
+    }
+
+    private void ResolveForInStatement(ForInStatement statement)
+    {
+        ResolveExpression(statement.Iterable);
+
+        EnterScope(isGlobalRoot: false, functionDepth: _scope.FunctionDepth);
+        var symbol = new NameSymbol(statement.Iterator.Value, NameSymbolKind.Local, statement.Iterator.Span, _scope.FunctionDepth);
+        _scope.Symbols[statement.Iterator.Value] = symbol;
+        _result.IdentifierSymbols[statement.Iterator] = symbol;
+
+        ResolveBlockStatement(statement.Body);
+        LeaveScope();
     }
 
     private void ResolveBlockStatement(BlockStatement block)

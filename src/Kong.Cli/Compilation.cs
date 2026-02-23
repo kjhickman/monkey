@@ -303,8 +303,15 @@ public static class Compilation
             case LetStatement { Value: { } value }:
                 ValidateExpression(value, filePath, diagnostics);
                 break;
+            case AssignmentStatement assignmentStatement:
+                ValidateExpression(assignmentStatement.Value, filePath, diagnostics);
+                break;
             case ReturnStatement { ReturnValue: { } returnValue }:
                 ValidateExpression(returnValue, filePath, diagnostics);
+                break;
+            case ForInStatement forInStatement:
+                ValidateExpression(forInStatement.Iterable, filePath, diagnostics);
+                ValidateBlock(forInStatement.Body, filePath, diagnostics);
                 break;
             case ExpressionStatement { Expression: { } expression }:
                 ValidateExpression(expression, filePath, diagnostics);

@@ -182,10 +182,46 @@ public class Parser
             TokenType.Namespace => ParseNamespaceStatement(),
             TokenType.Let => ParseLetStatement(),
             TokenType.Var => ParseVarStatement(),
+            TokenType.For => ParseForInStatement(),
             TokenType.Return => ParseReturnStatement(),
             TokenType.Identifier when PeekTokenIs(TokenType.Assign) => ParseAssignmentStatement(),
             _ => ParseExpressionStatement(),
         };
+    }
+
+    private ForInStatement? ParseForInStatement()
+    {
+        var startSpan = _curToken.Span;
+        var statement = new ForInStatement { Token = _curToken };
+
+        if (!ExpectPeek(TokenType.Identifier))
+        {
+            return null;
+        }
+
+        statement.Iterator = new Identifier
+        {
+            Token = _curToken,
+            Value = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!ExpectPeek(TokenType.In))
+        {
+            return null;
+        }
+
+        NextToken();
+        statement.Iterable = ParseExpression(Precedence.Lowest)!;
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        statement.Body = ParseBlockStatement();
+        statement.Span = new Span(startSpan.Start, statement.Body.Span.End);
+        return statement;
     }
 
     private LetStatement? ParseVarStatement()

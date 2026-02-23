@@ -274,6 +274,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesForInLoopOverArray()
+    {
+        var source = "let xs: int[] = [1, 2, 3]; var total: int = 0; for i in xs { total = total + i; } total;";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(6, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
         var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");

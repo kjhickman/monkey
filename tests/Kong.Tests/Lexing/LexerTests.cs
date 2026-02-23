@@ -562,4 +562,31 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesForInLoopTokens()
+    {
+        var input = "for i in xs { i; }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.For, "for"),
+            (TokenType.Identifier, "i"),
+            (TokenType.In, "in"),
+            (TokenType.Identifier, "xs"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Identifier, "i"),
+            (TokenType.Semicolon, ";"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

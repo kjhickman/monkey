@@ -36,6 +36,10 @@ fn Main() {
     let uiv: nuint = System.UIntPtr.Zero;
     let fv: float = System.Convert.ToSingle("6");
     let dv: decimal = System.Decimal.Parse("7");
+    var loopTotal: int = 0;
+    for i in matrix[0] {
+        loopTotal = loopTotal + i;
+    }
     checks = checks + 1;
 
     // Exercise logical operators with short-circuit-friendly shape.
@@ -48,6 +52,7 @@ fn Main() {
         fromClr == 3.0 &&
         scaled == 3.0 &&
         parseOk && parsed &&
+        loopTotal == 3 &&
         checks == 1;
 
     if (ok || false) {

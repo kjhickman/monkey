@@ -157,6 +157,14 @@ public class IrLowerer
                     }
                     break;
 
+                case ForInStatement forInStatement:
+                    if (!LowerForInStatement(forInStatement))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case FunctionDeclaration functionDeclaration:
                     if (!LowerFunctionDeclaration(functionDeclaration, isTopLevel))
                     {
@@ -218,7 +226,7 @@ public class IrLowerer
 
                 default:
                     _result.Diagnostics.Report(statement.Span,
-                        "phase-4 IR lowerer supports let/var, assignment, return, and expression statements only",
+                        "phase-4 IR lowerer supports let/var, assignment, for-in, return, and expression statements only",
                         "IR001");
                     Restore();
                     return false;
@@ -375,6 +383,145 @@ public class IrLowerer
         }
 
         _currentBlock.Instructions.Add(new IrStoreLocal(local, value.Value));
+        return true;
+    }
+
+    private bool LowerForInStatement(ForInStatement statement)
+    {
+        if (!TryGetExpressionType(statement.Iterable, out var iterableType) || iterableType is not ArrayTypeSymbol { ElementType: var elementType })
+        {
+            _result.Diagnostics.Report(statement.Iterable.Span,
+                "phase-4 IR lowerer requires for-in iterables to be arrays",
+                "IR001");
+            return false;
+        }
+
+        var arrayValue = LowerExpression(statement.Iterable);
+        if (arrayValue == null)
+        {
+            return false;
+        }
+
+        var iteratorLocal = AllocateNamedLocal(statement.Iterator.Value, elementType);
+        var indexLocal = AllocateAnonymousLocal(TypeSymbols.Int);
+
+        var zero = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrConstInt(zero, 0));
+        _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal, zero));
+
+        var conditionBlock = NewBlock();
+        var bodyBlock = NewBlock();
+        var afterBlock = NewBlock();
+        _currentBlock.Terminator = new IrJump(conditionBlock.Id);
+
+        _currentBlock = conditionBlock;
+        var indexForCondition = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrLoadLocal(indexForCondition, indexLocal));
+
+        var lengthValue = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrArrayLength(lengthValue, arrayValue.Value));
+
+        var hasNext = AllocateValue(TypeSymbols.Bool);
+        _currentBlock.Instructions.Add(new IrBinary(hasNext, IrBinaryOperator.LessThan, indexForCondition, lengthValue));
+        _currentBlock.Terminator = new IrBranch(hasNext, bodyBlock.Id, afterBlock.Id);
+
+        _currentBlock = bodyBlock;
+        var indexForElement = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrLoadLocal(indexForElement, indexLocal));
+        var elementValue = AllocateValue(elementType);
+        _currentBlock.Instructions.Add(new IrArrayIndex(elementValue, arrayValue.Value, indexForElement, elementType));
+        _currentBlock.Instructions.Add(new IrStoreLocal(iteratorLocal, elementValue));
+
+        if (!LowerLoopBody(statement.Body, conditionBlock.Id, indexLocal))
+        {
+            return false;
+        }
+
+        _currentBlock = afterBlock;
+        return true;
+    }
+
+    private bool LowerLoopBody(BlockStatement body, int continueBlockId, IrLocalId indexLocal)
+    {
+        foreach (var statement in body.Statements)
+        {
+            switch (statement)
+            {
+                case LetStatement letStatement:
+                    if (!LowerLetStatement(letStatement))
+                    {
+                        return false;
+                    }
+                    break;
+                case AssignmentStatement assignmentStatement:
+                    if (!LowerAssignmentStatement(assignmentStatement))
+                    {
+                        return false;
+                    }
+                    break;
+                case ForInStatement forInStatement:
+                    if (!LowerForInStatement(forInStatement))
+                    {
+                        return false;
+                    }
+                    break;
+                case ImportStatement:
+                case NamespaceStatement:
+                    break;
+                case ReturnStatement returnStatement:
+                    if (returnStatement.ReturnValue == null)
+                    {
+                        if (_function.ReturnType == TypeSymbols.Void)
+                        {
+                            _currentBlock.Terminator = new IrReturnVoid();
+                            return true;
+                        }
+
+                        _result.Diagnostics.Report(returnStatement.Span,
+                            "phase-6 IR lowerer requires return values for non-void functions",
+                            "IR001");
+                        return false;
+                    }
+
+                    var returnValue = LowerExpression(returnStatement.ReturnValue);
+                    if (returnValue == null)
+                    {
+                        return false;
+                    }
+
+                    _currentBlock.Terminator = new IrReturn(returnValue.Value);
+                    return true;
+                case ExpressionStatement { Expression: { } expression }:
+                {
+                    var value = LowerExpression(expression);
+                    if (value == null && (!TryGetExpressionType(expression, out var type) || type != TypeSymbols.Void))
+                    {
+                        return false;
+                    }
+
+                    break;
+                }
+                default:
+                    _result.Diagnostics.Report(statement.Span,
+                        "phase-6 IR lowerer does not support this statement in loop body",
+                        "IR001");
+                    return false;
+            }
+
+            if (_currentBlock.Terminator != null)
+            {
+                return true;
+            }
+        }
+
+        var currentIndex = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrLoadLocal(currentIndex, indexLocal));
+        var one = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrConstInt(one, 1));
+        var incremented = AllocateValue(TypeSymbols.Int);
+        _currentBlock.Instructions.Add(new IrBinary(incremented, IrBinaryOperator.Add, currentIndex, one));
+        _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal, incremented));
+        _currentBlock.Terminator = new IrJump(continueBlockId);
         return true;
     }
 
@@ -916,6 +1063,13 @@ public class IrLowerer
                     }
                     break;
 
+                case ForInStatement forInStatement:
+                    if (!LowerForInStatement(forInStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ImportStatement:
                 case NamespaceStatement:
                     break;
@@ -991,6 +1145,13 @@ public class IrLowerer
 
                 case AssignmentStatement assignmentStatement:
                     if (!LowerAssignmentStatement(assignmentStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
+                case ForInStatement forInStatement:
+                    if (!LowerForInStatement(forInStatement))
                     {
                         return null;
                     }

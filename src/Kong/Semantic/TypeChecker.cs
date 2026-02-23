@@ -98,6 +98,9 @@ public class TypeChecker
             case AssignmentStatement assignmentStatement:
                 CheckAssignmentStatement(assignmentStatement);
                 break;
+            case ForInStatement forInStatement:
+                CheckForInStatement(forInStatement);
+                break;
             case FunctionDeclaration functionDeclaration:
                 CheckFunctionDeclaration(functionDeclaration);
                 break;
@@ -225,6 +228,28 @@ public class TypeChecker
                 $"cannot assign expression of type '{valueType}' to variable '{statement.Name.Value}' of type '{targetType}'",
                 "T102");
         }
+    }
+
+    private void CheckForInStatement(ForInStatement statement)
+    {
+        var iterableType = CheckExpression(statement.Iterable);
+        var elementType = iterableType is ArrayTypeSymbol arrayType
+            ? arrayType.ElementType
+            : TypeSymbols.Error;
+
+        if (iterableType is not ArrayTypeSymbol && iterableType != TypeSymbols.Error)
+        {
+            _result.Diagnostics.Report(statement.Iterable.Span,
+                $"for-in iterable must be an array, got '{iterableType}'",
+                "T125");
+        }
+
+        if (_names.IdentifierSymbols.TryGetValue(statement.Iterator, out var symbol))
+        {
+            _symbolTypes[symbol] = elementType;
+        }
+
+        CheckBlockStatement(statement.Body);
     }
 
     private void CheckReturnStatement(ReturnStatement statement)

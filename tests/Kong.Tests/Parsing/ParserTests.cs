@@ -1078,6 +1078,22 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesForInStatement()
+    {
+        var input = "for i in xs { i; }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<ForInStatement>(unit.Statements[0]);
+        Assert.Equal("i", statement.Iterator.Value);
+        var iterable = Assert.IsType<Identifier>(statement.Iterable);
+        Assert.Equal("xs", iterable.Value);
+        Assert.Single(statement.Body.Statements);
+    }
+
+    [Fact]
     public void TestParsesImportStatement()
     {
         var input = "import System.Console;";

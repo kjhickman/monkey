@@ -927,6 +927,13 @@ public class ClrArtifactBuilder
                         il.Emit(OpCodes.Stloc, valueLocals[arrayIndex.Destination]);
                         break;
 
+                    case IrArrayLength arrayLength:
+                        il.Emit(OpCodes.Ldloc, valueLocals[arrayLength.Array]);
+                        il.Emit(OpCodes.Ldlen);
+                        il.Emit(OpCodes.Conv_I4);
+                        il.Emit(OpCodes.Stloc, valueLocals[arrayLength.Destination]);
+                        break;
+
                     case IrNewObject newObject:
                     {
                         if (!ConstructorClrResolver.TryResolve(

@@ -310,6 +310,23 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersForInLoop()
+    {
+        var source = "let xs: int[] = [1, 2, 3]; for i in xs { i; } 1;";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrArrayLength);
+        Assert.Contains(instructions, i => i is IrArrayIndex { ElementType: IntTypeSymbol });
+        Assert.Contains(lowering.Program.EntryPoint.Blocks, b => b.Terminator is IrBranch);
+    }
+
+    [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
         var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";

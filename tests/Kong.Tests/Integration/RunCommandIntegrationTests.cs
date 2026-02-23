@@ -739,6 +739,24 @@ public class RunCommandIntegrationTests
     }
 
     [Fact]
+    public void TestRunCommandSupportsForInLoop()
+    {
+        var source = "import System; fn Main() { let array: int[] = [1, 2, 3]; var total: int = 0; for i in array { total = total + i; } if (total == 6) { Console.WriteLine(1); } else { Console.WriteLine(0); } }";
+        var filePath = CreateTempProgram(source);
+        try
+        {
+            var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
+            Assert.Equal(string.Empty, stderr.Trim());
+            Assert.Contains("1", stdout);
+            Assert.Equal(0, exitCode);
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
+    }
+
+    [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
         var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");

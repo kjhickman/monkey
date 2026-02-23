@@ -620,6 +620,26 @@ public class TypeCheckerTests
         Assert.Equal(TypeSymbols.Decimal, result.ExpressionTypes[Assert.IsType<CallExpression>(Assert.IsType<ExpressionStatement>(unit.Statements[9]).Expression)]);
     }
 
+    [Fact]
+    public void TestTypeChecksForInLoopOverArray()
+    {
+        var source = "let xs: int[] = [1, 2, 3]; for i in xs { let y: int = i; }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsForInLoopRequiresArrayIterable()
+    {
+        var source = "let x: int = 1; for i in x { i; }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T125");
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

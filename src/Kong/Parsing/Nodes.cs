@@ -211,6 +211,22 @@ public class NamespaceStatement : IStatement
     public string String() => $"namespace {QualifiedName};";
 }
 
+public class ForInStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'for' token
+    public Identifier Iterator { get; set; } = null!;
+    public IExpression Iterable { get; set; } = null!;
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"for {Iterator.String()} in {Iterable.String()} {Body.String()}";
+    }
+}
+
 public class IntegerLiteral : IExpression
 {
     public Span Span { get; set; }
