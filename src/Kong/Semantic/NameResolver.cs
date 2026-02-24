@@ -261,6 +261,9 @@ public class NameResolver
             case ForInStatement forInStatement:
                 ResolveForInStatement(forInStatement);
                 break;
+            case WhileStatement whileStatement:
+                ResolveWhileStatement(whileStatement);
+                break;
             case BreakStatement:
             case ContinueStatement:
                 break;
@@ -428,6 +431,12 @@ public class NameResolver
 
         ResolveBlockStatement(statement.Body);
         LeaveScope();
+    }
+
+    private void ResolveWhileStatement(WhileStatement statement)
+    {
+        ResolveExpression(statement.Condition);
+        ResolveBlockStatement(statement.Body);
     }
 
     private void ResolveBlockStatement(BlockStatement block)

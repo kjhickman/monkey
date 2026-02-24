@@ -655,6 +655,9 @@ public class TypeChecker
             case ForInStatement forInStatement:
                 CheckForInStatement(forInStatement);
                 break;
+            case WhileStatement whileStatement:
+                CheckWhileStatement(whileStatement);
+                break;
             case BreakStatement breakStatement:
                 CheckBreakStatement(breakStatement);
                 break;
@@ -825,6 +828,21 @@ public class TypeChecker
         if (_names.IdentifierSymbols.TryGetValue(statement.Iterator, out var symbol))
         {
             _symbolTypes[symbol] = elementType;
+        }
+
+        _loopDepth++;
+        CheckBlockStatement(statement.Body);
+        _loopDepth--;
+    }
+
+    private void CheckWhileStatement(WhileStatement statement)
+    {
+        var conditionType = CheckExpression(statement.Condition);
+        if (conditionType != TypeSymbols.Bool && conditionType != TypeSymbols.Error)
+        {
+            _result.Diagnostics.Report(statement.Condition.Span,
+                $"while condition must be 'bool', got '{conditionType}'",
+                "T109");
         }
 
         _loopDepth++;

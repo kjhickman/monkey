@@ -104,6 +104,23 @@ public class NameResolverTests
     }
 
     [Fact]
+    public void TestResolvesWhileConditionAndBody()
+    {
+        var unit = Parse("module Test let i = 0 while i < 2 { let x = i x }");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var whileStatement = Assert.IsType<WhileStatement>(unit.Statements[2]);
+        var condition = Assert.IsType<InfixExpression>(whileStatement.Condition);
+        var conditionIdentifier = Assert.IsType<Identifier>(condition.Left);
+        Assert.True(result.IdentifierSymbols.TryGetValue(conditionIdentifier, out var symbol));
+        Assert.Equal(NameSymbolKind.Global, symbol.Kind);
+    }
+
+    [Fact]
     public void TestCapturesOuterFunctionVariable()
     {
         var unit = Parse("module Test let f = (x: int) => () => x let g = f(1) g");

@@ -88,6 +88,7 @@ public class ControlFlowAnalyzer
             BlockStatement blockStatement => AnalyzeBlock(blockStatement, diagnostics),
             LetStatement letStatement => AnalyzeExpression(letStatement.Value, diagnostics),
             ForInStatement forInStatement => AnalyzeForInStatement(forInStatement, diagnostics),
+            WhileStatement whileStatement => AnalyzeWhileStatement(whileStatement, diagnostics),
             AssignmentStatement assignmentStatement => AnalyzeExpression(assignmentStatement.Value, diagnostics),
             IndexAssignmentStatement indexAssignmentStatement => AnalyzeIndexAssignment(indexAssignmentStatement, diagnostics),
             BreakStatement => new FlowState(AlwaysReturns: false),
@@ -100,6 +101,13 @@ public class ControlFlowAnalyzer
     private FlowState AnalyzeForInStatement(ForInStatement statement, DiagnosticBag diagnostics)
     {
         AnalyzeExpression(statement.Iterable, diagnostics);
+        _ = AnalyzeBlock(statement.Body, diagnostics);
+        return new FlowState(AlwaysReturns: false);
+    }
+
+    private FlowState AnalyzeWhileStatement(WhileStatement statement, DiagnosticBag diagnostics)
+    {
+        AnalyzeExpression(statement.Condition, diagnostics);
         _ = AnalyzeBlock(statement.Body, diagnostics);
         return new FlowState(AlwaysReturns: false);
     }

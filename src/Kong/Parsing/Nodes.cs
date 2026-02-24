@@ -486,6 +486,21 @@ public class ForInStatement : IStatement
     }
 }
 
+public class WhileStatement : IStatement
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'while' token
+    public IExpression Condition { get; set; } = null!;
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"while {Condition.String()} {Body.String()}";
+    }
+}
+
 public class IntegerLiteral : IExpression
 {
     public Span Span { get; set; }

@@ -190,6 +190,7 @@ public class Parser
             TokenType.Let => ParseLetStatement(),
             TokenType.Var => ParseVarStatement(),
             TokenType.For => ParseForInStatement(),
+            TokenType.While => ParseWhileStatement(),
             TokenType.Break => ParseBreakStatement(),
             TokenType.Continue => ParseContinueStatement(),
             TokenType.Return => ParseReturnStatement(),
@@ -323,6 +324,30 @@ public class Parser
 
         NextToken();
         statement.Iterable = ParseExpression(Precedence.Lowest)!;
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null;
+        }
+
+        statement.Body = ParseBlockStatement();
+        statement.Span = new Span(startSpan.Start, statement.Body.Span.End);
+        return statement;
+    }
+
+    private WhileStatement? ParseWhileStatement()
+    {
+        var startSpan = _curToken.Span;
+        var statement = new WhileStatement { Token = _curToken };
+
+        NextToken();
+        var condition = ParseExpression(Precedence.Lowest);
+        if (condition == null)
+        {
+            return null;
+        }
+
+        statement.Condition = condition;
 
         if (!ExpectPeek(TokenType.LeftBrace))
         {

@@ -720,6 +720,36 @@ public class LexerTests
     }
 
     [Fact]
+    public void TestLexesWhileLoopTokens()
+    {
+        var input = "while i < 3 { i = i + 1 }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.While, "while"),
+            (TokenType.Identifier, "i"),
+            (TokenType.LessThan, "<"),
+            (TokenType.Integer, "3"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Identifier, "i"),
+            (TokenType.Assign, "="),
+            (TokenType.Identifier, "i"),
+            (TokenType.Plus, "+"),
+            (TokenType.Integer, "1"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
+
+    [Fact]
     public void TestLexesBreakAndContinueKeywords()
     {
         var input = "break; continue;";

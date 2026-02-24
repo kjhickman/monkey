@@ -357,6 +357,21 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersWhileLoop()
+    {
+        var source = "var i: int = 0 while i < 3 { i = i + 1 } 1";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        Assert.Contains(lowering.Program!.EntryPoint.Blocks, b => b.Terminator is IrBranch);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks, b => b.Terminator is IrJump);
+    }
+
+    [Fact]
     public void TestLowersIndexAssignmentStatement()
     {
         var source = "var xs: int[] = [1, 2, 3] xs[1] = 42 xs[1]";

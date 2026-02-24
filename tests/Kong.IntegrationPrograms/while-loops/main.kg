@@ -1,0 +1,27 @@
+use System
+
+module Demo.WhileLoops
+
+fn Main() {
+    var i: int = 0
+    var sum: int = 0
+    while i < 4 {
+        sum = sum + i
+        i = i + 1
+    }
+    System.Console.WriteLine(sum)
+
+    var c: int = 0
+    while c < 3 {
+        c = c + 1
+        continue
+    }
+    System.Console.WriteLine(c)
+
+    var b: int = 0
+    while b < 10 {
+        b = b + 1
+        break
+    }
+    System.Console.WriteLine(b)
+}

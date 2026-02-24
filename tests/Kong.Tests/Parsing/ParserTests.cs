@@ -1106,6 +1106,35 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesWhileStatement()
+    {
+        var input = "while i < 3 { i = i + 1 }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<WhileStatement>(unit.Statements[0]);
+        TestInfixExpression(statement.Condition, "i", "<", 3L);
+        Assert.Single(statement.Body.Statements);
+        Assert.IsType<AssignmentStatement>(statement.Body.Statements[0]);
+    }
+
+    [Fact]
+    public void TestParsesWhileWithBreakAndContinueStatements()
+    {
+        var input = "while true { break continue }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var loop = Assert.IsType<WhileStatement>(unit.Statements[0]);
+        Assert.IsType<BreakStatement>(loop.Body.Statements[0]);
+        Assert.IsType<ContinueStatement>(loop.Body.Statements[1]);
+    }
+
+    [Fact]
     public void TestParsesIndexAssignmentStatement()
     {
         var input = "xs[1] = 42";

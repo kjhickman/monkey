@@ -840,6 +840,26 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksWhileLoopWithBoolCondition()
+    {
+        var source = "var i: int = 0 while i < 3 { i = i + 1 }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsWhileLoopRequiresBoolCondition()
+    {
+        var source = "while 1 { 1 }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T109");
+    }
+
+    [Fact]
     public void TestReportsForInLoopRequiresArrayIterable()
     {
         var source = "let x: int = 1 for i in x { i }";
@@ -867,6 +887,15 @@ public class TypeCheckerTests
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T126");
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T127");
+    }
+
+    [Fact]
+    public void TestTypeChecksBreakContinueInsideWhileLoop()
+    {
+        var (_, _, result) = ParseResolveAndCheck("while true { break continue }");
+
+        Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T126");
+        Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T127");
     }
 
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)

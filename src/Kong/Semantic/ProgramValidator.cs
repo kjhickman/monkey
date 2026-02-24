@@ -120,6 +120,10 @@ public static class ProgramValidator
                     ReportUnsupportedIfWithoutElse(forInStatement.Iterable, diagnostics);
                     ReportUnsupportedIfWithoutElse(forInStatement.Body, diagnostics);
                     break;
+                case WhileStatement whileStatement:
+                    ReportUnsupportedIfWithoutElse(whileStatement.Condition, diagnostics);
+                    ReportUnsupportedIfWithoutElse(whileStatement.Body, diagnostics);
+                    break;
                 case BreakStatement:
                 case ContinueStatement:
                     break;

@@ -265,6 +265,14 @@ public class IrLowerer
                     }
                     break;
 
+                case WhileStatement whileStatement:
+                    if (!LowerWhileStatement(whileStatement))
+                    {
+                        Restore();
+                        return false;
+                    }
+                    break;
+
                 case BreakStatement:
                 case ContinueStatement:
                     _result.Diagnostics.Report(statement.Span,
@@ -343,7 +351,7 @@ public class IrLowerer
 
                 default:
                     _result.Diagnostics.Report(statement.Span,
-                        "phase-4 IR lowerer supports let/var, assignment, index assignment, for-in, return, and expression statements only",
+                        "phase-4 IR lowerer supports let/var, assignment, index assignment, for-in, while, return, and expression statements only",
                         "IR001");
                     Restore();
                     return false;
@@ -749,7 +757,41 @@ public class IrLowerer
         return true;
     }
 
-    private bool LowerLoopBody(BlockStatement body, int continueBlockId, int breakBlockId, IrLocalId indexLocal)
+    private bool LowerWhileStatement(WhileStatement statement)
+    {
+        if (!TryGetExpressionType(statement.Condition, out var conditionType) || conditionType != TypeSymbols.Bool)
+        {
+            _result.Diagnostics.Report(statement.Condition.Span,
+                "phase-4 IR lowerer requires bool while condition",
+                "IR001");
+            return false;
+        }
+
+        var conditionBlock = NewBlock();
+        var bodyBlock = NewBlock();
+        var afterBlock = NewBlock();
+        _currentBlock.Terminator = new IrJump(conditionBlock.Id);
+
+        _currentBlock = conditionBlock;
+        var conditionValue = LowerExpression(statement.Condition);
+        if (conditionValue == null)
+        {
+            return false;
+        }
+
+        _currentBlock.Terminator = new IrBranch(conditionValue.Value, bodyBlock.Id, afterBlock.Id);
+
+        _currentBlock = bodyBlock;
+        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, null))
+        {
+            return false;
+        }
+
+        _currentBlock = afterBlock;
+        return true;
+    }
+
+    private bool LowerLoopBody(BlockStatement body, int continueBlockId, int breakBlockId, IrLocalId? indexLocal)
     {
         foreach (var statement in body.Statements)
         {
@@ -782,6 +824,12 @@ public class IrLowerer
                     break;
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
+                    {
+                        return false;
+                    }
+                    break;
+                case WhileStatement whileStatement:
+                    if (!LowerWhileStatement(whileStatement))
                     {
                         return false;
                     }
@@ -850,15 +898,21 @@ public class IrLowerer
         return true;
     }
 
-    private void EmitLoopIncrement(IrLocalId indexLocal, int continueBlockId)
+    private void EmitLoopIncrement(IrLocalId? indexLocal, int continueBlockId)
     {
+        if (indexLocal == null)
+        {
+            _currentBlock.Terminator = new IrJump(continueBlockId);
+            return;
+        }
+
         var currentIndex = AllocateValue(TypeSymbols.Int);
-        _currentBlock.Instructions.Add(new IrLoadLocal(currentIndex, indexLocal));
+        _currentBlock.Instructions.Add(new IrLoadLocal(currentIndex, indexLocal.Value));
         var one = AllocateValue(TypeSymbols.Int);
         _currentBlock.Instructions.Add(new IrConstInt(one, 1));
         var incremented = AllocateValue(TypeSymbols.Int);
         _currentBlock.Instructions.Add(new IrBinary(incremented, IrBinaryOperator.Add, currentIndex, one));
-        _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal, incremented));
+        _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal.Value, incremented));
         _currentBlock.Terminator = new IrJump(continueBlockId);
     }
 
@@ -1561,6 +1615,13 @@ public class IrLowerer
                     }
                     break;
 
+                case WhileStatement whileStatement:
+                    if (!LowerWhileStatement(whileStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
                 case ImportStatement:
                 case NamespaceStatement:
                 case EnumDeclaration:
@@ -1662,6 +1723,13 @@ public class IrLowerer
 
                 case ForInStatement forInStatement:
                     if (!LowerForInStatement(forInStatement))
+                    {
+                        return null;
+                    }
+                    break;
+
+                case WhileStatement whileStatement:
+                    if (!LowerWhileStatement(whileStatement))
                     {
                         return null;
                     }
