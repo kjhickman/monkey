@@ -40,7 +40,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypedFunctionCall()
     {
-        var input = "fn(x: int, y: int) -> int { return x + y }(1, 2)";
+        var input = "((x: int, y: int) => x + y)(1, 2)";
         var (_, names, result) = ParseResolveAndCheck(input);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -85,7 +85,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestMissingFunctionParameterTypeAnnotationReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("fn(x) -> int { return x }");
+        var (_, _, result) = ParseResolveAndCheck("fn Test(x) -> int { return x }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T105");
@@ -94,7 +94,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReturnTypeMismatchReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("fn() -> int { return true }");
+        var (_, _, result) = ParseResolveAndCheck("fn Test() -> int { return true }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T104");
@@ -129,7 +129,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestCallArgumentTypeMismatchReportsDiagnostic()
     {
-        var input = "fn(x: int) -> int { return x }(true)";
+        var input = "((x: int) => x)(true)";
         var (_, _, result) = ParseResolveAndCheck(input);
 
         Assert.True(result.Diagnostics.HasErrors);

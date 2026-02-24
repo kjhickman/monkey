@@ -1338,8 +1338,24 @@ public class TypeChecker
             parameterTypes.Add(parameterType);
         }
 
+        for (var i = 0; i < functionLiteral.Parameters.Count && i < parameterTypes.Count; i++)
+        {
+            var parameter = functionLiteral.Parameters[i];
+            if (_names.ParameterSymbols.TryGetValue(parameter, out var parameterSymbol))
+            {
+                _symbolTypes[parameterSymbol] = parameterTypes[i];
+            }
+        }
+
         TypeSymbol returnType;
-        if (functionLiteral.ReturnTypeAnnotation == null)
+        if (functionLiteral.IsLambda)
+        {
+            var bodyType = CheckBlockExpressionType(functionLiteral.Body);
+            returnType = functionLiteral.ReturnTypeAnnotation == null
+                ? bodyType
+                : TypeAnnotationBinder.Bind(functionLiteral.ReturnTypeAnnotation, _result.Diagnostics, _namedTypeSymbols) ?? TypeSymbols.Error;
+        }
+        else if (functionLiteral.ReturnTypeAnnotation == null)
         {
             _result.Diagnostics.Report(functionLiteral.Span,
                 "missing return type annotation for function",

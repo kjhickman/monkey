@@ -84,7 +84,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersFunctionLiteralCall()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("fn(x: int) -> int { return x + 1 }(2)");
+        var (unit, typeCheck) = ParseAndTypeCheck("((x: int) => x + 1)(2)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -407,7 +407,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
-        var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10)";
+        var input = "let f = (outer: int) => (x: int) => x + outer let g = f(10) g(5)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -426,7 +426,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNestedClosureCalls()
     {
-        var input = "let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y } g(7) } f(5)";
+        var input = "let f = (x: int) => (y: int) => x + y let g = f(5) g(7)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -440,7 +440,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersEscapingClosureValueAndInvoke()
     {
-        var input = "let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } } let addTwo: fn(int) -> int = makeAdder(2) addTwo(40)";
+        var input = "let makeAdder: (int) -> (int) -> int = (x: int) => (y: int) => x + y let addTwo: (int) -> int = makeAdder(2) addTwo(40)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 

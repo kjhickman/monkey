@@ -73,7 +73,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesFunctionLiteralCallWithReturn()
     {
-        var result = Execute("fn(x: int) -> int { return x + 1 }(41)");
+        var result = Execute("((x: int) => x + 1)(41)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -309,7 +309,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
-        var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10)");
+        var result = Execute("let f = (outer: int) => (x: int) => x + outer let g = f(10) g(5)");
 
         Assert.True(result.Executed);
         Assert.Equal(15, result.Value);
@@ -318,7 +318,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesNestedClosureCall()
     {
-        var result = Execute("let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y } g(7) } f(5)");
+        var result = Execute("let f = (x: int) => (y: int) => x + y let g = f(5) g(7)");
 
         Assert.True(result.Executed);
         Assert.Equal(12, result.Value);
@@ -327,7 +327,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesEscapingClosureValue()
     {
-        var result = Execute("let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } } let addTwo: fn(int) -> int = makeAdder(2) addTwo(40)");
+        var result = Execute("let makeAdder: (int) -> (int) -> int = (x: int) => (y: int) => x + y let addTwo: (int) -> int = makeAdder(2) addTwo(40)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);

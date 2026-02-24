@@ -72,7 +72,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesFunctionCallWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { fn(x: int) -> int { return x + 1 }(5) }");
+        var filePath = CreateTempProgram("fn Main() { ((x: int) => x + 1)(5) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -139,7 +139,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesClosureProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10) }");
+        var filePath = CreateTempProgram("fn Main() { let f = (outer: int) => (x: int) => x + outer let g = f(10) g(5) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);

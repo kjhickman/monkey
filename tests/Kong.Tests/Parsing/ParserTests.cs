@@ -341,7 +341,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralParsing()
     {
-        var input = "fn(x, y) { x + y }";
+        var input = "(x: int, y: int) => x + y";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -356,7 +356,9 @@ public class ParserTests
         Assert.Equal(2, function.Parameters.Count);
 
         Assert.Equal("x", function.Parameters[0].Name);
+        Assert.Equal("int", function.Parameters[0].TypeAnnotation?.String());
         Assert.Equal("y", function.Parameters[1].Name);
+        Assert.Equal("int", function.Parameters[1].TypeAnnotation?.String());
 
         Assert.Single(function.Body.Statements);
 
@@ -365,9 +367,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("fn() {}", new string[] { })]
-    [InlineData("fn(x) {}", new[] { "x" })]
-    [InlineData("fn(x, y, z) {}", new[] { "x", "y", "z" })]
+    [InlineData("() => 1", new string[] { })]
+    [InlineData("(x: int) => x", new[] { "x" })]
+    [InlineData("(x: int, y: int, z: int) => x", new[] { "x", "y", "z" })]
     public void TestFunctionParameterParsing(string input, string[] expectedParams)
     {
         var l = new Lexer(input);
@@ -387,9 +389,9 @@ public class ParserTests
     }
 
     [Fact]
-    public void TestFunctionParameterAndReturnTypeParsing()
+    public void TestLambdaParameterTypeParsing()
     {
-        var input = "fn(x: int, y: string[]) -> int[] { x }";
+        var input = "(x: int, y: string[]) => x";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -404,9 +406,7 @@ public class ParserTests
         Assert.Equal("int", function.Parameters[0].TypeAnnotation?.String());
         Assert.Equal("y", function.Parameters[1].Name);
         Assert.Equal("string[]", function.Parameters[1].TypeAnnotation?.String());
-
-        Assert.NotNull(function.ReturnTypeAnnotation);
-        Assert.Equal("int[]", function.ReturnTypeAnnotation!.String());
+        Assert.Null(function.ReturnTypeAnnotation);
     }
 
     [Fact]
@@ -565,7 +565,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralWithName()
     {
-        var input = "let myFunction = fn() { }";
+        var input = "let myFunction = () => 1";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -854,9 +854,9 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralSpan()
     {
-        // Input:  fn(x) { x }
-        // Cols:   12345678901
-        var input = "fn(x) { x }";
+        // Input:  (x: int) => x
+        // Cols:   1234567890123
+        var input = "(x: int) => x";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -864,10 +864,10 @@ public class ParserTests
 
         var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
-        // Span from 'fn' to closing '}'
-        AssertSpan(fnLit.Span, 1, 1, 1, 12);
+        // Span from '(' to end of expression
+        AssertSpan(fnLit.Span, 1, 1, 1, 14);
         // Parameter 'x'
-        AssertSpan(fnLit.Parameters[0].Span, 1, 4, 1, 5);
+        AssertSpan(fnLit.Parameters[0].Span, 1, 2, 1, 8);
     }
 
     [Fact]
@@ -922,17 +922,16 @@ public class ParserTests
     [Fact]
     public void TestBlockStatementSpan()
     {
-        // Test via function literal body
-        var input = "fn() { 1 2 }";
+        // Test via named function body
+        var input = "fn Test() { 1 2 }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
+        var declaration = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
         // Block span from '{' to '}'
-        AssertSpan(fnLit.Body.Span, 1, 6, 1, 13);
+        AssertSpan(declaration.Body.Span, 1, 11, 1, 18);
     }
 
     [Fact]
@@ -959,20 +958,19 @@ public class ParserTests
     [Fact]
     public void TestMultiLineFunctionSpan()
     {
-        var input = "fn(x) {\n  return x\n}";
+        var input = "fn Example(x: int) -> int {\n  return x\n}";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
-        var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
+        var declaration = Assert.IsType<FunctionDeclaration>(unit.Statements[0]);
         // Span from 'fn' on line 1 to '}' on line 3
-        AssertSpan(fnLit.Span, 1, 1, 3, 2);
+        AssertSpan(declaration.Span, 1, 1, 3, 2);
         // Body span from '{' on line 1 to '}' on line 3
-        AssertSpan(fnLit.Body.Span, 1, 7, 3, 2);
+        AssertSpan(declaration.Body.Span, 1, 27, 3, 2);
         // Return statement on line 2
-        var retStmt = Assert.IsType<ReturnStatement>(fnLit.Body.Statements[0]);
+        var retStmt = Assert.IsType<ReturnStatement>(declaration.Body.Statements[0]);
         AssertSpan(retStmt.Span, 2, 3, 2, 11);
     }
 
@@ -1408,5 +1406,31 @@ public class ParserTests
 
         Assert.True(p.Diagnostics.HasErrors);
         Assert.Contains(p.Diagnostics.All, d => d.Code == "P006");
+    }
+
+    [Fact]
+    public void TestRejectsAnonymousFnSyntax()
+    {
+        var input = "fn(x) { x }";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        p.ParseCompilationUnit();
+
+        Assert.True(p.Diagnostics.HasErrors);
+        Assert.Contains(p.Diagnostics.All, d => d.Code == "P006");
+    }
+
+    [Fact]
+    public void TestRejectsFnTypeAnnotationSyntax()
+    {
+        var input = "let f: fn(int) -> int = (x: int) => x";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        p.ParseCompilationUnit();
+
+        Assert.True(p.Diagnostics.HasErrors);
+        Assert.Contains(p.Diagnostics.All, d => d.Code == "P004");
     }
 }

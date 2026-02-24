@@ -42,14 +42,12 @@ fn Add(a: int, b: int) -> int {
     a + b
 }
 
-fn MakeAdder(delta: int) -> fn(int) -> int {
-    fn(x: int) -> int {
-        x + delta
-    }
+fn MakeAdder(delta: int) -> (int) -> int {
+    (x: int) => x + delta
 }
 
 fn Main() {
-    let addOne: fn(int) -> int = MakeAdder(1) // first-class function value
+    let addOne: (int) -> int = MakeAdder(1) // first-class function value
     let n = addOne(Add(40, 1))
 }
 ```

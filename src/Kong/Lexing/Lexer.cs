@@ -34,6 +34,12 @@ public class Lexer
                     token = new Token(TokenType.Equal, "==",
                         new Span(start, new Position(_line, _column + 1)));
                 }
+                else if (PeekChar() == '>')
+                {
+                    ReadChar();
+                    token = new Token(TokenType.DoubleArrow, "=>",
+                        new Span(start, new Position(_line, _column + 1)));
+                }
                 else
                 {
                     token = NewToken(TokenType.Assign, _ch, start);

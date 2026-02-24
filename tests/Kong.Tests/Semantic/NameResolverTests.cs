@@ -53,7 +53,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsDuplicateParameterDeclaration()
     {
-        var unit = Parse("module Test fn(x, x) { x }");
+        var unit = Parse("module Test let f = (x: int, x: int) => x");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -106,7 +106,7 @@ public class NameResolverTests
     [Fact]
     public void TestCapturesOuterFunctionVariable()
     {
-        var unit = Parse("module Test let f = fn(x) { let g = fn() { x } g }");
+        var unit = Parse("module Test let f = (x: int) => () => x let g = f(1) g");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -115,8 +115,8 @@ public class NameResolverTests
 
         var outerLet = Assert.IsType<LetStatement>(unit.Statements[1]);
         var outerFunction = Assert.IsType<FunctionLiteral>(outerLet.Value);
-        var innerLet = Assert.IsType<LetStatement>(outerFunction.Body.Statements[0]);
-        var innerFunction = Assert.IsType<FunctionLiteral>(innerLet.Value);
+        var innerExpression = Assert.IsType<ExpressionStatement>(outerFunction.Body.Statements[0]);
+        var innerFunction = Assert.IsType<FunctionLiteral>(innerExpression.Expression);
 
         var captures = result.GetCapturedSymbols(innerFunction);
         Assert.Single(captures);
@@ -150,7 +150,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesTypedFunctionParameter()
     {
-        var unit = Parse("module Test let f = fn(x: int) -> int { x } f(1)");
+        var unit = Parse("module Test let f = (x: int) => x f(1)");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -190,7 +190,7 @@ public class NameResolverTests
     [Fact]
     public void TestCapturesOuterTypedFunctionParameter()
     {
-        var unit = Parse("module Test let f = fn(x: int) -> int { let g = fn() -> int { x } g() }");
+        var unit = Parse("module Test let f = (x: int) => () => x let g = f(1) g()");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -199,8 +199,8 @@ public class NameResolverTests
 
         var outerLet = Assert.IsType<LetStatement>(unit.Statements[1]);
         var outerFunction = Assert.IsType<FunctionLiteral>(outerLet.Value);
-        var innerLet = Assert.IsType<LetStatement>(outerFunction.Body.Statements[0]);
-        var innerFunction = Assert.IsType<FunctionLiteral>(innerLet.Value);
+        var innerExpression = Assert.IsType<ExpressionStatement>(outerFunction.Body.Statements[0]);
+        var innerFunction = Assert.IsType<FunctionLiteral>(innerExpression.Expression);
 
         var captures = result.GetCapturedSymbols(innerFunction);
         Assert.Single(captures);

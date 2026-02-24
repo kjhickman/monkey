@@ -11,9 +11,7 @@ public class LexerTests
             let five: int = 5;
             let ten: int = 10;
 
-            let add = fn(x, y) -> int {
-              x + y;
-            };
+            let add = (x: int, y: int) => x + y;
 
             let result: int = add(five, ten);
             !-/*5;
@@ -52,20 +50,19 @@ public class LexerTests
             (TokenType.Let, "let"),
             (TokenType.Identifier, "add"),
             (TokenType.Assign, "="),
-            (TokenType.Function, "fn"),
             (TokenType.LeftParenthesis, "("),
             (TokenType.Identifier, "x"),
+            (TokenType.Colon, ":"),
+            (TokenType.Identifier, "int"),
             (TokenType.Comma, ","),
             (TokenType.Identifier, "y"),
-            (TokenType.RightParenthesis, ")"),
-            (TokenType.Arrow, "->"),
+            (TokenType.Colon, ":"),
             (TokenType.Identifier, "int"),
-            (TokenType.LeftBrace, "{"),
+            (TokenType.RightParenthesis, ")"),
+            (TokenType.DoubleArrow, "=>"),
             (TokenType.Identifier, "x"),
             (TokenType.Plus, "+"),
             (TokenType.Identifier, "y"),
-            (TokenType.Illegal, ";"),
-            (TokenType.RightBrace, "}"),
             (TokenType.Illegal, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "result"),
@@ -275,17 +272,22 @@ public class LexerTests
     [Fact]
     public void TestTokenSpans_FunctionDefinition()
     {
-        var input = "fn(x) {\n  return x;\n}";
+        var input = "fn Add(x: int) -> int {\n  return x;\n}";
 
         var l = new Lexer(input);
 
         var tests = new (TokenType type, string literal, int startLine, int startCol, int endLine, int endCol)[]
         {
             (TokenType.Function, "fn", 1, 1, 1, 3),
-            (TokenType.LeftParenthesis, "(", 1, 3, 1, 4),
-            (TokenType.Identifier, "x", 1, 4, 1, 5),
-            (TokenType.RightParenthesis, ")", 1, 5, 1, 6),
-            (TokenType.LeftBrace, "{", 1, 7, 1, 8),
+            (TokenType.Identifier, "Add", 1, 4, 1, 7),
+            (TokenType.LeftParenthesis, "(", 1, 7, 1, 8),
+            (TokenType.Identifier, "x", 1, 8, 1, 9),
+            (TokenType.Colon, ":", 1, 9, 1, 10),
+            (TokenType.Identifier, "int", 1, 11, 1, 14),
+            (TokenType.RightParenthesis, ")", 1, 14, 1, 15),
+            (TokenType.Arrow, "->", 1, 16, 1, 18),
+            (TokenType.Identifier, "int", 1, 19, 1, 22),
+            (TokenType.LeftBrace, "{", 1, 23, 1, 24),
             (TokenType.Return, "return", 2, 3, 2, 9),
             (TokenType.Identifier, "x", 2, 10, 2, 11),
             (TokenType.Illegal, ";", 2, 11, 2, 12),
@@ -466,8 +468,7 @@ public class LexerTests
             (TokenType.LeftParenthesis, "("),
             (TokenType.Identifier, "v"),
             (TokenType.RightParenthesis, ")"),
-            (TokenType.Assign, "="),
-            (TokenType.GreaterThan, ">"),
+            (TokenType.DoubleArrow, "=>"),
             (TokenType.Identifier, "v"),
             (TokenType.RightBrace, "}"),
             (TokenType.EndOfFile, ""),

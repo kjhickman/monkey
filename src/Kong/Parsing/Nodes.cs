@@ -217,6 +217,7 @@ public class FunctionDeclaration : IStatement
         return new FunctionLiteral
         {
             Token = Token,
+            IsLambda = false,
             Name = Name.Value,
             Parameters = Parameters,
             ReturnTypeAnnotation = ReturnTypeAnnotation,
@@ -649,6 +650,7 @@ public class FunctionLiteral : IExpression
 {
     public Span Span { get; set; }
     public Token Token { get; set; } // The 'fn' token
+    public bool IsLambda { get; set; }
     public List<FunctionParameter> Parameters { get; set; } = [];
     public ITypeNode? ReturnTypeAnnotation { get; set; }
     public BlockStatement Body { get; set; } = null!;
@@ -660,11 +662,18 @@ public class FunctionLiteral : IExpression
     {
         var sb = new StringBuilder();
         var paramStrings = Parameters.Select(p => p.String());
-        sb.Append(TokenLiteral());
-        if (Name != "")
+        if (IsLambda)
         {
-            sb.Append($"<{Name}>");
+            sb.Append('(');
+            sb.Append(string.Join(", ", paramStrings));
+            sb.Append(") => ");
+            sb.Append(Body.String());
+            return sb.ToString();
         }
+
+        sb.Append(TokenLiteral());
+        sb.Append(' ');
+        sb.Append(Name);
         sb.Append('(');
         sb.Append(string.Join(", ", paramStrings));
         sb.Append(')');
@@ -722,7 +731,7 @@ public class FunctionType : ITypeNode
     public string String()
     {
         var parameters = ParameterTypes.Select(p => p.String());
-        return $"fn({string.Join(", ", parameters)}) -> {ReturnType.String()}";
+        return $"({string.Join(", ", parameters)}) -> {ReturnType.String()}";
     }
 }
 

@@ -226,7 +226,7 @@ public sealed record ArrayTypeSymbol(TypeSymbol ElementType) : TypeSymbol
 
 public sealed record FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes, TypeSymbol ReturnType) : TypeSymbol
 {
-    public override string Name => $"fn({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
+    public override string Name => $"({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
 }
 
 public sealed record EnumTypeSymbol(string EnumName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol

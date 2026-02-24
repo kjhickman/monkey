@@ -67,7 +67,7 @@ public class Parser
             { TokenType.False, ParseBoolean },
             { TokenType.Bang, ParsePrefixExpression },
             { TokenType.Minus, ParsePrefixExpression },
-            { TokenType.LeftParenthesis, ParseGroupedExpression },
+            { TokenType.LeftParenthesis, ParseGroupedOrLambdaExpression },
             { TokenType.If, ParseIfExpression },
             { TokenType.Match, ParseMatchExpression },
             { TokenType.LeftBracket, ParseArrayLiteral },
@@ -1267,9 +1267,10 @@ public class Parser
 
     private ITypeNode? ParseTypePrimary()
     {
-        if (CurTokenIs(TokenType.Function))
+        if (CurTokenIs(TokenType.LeftParenthesis))
         {
-            return ParseFunctionTypeNode();
+            var start = _curToken.Span.Start;
+            return ParseLambdaTypeNode(start);
         }
 
         if (!CurTokenIs(TokenType.Identifier))
@@ -1344,16 +1345,18 @@ public class Parser
 
     private ITypeNode? ParseFunctionTypeNode()
     {
-        var startSpan = _curToken.Span.Start;
+        _diagnostics.Report(_curToken.Span,
+            "function type literals must use '(T1, T2) -> T' syntax",
+            "P004");
+        return null;
+    }
+
+    private ITypeNode? ParseLambdaTypeNode(Position startSpan)
+    {
         var functionType = new FunctionType
         {
             Token = _curToken,
         };
-
-        if (!ExpectPeek(TokenType.LeftParenthesis))
-        {
-            return null;
-        }
 
         if (!PeekTokenIs(TokenType.RightParenthesis))
         {
@@ -1462,6 +1465,10 @@ public class Parser
         }
 
         var leftExpression = prefix();
+        if (leftExpression == null)
+        {
+            return null;
+        }
 
         while (precedence < PeekPrecedence())
         {
@@ -1610,39 +1617,150 @@ public class Parser
 
     private IExpression ParseFunctionLiteral()
     {
-        var startSpan = _curToken.Span;
-        var literal = new FunctionLiteral { Token = _curToken };
+        _diagnostics.Report(_curToken.Span,
+            "anonymous function literals must use '(args) => expr' syntax",
+            "P006");
+        return null!;
+    }
 
-        if (!ExpectPeek(TokenType.LeftParenthesis))
+    private IExpression ParseGroupedOrLambdaExpression()
+    {
+        var startSpan = _curToken.Span.Start;
+
+        if (!PeekTokenIs(TokenType.RightParenthesis) && !PeekTokenIs(TokenType.Identifier) && !PeekTokenIs(TokenType.Self))
         {
-            return null!;
+            return ParseGroupedExpression();
         }
 
-        literal.Parameters = ParseFunctionParameters();
-
-        if (PeekTokenIs(TokenType.Arrow))
+        var (parameters, endSpan, isLambda) = TryParseLambdaParameters();
+        if (!isLambda)
         {
-            NextToken();
-            NextToken();
-
-            literal.ReturnTypeAnnotation = ParseTypeNode();
-            if (literal.ReturnTypeAnnotation == null)
+            if (endSpan != default)
             {
-                return null!;
+                _diagnostics.Report(new Span(startSpan, endSpan),
+                    "lambda parameters require type annotations; use '(x: T) => expr'",
+                    "P006");
             }
+            return ParseGroupedExpression();
         }
 
-        if (!ExpectPeek(TokenType.LeftBrace))
+        var literal = new FunctionLiteral
+        {
+            Token = _curToken,
+            IsLambda = true,
+            Parameters = parameters,
+        };
+
+        NextToken();
+        var bodyExpression = ParseExpression(Precedence.Lowest);
+        if (bodyExpression == null)
         {
             return null!;
         }
 
-        literal.Body = ParseBlockStatement();
+        var bodyStatement = new ExpressionStatement
+        {
+            Token = _curToken,
+            Expression = bodyExpression,
+            Span = bodyExpression.Span,
+        };
 
-        // Span from 'fn' to closing '}' of body
-        literal.Span = new Span(startSpan.Start, literal.Body.Span.End);
-
+        literal.Body = new BlockStatement
+        {
+            Token = _curToken,
+            Statements = [bodyStatement],
+            Span = bodyExpression.Span,
+        };
+        literal.Span = new Span(startSpan, bodyExpression.Span.End);
         return literal;
+    }
+
+    private (List<FunctionParameter> Parameters, Position EndSpan, bool IsLambda) TryParseLambdaParameters()
+    {
+        var parameters = new List<FunctionParameter>();
+        var endSpan = default(Position);
+
+        if (PeekTokenIs(TokenType.RightParenthesis))
+        {
+            NextToken();
+            if (PeekTokenIs(TokenType.DoubleArrow))
+            {
+                NextToken();
+                endSpan = _curToken.Span.End;
+                return (parameters, endSpan, true);
+            }
+
+            return (parameters, default, false);
+        }
+
+        NextToken();
+        var parameter = ParseLambdaParameter();
+        if (parameter == null)
+        {
+            return (parameters, default, false);
+        }
+
+        parameters.Add(parameter);
+
+        while (PeekTokenIs(TokenType.Comma))
+        {
+            NextToken();
+            NextToken();
+            var nextParameter = ParseLambdaParameter();
+            if (nextParameter == null)
+            {
+                return (parameters, default, false);
+            }
+
+            parameters.Add(nextParameter);
+        }
+
+        if (!ExpectPeek(TokenType.RightParenthesis))
+        {
+            return (parameters, default, false);
+        }
+
+        endSpan = _curToken.Span.End;
+        if (!ExpectPeek(TokenType.DoubleArrow))
+        {
+            return (parameters, endSpan, false);
+        }
+
+        return (parameters, endSpan, true);
+    }
+
+    private FunctionParameter? ParseLambdaParameter()
+    {
+        if (!CurTokenIs(TokenType.Identifier) && !CurTokenIs(TokenType.Self))
+        {
+            return null;
+        }
+
+        var parameter = new FunctionParameter
+        {
+            Token = _curToken,
+            Name = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        if (!PeekTokenIs(TokenType.Colon))
+        {
+            _diagnostics.Report(_curToken.Span,
+                $"missing type annotation for parameter '{parameter.Name}'",
+                "P006");
+            return null;
+        }
+
+        NextToken();
+        NextToken();
+        parameter.TypeAnnotation = ParseTypeNode();
+        if (parameter.TypeAnnotation == null)
+        {
+            return null;
+        }
+
+        parameter.Span = new Span(parameter.Span.Start, parameter.TypeAnnotation.Span.End);
+        return parameter;
     }
 
     private IExpression ParseBoolean()
@@ -1808,7 +1926,7 @@ public class Parser
             }
         }
 
-        if (!ExpectPeek(TokenType.Assign) || !ExpectPeek(TokenType.GreaterThan))
+        if (!ExpectPeek(TokenType.DoubleArrow))
         {
             return null;
         }

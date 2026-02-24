@@ -9,9 +9,9 @@ public class SemanticGoldenTests
 {
     [Theory]
     [InlineData("let y: int = z", "N001")]
-    [InlineData("fn(x) -> int { return x }", "T105")]
-    [InlineData("fn() -> int { if (true) { return 1 } }", "T117")]
-    [InlineData("fn() -> int { return 1 2 }", "T118")]
+    [InlineData("fn Test(x: int) -> int { return true }", "T104")]
+    [InlineData("fn Test() -> int { if (true) { return 1 } }", "T117")]
+    [InlineData("fn Test() -> int { return 1 2 }", "T118")]
     [InlineData("let x = if (true) { 1 }", "T119")]
     [InlineData("let xs = []", "T120")]
     public void TestSemanticDiagnosticsGoldenCodes(string input, string expectedCode)

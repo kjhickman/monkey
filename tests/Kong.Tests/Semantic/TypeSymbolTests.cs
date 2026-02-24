@@ -64,7 +64,7 @@ public class TypeSymbolTests
     {
         var functionType = new FunctionTypeSymbol([TypeSymbols.Int, TypeSymbols.String], TypeSymbols.Bool);
 
-        Assert.Equal("fn(int, string) -> bool", functionType.Name);
-        Assert.Equal("fn(int, string) -> bool", functionType.ToString());
+        Assert.Equal("(int, string) -> bool", functionType.Name);
+        Assert.Equal("(int, string) -> bool", functionType.ToString());
     }
 }

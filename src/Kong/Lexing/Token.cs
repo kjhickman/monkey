@@ -20,6 +20,7 @@ public enum TokenType
     Plus,
     Minus,
     Arrow,
+    DoubleArrow,
     Bang,
     Asterisk,
     Slash,
