@@ -146,7 +146,11 @@ public static class Compilation
         loadedUnits = [];
 
         var discoveredPaths = Directory
-            .GetFiles(rootDirectory, "*.kg", SearchOption.AllDirectories)
+            .GetFiles(rootDirectory, "*.kg", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+            })
             .Select(Path.GetFullPath)
             .ToList();
 

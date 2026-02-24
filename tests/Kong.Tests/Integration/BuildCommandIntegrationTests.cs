@@ -59,7 +59,7 @@ public class BuildCommandIntegrationTests
                 Directory.Delete(workingDir, recursive: true);
             }
 
-            File.Delete(sourcePath);
+            DeleteTempProgram(sourcePath);
         }
     }
 
@@ -101,7 +101,7 @@ public class BuildCommandIntegrationTests
                 Directory.Delete(workingDir, recursive: true);
             }
 
-            File.Delete(sourcePath);
+            DeleteTempProgram(sourcePath);
         }
     }
 
@@ -125,7 +125,7 @@ public class BuildCommandIntegrationTests
                 Directory.Delete(workingDir, recursive: true);
             }
 
-            File.Delete(sourcePath);
+            DeleteTempProgram(sourcePath);
         }
     }
 
@@ -326,8 +326,24 @@ public class BuildCommandIntegrationTests
 
     private static string CreateTempProgram(string source)
     {
-        var filePath = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}.kg");
+        var programDirectory = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(programDirectory);
+        var filePath = Path.Combine(programDirectory, "main.kg");
         File.WriteAllText(filePath, TestSourceUtilities.EnsureFileScopedNamespace(source));
         return filePath;
+    }
+
+    private static void DeleteTempProgram(string filePath)
+    {
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+
+        var directory = Path.GetDirectoryName(filePath);
+        if (directory != null && Directory.Exists(directory))
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 }

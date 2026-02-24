@@ -860,7 +860,9 @@ public class RunCommandIntegrationTests
 
     private static string CreateTempProgram(string source)
     {
-        var filePath = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}.kg");
+        var programDirectory = Path.Combine(Path.GetTempPath(), $"kong-run-test-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(programDirectory);
+        var filePath = Path.Combine(programDirectory, "main.kg");
         File.WriteAllText(filePath, TestSourceUtilities.EnsureFileScopedNamespace(source));
         return filePath;
     }
