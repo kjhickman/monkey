@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using Kong.Cli.Commands;
+using Kong.Cli.NativeAot;
 using Kong.Tests;
+using System.Runtime.InteropServices;
 
 namespace Kong.Tests.Integration;
 
@@ -93,6 +95,87 @@ public class BuildCommandIntegrationTests
             Assert.Equal(5, run.ExitCode);
             Assert.Equal(string.Empty, run.StdOut.Trim());
             Assert.Equal(string.Empty, run.StdErr.Trim());
+        }
+        finally
+        {
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+
+            DeleteTempProgram(sourcePath);
+        }
+    }
+
+    [Fact]
+    public void TestBuildCommandNativeDefaultsRidToCurrentRuntime()
+    {
+        var sourcePath = CreateTempProgram("fn Main() -> int { 0 }");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(workingDir);
+            var publisher = new FakeNativeAotPublisher();
+            var command = new BuildFile
+            {
+                File = sourcePath,
+                Native = true,
+                NativeAotPublisher = publisher,
+            };
+
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var originalOut = Console.Out;
+            var originalError = Console.Error;
+            var originalDirectory = Directory.GetCurrentDirectory();
+            try
+            {
+                Directory.SetCurrentDirectory(workingDir);
+                Console.SetOut(stdout);
+                Console.SetError(stderr);
+                command.Run(null!);
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(originalDirectory);
+                Console.SetOut(originalOut);
+                Console.SetError(originalError);
+            }
+
+            Assert.Equal(RuntimeInformation.RuntimeIdentifier, publisher.RuntimeIdentifier);
+            Assert.Equal(string.Empty, stderr.ToString().Trim());
+            Assert.Contains(Path.Combine("dist", "main", "native", RuntimeInformation.RuntimeIdentifier), stdout.ToString());
+        }
+        finally
+        {
+            if (Directory.Exists(workingDir))
+            {
+                Directory.Delete(workingDir, recursive: true);
+            }
+
+            DeleteTempProgram(sourcePath);
+        }
+    }
+
+    [Fact]
+    public void TestBuildCommandRejectsRidWithoutNative()
+    {
+        var sourcePath = CreateTempProgram("fn Main() { 0 }");
+        var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
+
+        try
+        {
+            Directory.CreateDirectory(workingDir);
+            var command = new BuildFile
+            {
+                File = sourcePath,
+                Rid = "osx-arm64",
+            };
+
+            var (_, stdErr) = ExecuteBuildCommand(sourcePath, workingDir, command);
+            Assert.Contains("[CLI021]", stdErr);
+            Assert.Contains("'--rid' requires '--native'", stdErr);
         }
         finally
         {
@@ -296,9 +379,9 @@ public class BuildCommandIntegrationTests
         return (process.ExitCode, stdOut, stdErr);
     }
 
-    private static (string StdOut, string StdErr) ExecuteBuildCommand(string sourcePath, string workingDir)
+    private static (string StdOut, string StdErr) ExecuteBuildCommand(string sourcePath, string workingDir, BuildFile? buildFile = null)
     {
-        var command = new BuildFile
+        var command = buildFile ?? new BuildFile
         {
             File = sourcePath,
         };
@@ -344,6 +427,29 @@ public class BuildCommandIntegrationTests
         if (directory != null && Directory.Exists(directory))
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    private sealed class FakeNativeAotPublisher : INativeAotPublisher
+    {
+        public string RuntimeIdentifier { get; private set; } = string.Empty;
+
+        public NativeAotPublishResult Publish(
+            string assemblyPath,
+            string outputDirectory,
+            string assemblyName,
+            string runtimeIdentifier,
+            string configuration)
+        {
+            RuntimeIdentifier = runtimeIdentifier;
+            var extension = runtimeIdentifier.StartsWith("win-", StringComparison.OrdinalIgnoreCase)
+                ? ".exe"
+                : string.Empty;
+            return new NativeAotPublishResult
+            {
+                Published = true,
+                BinaryPath = Path.Combine(outputDirectory, assemblyName + extension),
+            };
         }
     }
 }
