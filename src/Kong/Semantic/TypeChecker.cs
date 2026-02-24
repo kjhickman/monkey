@@ -42,6 +42,12 @@ public sealed record MatchResolution(
 
 public class TypeChecker
 {
+    private sealed class LoopContext
+    {
+        public LoopExpression? Expression { get; init; }
+        public TypeSymbol? BreakType { get; set; }
+    }
+
     private sealed class ClassDefinition
     {
         public required string Name { get; init; }
@@ -64,6 +70,7 @@ public class TypeChecker
     private readonly TypeCheckResult _result = new();
     private readonly Dictionary<NameSymbol, TypeSymbol> _symbolTypes = [];
     private readonly Stack<TypeSymbol> _currentFunctionReturnTypes = [];
+    private readonly Stack<LoopContext> _loopContexts = [];
     private int _loopDepth;
     private NameResolution _names = null!;
     private IReadOnlyDictionary<string, FunctionTypeSymbol> _externalFunctionTypes =
@@ -101,6 +108,7 @@ public class TypeChecker
         _classDefinitions.Clear();
         _interfaceDefinitions.Clear();
         _currentSelfTypes.Clear();
+        _loopContexts.Clear();
         _result.EnumDefinitions.Clear();
         _result.ClassDefinitions.Clear();
         _result.InterfaceDefinitions.Clear();
@@ -831,7 +839,9 @@ public class TypeChecker
         }
 
         _loopDepth++;
+        _loopContexts.Push(new LoopContext());
         CheckBlockStatement(statement.Body);
+        _loopContexts.Pop();
         _loopDepth--;
     }
 
@@ -846,7 +856,9 @@ public class TypeChecker
         }
 
         _loopDepth++;
+        _loopContexts.Push(new LoopContext());
         CheckBlockStatement(statement.Body);
+        _loopContexts.Pop();
         _loopDepth--;
     }
 
@@ -1026,11 +1038,50 @@ public class TypeChecker
 
     private void CheckBreakStatement(BreakStatement statement)
     {
+        TypeSymbol? breakValueType = null;
+        if (statement.Value != null)
+        {
+            breakValueType = CheckExpression(statement.Value);
+        }
+
         if (_loopDepth == 0)
         {
             _result.Diagnostics.Report(statement.Span,
                 "'break' can only be used inside a loop",
                 "T126");
+            return;
+        }
+
+        if (_loopContexts.Count == 0)
+        {
+            return;
+        }
+
+        var loopContext = _loopContexts.Peek();
+        if (loopContext.Expression == null)
+        {
+            if (statement.Value != null)
+            {
+                _result.Diagnostics.Report(statement.Span,
+                    "'break' with a value is only allowed inside loop expressions",
+                    "T136");
+            }
+
+            return;
+        }
+
+        var currentBreakType = statement.Value == null ? TypeSymbols.Void : breakValueType ?? TypeSymbols.Error;
+        if (loopContext.BreakType == null)
+        {
+            loopContext.BreakType = currentBreakType;
+            return;
+        }
+
+        if (!AreCompatible(currentBreakType, loopContext.BreakType))
+        {
+            _result.Diagnostics.Report(statement.Span,
+                $"loop break types must match, got '{currentBreakType}' and '{loopContext.BreakType}'",
+                "T137");
         }
     }
 
@@ -1089,6 +1140,7 @@ public class TypeChecker
             PrefixExpression prefixExpression => CheckPrefixExpression(prefixExpression),
             InfixExpression infixExpression => CheckInfixExpression(infixExpression),
             IfExpression ifExpression => CheckIfExpression(ifExpression),
+            LoopExpression loopExpression => CheckLoopExpression(loopExpression),
             MatchExpression matchExpression => CheckMatchExpression(matchExpression),
             FunctionLiteral functionLiteral => CheckFunctionLiteral(functionLiteral),
             CallExpression callExpression => CheckCallExpression(callExpression),
@@ -1217,6 +1269,18 @@ public class TypeChecker
             $"if branches must have matching types, got '{consequenceType}' and '{alternativeType}'",
             "T110");
         return TypeSymbols.Error;
+    }
+
+    private TypeSymbol CheckLoopExpression(LoopExpression expression)
+    {
+        var context = new LoopContext { Expression = expression };
+        _loopDepth++;
+        _loopContexts.Push(context);
+        CheckBlockStatement(expression.Body);
+        _loopContexts.Pop();
+        _loopDepth--;
+
+        return context.BreakType ?? TypeSymbols.Void;
     }
 
     private TypeSymbol CheckMatchExpression(MatchExpression expression)

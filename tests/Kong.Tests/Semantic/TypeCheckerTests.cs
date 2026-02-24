@@ -898,6 +898,33 @@ public class TypeCheckerTests
         Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T127");
     }
 
+    [Fact]
+    public void TestTypeChecksLoopExpressionWithBreakValue()
+    {
+        var source = "let x: int = loop { break 42 }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestReportsBreakValueOutsideLoopExpression()
+    {
+        var (_, _, result) = ParseResolveAndCheck("let x: int = loop { while true { break 1 } break 0 }");
+
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T136");
+    }
+
+    [Fact]
+    public void TestReportsMismatchedLoopBreakTypes()
+    {
+        var source = "let x = loop { if (true) { break 1 } else { break true } }";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T137");
+    }
+
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         input = TestSourceUtilities.EnsureFileScopedNamespace(input);

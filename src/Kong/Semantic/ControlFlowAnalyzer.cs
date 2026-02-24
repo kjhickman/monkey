@@ -91,7 +91,7 @@ public class ControlFlowAnalyzer
             WhileStatement whileStatement => AnalyzeWhileStatement(whileStatement, diagnostics),
             AssignmentStatement assignmentStatement => AnalyzeExpression(assignmentStatement.Value, diagnostics),
             IndexAssignmentStatement indexAssignmentStatement => AnalyzeIndexAssignment(indexAssignmentStatement, diagnostics),
-            BreakStatement => new FlowState(AlwaysReturns: false),
+            BreakStatement breakStatement => AnalyzeExpression(breakStatement.Value, diagnostics),
             ContinueStatement => new FlowState(AlwaysReturns: false),
             ExpressionStatement expressionStatement => AnalyzeExpression(expressionStatement.Expression, diagnostics),
             _ => new FlowState(AlwaysReturns: false),
@@ -146,6 +146,12 @@ public class ControlFlowAnalyzer
             }
 
             return new FlowState(AlwaysReturns: true);
+        }
+
+        if (expression is LoopExpression loopExpression)
+        {
+            _ = AnalyzeBlock(loopExpression.Body, diagnostics);
+            return new FlowState(AlwaysReturns: false);
         }
 
         return new FlowState(AlwaysReturns: false);

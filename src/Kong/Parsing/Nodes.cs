@@ -104,10 +104,11 @@ public class BreakStatement : IStatement
 {
     public Span Span { get; set; }
     public Token Token { get; set; }
+    public IExpression? Value { get; set; }
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => "break";
+    public string String() => Value == null ? "break" : $"break {Value.String()}";
 }
 
 public class ContinueStatement : IStatement
@@ -498,6 +499,20 @@ public class WhileStatement : IStatement
     public string String()
     {
         return $"while {Condition.String()} {Body.String()}";
+    }
+}
+
+public class LoopExpression : IExpression
+{
+    public Span Span { get; set; }
+    public Token Token { get; set; } // the 'loop' token
+    public BlockStatement Body { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"loop {Body.String()}";
     }
 }
 

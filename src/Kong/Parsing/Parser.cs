@@ -30,6 +30,7 @@ public class Parser
     private readonly Dictionary<TokenType, Func<IExpression>> _prefixParseFns;
     private readonly Dictionary<TokenType, Func<IExpression, IExpression>> _infixParseFns;
     private int _blockDepth;
+    private int _loopExpressionDepth;
 
     private static readonly Dictionary<TokenType, Precedence> Precedences = new()
     {
@@ -69,6 +70,7 @@ public class Parser
             { TokenType.Minus, ParsePrefixExpression },
             { TokenType.LeftParenthesis, ParseGroupedOrLambdaExpression },
             { TokenType.If, ParseIfExpression },
+            { TokenType.Loop, ParseLoopExpression },
             { TokenType.Match, ParseMatchExpression },
             { TokenType.LeftBracket, ParseArrayLiteral },
             { TokenType.New, ParseNewExpression },
@@ -290,7 +292,18 @@ public class Parser
 
     private BreakStatement ParseBreakStatement()
     {
+        var startSpan = _curToken.Span;
         var statement = new BreakStatement { Token = _curToken, Span = _curToken.Span };
+        if (_loopExpressionDepth > 0 && _prefixParseFns.ContainsKey(_peekToken.Type))
+        {
+            NextToken();
+            statement.Value = ParseExpression(Precedence.Lowest);
+            if (statement.Value != null)
+            {
+                statement.Span = new Span(startSpan.Start, statement.Value.Span.End);
+            }
+        }
+
         return statement;
     }
 
@@ -1847,6 +1860,23 @@ public class Parser
         expression.Alternative = ParseBlockStatement();
         expression.Span = new Span(startSpan.Start, expression.Alternative.Span.End);
 
+        return expression;
+    }
+
+    private IExpression ParseLoopExpression()
+    {
+        var startSpan = _curToken.Span;
+        var expression = new LoopExpression { Token = _curToken };
+
+        if (!ExpectPeek(TokenType.LeftBrace))
+        {
+            return null!;
+        }
+
+        _loopExpressionDepth++;
+        expression.Body = ParseBlockStatement();
+        _loopExpressionDepth--;
+        expression.Span = new Span(startSpan.Start, expression.Body.Span.End);
         return expression;
     }
 

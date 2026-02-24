@@ -121,6 +121,25 @@ public class NameResolverTests
     }
 
     [Fact]
+    public void TestResolvesBreakValueInsideLoopExpression()
+    {
+        var unit = Parse("module Test let x = 1 let y = loop { break x }");
+
+        var resolver = new NameResolver();
+        var result = resolver.Resolve(unit);
+
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var loopLet = Assert.IsType<LetStatement>(unit.Statements[2]);
+        var loopExpression = Assert.IsType<LoopExpression>(loopLet.Value);
+        var breakStatement = Assert.IsType<BreakStatement>(loopExpression.Body.Statements[0]);
+        var breakIdentifier = Assert.IsType<Identifier>(breakStatement.Value);
+        Assert.True(result.IdentifierSymbols.TryGetValue(breakIdentifier, out var symbol));
+        Assert.Equal(NameSymbolKind.Global, symbol.Kind);
+        Assert.Equal("x", symbol.Name);
+    }
+
+    [Fact]
     public void TestCapturesOuterFunctionVariable()
     {
         var unit = Parse("module Test let f = (x: int) => () => x let g = f(1) g");

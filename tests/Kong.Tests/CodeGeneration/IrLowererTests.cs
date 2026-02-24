@@ -372,6 +372,22 @@ public class IrLowererTests
     }
 
     [Fact]
+    public void TestLowersLoopExpressionWithBreakValue()
+    {
+        var source = "let x: int = loop { break 42 } x";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var instructions = lowering.Program!.EntryPoint.Blocks.SelectMany(b => b.Instructions).ToList();
+        Assert.Contains(instructions, i => i is IrStoreLocal);
+        Assert.Contains(lowering.Program.EntryPoint.Blocks, b => b.Terminator is IrJump);
+    }
+
+    [Fact]
     public void TestLowersIndexAssignmentStatement()
     {
         var source = "var xs: int[] = [1, 2, 3] xs[1] = 42 xs[1]";

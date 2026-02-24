@@ -124,6 +124,9 @@ public static class ProgramValidator
                     ReportUnsupportedIfWithoutElse(whileStatement.Condition, diagnostics);
                     ReportUnsupportedIfWithoutElse(whileStatement.Body, diagnostics);
                     break;
+                case BreakStatement { Value: { } breakValue }:
+                    ReportUnsupportedIfWithoutElse(breakValue, diagnostics);
+                    break;
                 case BreakStatement:
                 case ContinueStatement:
                     break;
@@ -158,6 +161,9 @@ public static class ProgramValidator
                 {
                     ReportUnsupportedIfWithoutElse(ifExpression.Alternative, diagnostics);
                 }
+                break;
+            case LoopExpression loopExpression:
+                ReportUnsupportedIfWithoutElse(loopExpression.Body, diagnostics);
                 break;
             case PrefixExpression prefixExpression:
                 ReportUnsupportedIfWithoutElse(prefixExpression.Right, diagnostics);

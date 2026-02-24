@@ -264,7 +264,12 @@ public class NameResolver
             case WhileStatement whileStatement:
                 ResolveWhileStatement(whileStatement);
                 break;
-            case BreakStatement:
+            case BreakStatement breakStatement:
+                if (breakStatement.Value != null)
+                {
+                    ResolveExpression(breakStatement.Value);
+                }
+                break;
             case ContinueStatement:
                 break;
             case FunctionDeclaration functionDeclaration:
@@ -470,6 +475,9 @@ public class NameResolver
                 {
                     ResolveBlockStatement(ifExpression.Alternative);
                 }
+                break;
+            case LoopExpression loopExpression:
+                ResolveBlockStatement(loopExpression.Body);
                 break;
             case MatchExpression matchExpression:
                 ResolveExpression(matchExpression.Target);

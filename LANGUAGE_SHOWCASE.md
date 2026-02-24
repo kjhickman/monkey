@@ -20,7 +20,7 @@ fn Main() {
 }
 ```
 
-## 2) Control flow: if/else + for-in + while
+## 2) Control flow: if/else + for-in + while + loop
 
 ```text
 fn Main() {
@@ -37,7 +37,11 @@ fn Main() {
         i = i + 1
     }
 
-    let label = if (total > 5) { "big" } else { "small" }
+    let firstAtLeastThree: int = loop {
+        if (total >= 3) { break total } else { total = total + 1 }
+    }
+
+    let label = if (firstAtLeastThree > 5) { "big" } else { "small" }
 }
 ```
 

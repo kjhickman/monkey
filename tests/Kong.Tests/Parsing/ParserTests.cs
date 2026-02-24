@@ -1164,6 +1164,36 @@ public class ParserTests
     }
 
     [Fact]
+    public void TestParsesLoopExpressionWithBreakValue()
+    {
+        var input = "let x = loop { break 42 }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<LetStatement>(unit.Statements[0]);
+        var loopExpression = Assert.IsType<LoopExpression>(statement.Value);
+        var breakStatement = Assert.IsType<BreakStatement>(loopExpression.Body.Statements[0]);
+        TestIntegerLiteral(Assert.IsType<IntegerLiteral>(breakStatement.Value), 42);
+    }
+
+    [Fact]
+    public void TestParsesLoopExpressionWithBareBreak()
+    {
+        var input = "let x = loop { break }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var statement = Assert.IsType<LetStatement>(unit.Statements[0]);
+        var loopExpression = Assert.IsType<LoopExpression>(statement.Value);
+        var breakStatement = Assert.IsType<BreakStatement>(loopExpression.Body.Statements[0]);
+        Assert.Null(breakStatement.Value);
+    }
+
+    [Fact]
     public void TestParsesImportStatement()
     {
         var input = "use System.Console";

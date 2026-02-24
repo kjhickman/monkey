@@ -81,6 +81,14 @@ public class ControlFlowAnalyzerTests
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T117");
     }
 
+    [Fact]
+    public void TestLoopExpressionDoesNotSatisfyMissingReturnAnalysis()
+    {
+        var (_, result) = ParseResolveAndCheck("fn Test() -> int { loop { break 1 } }");
+
+        Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T117");
+    }
+
     private static (CompilationUnit Unit, TypeCheckResult Result) ParseResolveAndCheck(string input)
     {
         var lexer = new Lexer(input);

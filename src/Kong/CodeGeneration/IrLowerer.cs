@@ -6,6 +6,15 @@ namespace Kong.CodeGeneration;
 
 public class IrLowerer
 {
+    private sealed class LoopLoweringContext
+    {
+        public required int ContinueBlockId { get; init; }
+        public required int BreakBlockId { get; init; }
+        public required IrLocalId? IndexLocal { get; init; }
+        public required IrLocalId? ResultLocal { get; init; }
+        public required TypeSymbol? ResultType { get; init; }
+    }
+
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<CallExpression, string> _resolvedStaticMethodPaths = [];
@@ -29,6 +38,7 @@ public class IrLowerer
     private IrBlock _currentBlock = null!;
 
     private readonly Dictionary<string, IrLocalId> _localsByName = [];
+    private readonly Stack<LoopLoweringContext> _loopContexts = [];
 
     private int _nextValueId;
     private int _nextLocalId;
@@ -60,6 +70,7 @@ public class IrLowerer
         _interfaceDefinitions.Clear();
         _methodHelperNames.Clear();
         _constructorHelperNames.Clear();
+        _loopContexts.Clear();
         foreach (var pair in typeCheckResult.ExpressionTypes)
         {
             _expressionTypes[pair.Key] = pair.Value;
@@ -748,7 +759,7 @@ public class IrLowerer
         _currentBlock.Instructions.Add(new IrArrayIndex(elementValue, arrayValue.Value, indexForElement, elementType));
         _currentBlock.Instructions.Add(new IrStoreLocal(iteratorLocal, elementValue));
 
-        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, indexLocal))
+        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, indexLocal, null, null))
         {
             return false;
         }
@@ -782,7 +793,7 @@ public class IrLowerer
         _currentBlock.Terminator = new IrBranch(conditionValue.Value, bodyBlock.Id, afterBlock.Id);
 
         _currentBlock = bodyBlock;
-        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, null))
+        if (!LowerLoopBody(statement.Body, conditionBlock.Id, afterBlock.Id, null, null, null))
         {
             return false;
         }
@@ -791,8 +802,25 @@ public class IrLowerer
         return true;
     }
 
-    private bool LowerLoopBody(BlockStatement body, int continueBlockId, int breakBlockId, IrLocalId? indexLocal)
+    private bool LowerLoopBody(
+        BlockStatement body,
+        int continueBlockId,
+        int breakBlockId,
+        IrLocalId? indexLocal,
+        IrLocalId? loopResultLocal,
+        TypeSymbol? loopResultType)
     {
+        _loopContexts.Push(new LoopLoweringContext
+        {
+            ContinueBlockId = continueBlockId,
+            BreakBlockId = breakBlockId,
+            IndexLocal = indexLocal,
+            ResultLocal = loopResultLocal,
+            ResultType = loopResultType,
+        });
+
+        try
+        {
         foreach (var statement in body.Statements)
         {
             switch (statement)
@@ -834,11 +862,19 @@ public class IrLowerer
                         return false;
                     }
                     break;
-                case BreakStatement:
-                    _currentBlock.Terminator = new IrJump(breakBlockId);
+                case BreakStatement breakStatement:
+                    if (!LowerBreakStatement(breakStatement))
+                    {
+                        return false;
+                    }
+
                     return true;
-                case ContinueStatement:
-                    EmitLoopIncrement(indexLocal, continueBlockId);
+                case ContinueStatement continueStatement:
+                    if (!LowerContinueStatement(continueStatement))
+                    {
+                        return false;
+                    }
+
                     return true;
                 case ImportStatement:
                 case NamespaceStatement:
@@ -896,6 +932,11 @@ public class IrLowerer
 
         EmitLoopIncrement(indexLocal, continueBlockId);
         return true;
+        }
+        finally
+        {
+            _loopContexts.Pop();
+        }
     }
 
     private void EmitLoopIncrement(IrLocalId? indexLocal, int continueBlockId)
@@ -914,6 +955,62 @@ public class IrLowerer
         _currentBlock.Instructions.Add(new IrBinary(incremented, IrBinaryOperator.Add, currentIndex, one));
         _currentBlock.Instructions.Add(new IrStoreLocal(indexLocal.Value, incremented));
         _currentBlock.Terminator = new IrJump(continueBlockId);
+    }
+
+    private bool LowerBreakStatement(BreakStatement statement)
+    {
+        if (_loopContexts.Count == 0)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "phase-4 IR lowerer does not support break outside loops",
+                "IR001");
+            return false;
+        }
+
+        var loopContext = _loopContexts.Peek();
+        if (statement.Value != null)
+        {
+            if (loopContext.ResultLocal == null || loopContext.ResultType == null || loopContext.ResultType == TypeSymbols.Void)
+            {
+                _result.Diagnostics.Report(statement.Span,
+                    "phase-4 IR lowerer only supports break values for loop expressions",
+                    "IR001");
+                return false;
+            }
+
+            var value = LowerExpression(statement.Value);
+            if (value == null)
+            {
+                return false;
+            }
+
+            _currentBlock.Instructions.Add(new IrStoreLocal(loopContext.ResultLocal.Value, value.Value));
+        }
+        else if (loopContext.ResultLocal != null && loopContext.ResultType != TypeSymbols.Void)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "phase-4 IR lowerer requires break values for non-void loop expressions",
+                "IR001");
+            return false;
+        }
+
+        _currentBlock.Terminator = new IrJump(loopContext.BreakBlockId);
+        return true;
+    }
+
+    private bool LowerContinueStatement(ContinueStatement statement)
+    {
+        if (_loopContexts.Count == 0)
+        {
+            _result.Diagnostics.Report(statement.Span,
+                "phase-4 IR lowerer does not support continue outside loops",
+                "IR001");
+            return false;
+        }
+
+        var loopContext = _loopContexts.Peek();
+        EmitLoopIncrement(loopContext.IndexLocal, loopContext.ContinueBlockId);
+        return true;
     }
 
     private (string FunctionName, IReadOnlyList<IrLocalId> CapturedLocals)? LowerFunctionLiteral(
@@ -1250,6 +1347,9 @@ public class IrLowerer
             case IfExpression ifExpression:
                 return LowerIfExpression(ifExpression);
 
+            case LoopExpression loopExpression:
+                return LowerLoopExpression(loopExpression);
+
             case MatchExpression matchExpression:
                 return LowerMatchExpression(matchExpression);
 
@@ -1401,6 +1501,38 @@ public class IrLowerer
         _currentBlock = mergeBlock;
         var destination = AllocateValue(resultType);
         _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal));
+        return destination;
+    }
+
+    private IrValueId? LowerLoopExpression(LoopExpression loopExpression)
+    {
+        if (!TryGetExpressionType(loopExpression, out var resultType) || !IsSupportedRuntimeType(resultType))
+        {
+            _result.Diagnostics.Report(loopExpression.Span,
+                "phase-4 IR lowerer requires supported loop-expression result type",
+                "IR001");
+            return null;
+        }
+
+        var bodyBlock = NewBlock();
+        var afterBlock = NewBlock();
+        var resultLocal = resultType == TypeSymbols.Void ? (IrLocalId?)null : AllocateAnonymousLocal(resultType);
+
+        _currentBlock.Terminator = new IrJump(bodyBlock.Id);
+        _currentBlock = bodyBlock;
+        if (!LowerLoopBody(loopExpression.Body, bodyBlock.Id, afterBlock.Id, null, resultLocal, resultType))
+        {
+            return null;
+        }
+
+        _currentBlock = afterBlock;
+        if (resultType == TypeSymbols.Void)
+        {
+            return null;
+        }
+
+        var destination = AllocateValue(resultType);
+        _currentBlock.Instructions.Add(new IrLoadLocal(destination, resultLocal!.Value));
         return destination;
     }
 
@@ -1621,6 +1753,22 @@ public class IrLowerer
                         return null;
                     }
                     break;
+
+                case BreakStatement breakStatement:
+                    if (!LowerBreakStatement(breakStatement))
+                    {
+                        return null;
+                    }
+
+                    return true;
+
+                case ContinueStatement continueStatement:
+                    if (!LowerContinueStatement(continueStatement))
+                    {
+                        return null;
+                    }
+
+                    return true;
 
                 case ImportStatement:
                 case NamespaceStatement:

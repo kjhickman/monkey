@@ -771,4 +771,28 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestLexesLoopAndBreakValueTokens()
+    {
+        var input = "loop { break 42 }";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Loop, "loop"),
+            (TokenType.LeftBrace, "{"),
+            (TokenType.Break, "break"),
+            (TokenType.Integer, "42"),
+            (TokenType.RightBrace, "}"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }

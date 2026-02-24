@@ -1,0 +1,13 @@
+use System
+
+module Demo.LoopExpression
+
+fn Main() {
+    var i: int = 0
+    let value: int = loop {
+        i = i + 1
+        if (i < 5) { continue } else { break i }
+    }
+
+    System.Console.WriteLine(value)
+}
