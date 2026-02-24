@@ -67,10 +67,6 @@ impl Box {
     init(value: T) {
         self.value = value
     }
-
-    fn Get(self) -> T {
-        self.value
-    }
 }
 
 impl IGet for Box {
