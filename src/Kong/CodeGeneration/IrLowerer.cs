@@ -18,6 +18,7 @@ public class IrLowerer
     private IrLoweringResult _result = new();
     private readonly Dictionary<IExpression, TypeSymbol> _expressionTypes = [];
     private readonly Dictionary<CallExpression, string> _resolvedStaticMethodPaths = [];
+    private readonly Dictionary<CallExpression, string> _resolvedExtensionMethodPaths = [];
     private readonly Dictionary<MemberAccessExpression, string> _resolvedStaticValuePaths = [];
     private readonly Dictionary<CallExpression, string> _resolvedInstanceMethodMembers = [];
     private readonly Dictionary<MemberAccessExpression, string> _resolvedInstanceValueMembers = [];
@@ -57,6 +58,7 @@ public class IrLowerer
         _nameResolution = nameResolution;
         _expressionTypes.Clear();
         _resolvedStaticMethodPaths.Clear();
+        _resolvedExtensionMethodPaths.Clear();
         _resolvedStaticValuePaths.Clear();
         _resolvedInstanceMethodMembers.Clear();
         _resolvedInstanceValueMembers.Clear();
@@ -79,6 +81,11 @@ public class IrLowerer
         foreach (var pair in typeCheckResult.ResolvedStaticMethodPaths)
         {
             _resolvedStaticMethodPaths[pair.Key] = pair.Value;
+        }
+
+        foreach (var pair in typeCheckResult.ResolvedExtensionMethodPaths)
+        {
+            _resolvedExtensionMethodPaths[pair.Key] = pair.Value;
         }
 
         foreach (var pair in typeCheckResult.ResolvedStaticValuePaths)
@@ -1962,6 +1969,11 @@ public class IrLowerer
                 return LowerInstanceCallExpression(memberAccessExpression, callExpression, returnType);
             }
 
+            if (_resolvedExtensionMethodPaths.ContainsKey(callExpression))
+            {
+                return LowerExtensionMethodCallExpression(memberAccessExpression, callExpression, returnType);
+            }
+
             return LowerStaticCallExpression(memberAccessExpression, callExpression, returnType);
         }
 
@@ -2073,6 +2085,82 @@ public class IrLowerer
         var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count);
         var argumentModifiers = new List<CallArgumentModifier>(callExpression.Arguments.Count);
         var byRefLocals = new List<IrLocalId?>(callExpression.Arguments.Count);
+        foreach (var argument in callExpression.Arguments)
+        {
+            if (!TryGetExpressionType(argument.Expression, out var argumentType))
+            {
+                return null;
+            }
+
+            if (argument.Modifier is CallArgumentModifier.Out or CallArgumentModifier.Ref)
+            {
+                if (argument.Expression is not Identifier identifier || !_localsByName.TryGetValue(identifier.Value, out var local))
+                {
+                    _result.Diagnostics.Report(argument.Span,
+                        "phase-4 IR lowerer requires out/ref arguments to reference local variables",
+                        "IR002");
+                    return null;
+                }
+
+                arguments.Add(null);
+                byRefLocals.Add(local);
+            }
+            else
+            {
+                var value = LowerExpression(argument.Expression);
+                if (value == null)
+                {
+                    return null;
+                }
+
+                arguments.Add(value.Value);
+                byRefLocals.Add(null);
+            }
+
+            argumentTypes.Add(argumentType);
+            argumentModifiers.Add(argument.Modifier);
+        }
+
+        if (returnType == TypeSymbols.Void)
+        {
+            _currentBlock.Instructions.Add(new IrStaticCallVoid(methodPath, arguments, argumentTypes, argumentModifiers, byRefLocals));
+            return null;
+        }
+
+        var destination = AllocateValue(returnType);
+        _currentBlock.Instructions.Add(new IrStaticCall(destination, methodPath, arguments, argumentTypes, argumentModifiers, byRefLocals));
+        return destination;
+    }
+
+    private IrValueId? LowerExtensionMethodCallExpression(
+        MemberAccessExpression memberAccessExpression,
+        CallExpression callExpression,
+        TypeSymbol returnType)
+    {
+        if (!_resolvedExtensionMethodPaths.TryGetValue(callExpression, out var methodPath))
+        {
+            _result.Diagnostics.Report(memberAccessExpression.Span,
+                "phase-4 IR lowerer could not determine extension method path",
+                "IR002");
+            return null;
+        }
+
+        if (!TryGetExpressionType(memberAccessExpression.Object, out var receiverType))
+        {
+            return null;
+        }
+
+        var receiverValue = LowerExpression(memberAccessExpression.Object);
+        if (receiverValue == null)
+        {
+            return null;
+        }
+
+        var arguments = new List<IrValueId?>(callExpression.Arguments.Count + 1) { receiverValue.Value };
+        var argumentTypes = new List<TypeSymbol>(callExpression.Arguments.Count + 1) { receiverType };
+        var argumentModifiers = new List<CallArgumentModifier>(callExpression.Arguments.Count + 1) { CallArgumentModifier.None };
+        var byRefLocals = new List<IrLocalId?>(callExpression.Arguments.Count + 1) { null };
+
         foreach (var argument in callExpression.Arguments)
         {
             if (!TryGetExpressionType(argument.Expression, out var argumentType))
@@ -2605,6 +2693,7 @@ public class IrLowerer
                type is GenericParameterTypeSymbol ||
                type is ClassTypeSymbol ||
                type is InterfaceTypeSymbol ||
+               type is ClrGenericTypeSymbol ||
                type is EnumTypeSymbol ||
                type is ClrNominalTypeSymbol ||
                type is ArrayTypeSymbol arrayType && IsSupportedArrayElementType(arrayType.ElementType) ||
@@ -2709,6 +2798,25 @@ public class IrLowerer
             for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
             {
                 if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClrGenericTypeSymbol leftClrGeneric && right is ClrGenericTypeSymbol rightClrGeneric)
+        {
+            if (!string.Equals(leftClrGeneric.GenericTypeName, rightClrGeneric.GenericTypeName, StringComparison.Ordinal) ||
+                leftClrGeneric.TypeArguments.Count != rightClrGeneric.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClrGeneric.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClrGeneric.TypeArguments[i], rightClrGeneric.TypeArguments[i]))
                 {
                     return false;
                 }

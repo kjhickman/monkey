@@ -308,6 +308,11 @@ public sealed record ClrNominalTypeSymbol(string ClrTypeFullName) : TypeSymbol
     public override string Name => ClrTypeFullName;
 }
 
+public sealed record ClrGenericTypeSymbol(string GenericTypeName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol
+{
+    public override string Name => $"{GenericTypeName}<{string.Join(", ", TypeArguments)}>";
+}
+
 public static class TypeSymbols
 {
     public static IntTypeSymbol Int { get; } = IntTypeSymbol.Instance;

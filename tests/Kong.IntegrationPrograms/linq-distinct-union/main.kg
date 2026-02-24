@@ -1,0 +1,12 @@
+use System
+use System.Linq
+
+module Demo.LinqDistinctUnion
+
+fn Main() {
+    let left: int[] = [1, 2, 2, 3]
+    let right: int[] = [3, 4]
+    let unique = left.Distinct().Union(right)
+    let count: int = Enumerable.Count(unique)
+    Console.WriteLine(count)
+}

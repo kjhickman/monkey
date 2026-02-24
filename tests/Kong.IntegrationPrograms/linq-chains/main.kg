@@ -1,0 +1,16 @@
+use System
+use System.Linq
+
+module Demo.LinqChains
+
+fn Main() {
+    let numbers: int[] = [1, 2, 3, 4, 5]
+    let processed = numbers
+        .Where((n: int) => n > 2)
+        .Select((n: int) => n * n)
+        .OrderByDescending((n: int) => n)
+        .ToList()
+
+    let count: int = Enumerable.Count(processed)
+    Console.WriteLine(count)
+}

@@ -1,0 +1,20 @@
+use System
+use System.Linq
+
+module Demo.LinqSumAverageSelectors
+
+fn Main() {
+    let numbers: int[] = [1, 2, 3, 4]
+    let sum: int = numbers.Sum((n: int) => n * 2)
+    let avg: double = numbers.Average((n: int) => n * 2)
+
+    if (sum == 20) {
+        if (avg == 5.0) {
+            Console.WriteLine(1)
+        } else {
+            Console.WriteLine(0)
+        }
+    } else {
+        Console.WriteLine(0)
+    }
+}

@@ -1,0 +1,20 @@
+use System
+use System.Linq
+
+module Demo.LinqSumAverage
+
+fn Main() {
+    let numbers: int[] = [1, 2, 3, 4, 5]
+    let sum: int = numbers.Sum()
+    let avg: double = numbers.Average()
+
+    if (sum == 15) {
+        if (avg == 3.0) {
+            Console.WriteLine(1)
+        } else {
+            Console.WriteLine(0)
+        }
+    } else {
+        Console.WriteLine(0)
+    }
+}

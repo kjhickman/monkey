@@ -513,6 +513,196 @@ public class IrLowererTests
         Assert.Contains(lowering.Diagnostics.All, d => d.Code == "IR001");
     }
 
+    [Fact]
+    public void TestLowersLinqExtensionChainToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let processed = numbers.Where((n: int) => n > 1).Select((n: int) => n * n).OrderByDescending((n: int) => n).ToList() 1";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Where", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Select", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.OrderByDescending", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.ToList", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqAnyAndAllExtensionsToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let hasAny = numbers.Any() let allPositive = numbers.All((n: int) => n > 0) if (hasAny && allPositive) { 1 } else { 0 }";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Any", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.All", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqGroupByExtensionToStaticCall()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let grouped = numbers.GroupBy((n: int) => n > 2) let count: int = Enumerable.Count(grouped) count";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.GroupBy", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqThenByDescendingExtensionToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [21, 11, 12, 22, 13] let sorted = numbers.OrderBy((n: int) => n / 10).ThenByDescending((n: int) => n).ToList() let first: int = Enumerable.First(sorted) first";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.OrderBy", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.ThenByDescending", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.ToList", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqSelectManyExtensionToStaticCall()
+    {
+        var source = "use System.Linq let groups: int[][] = [[1, 2], [3, 4, 5]] let flattened = groups.SelectMany((g: int[]) => g) let count: int = Enumerable.Count(flattened) count";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.SelectMany", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqDistinctAndUnionExtensionsToStaticCalls()
+    {
+        var source = "use System.Linq let left: int[] = [1, 2, 2, 3] let right: int[] = [3, 4] let unique = left.Distinct().Union(right) let count: int = Enumerable.Count(unique) count";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Distinct", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Union", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqMaxAndMinExtensionsToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [5, 2, 8, 1, 9] let max: int = numbers.Max() let min: int = numbers.Min() max - min";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Max", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Min", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqSumAndAverageExtensionsToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let sum: int = numbers.Sum() let avg: double = numbers.Average() if (sum == 15) { if (avg == 3.0) { 1 } else { 0 } } else { 0 }";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Sum", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Average", staticCalls);
+    }
+
+    [Fact]
+    public void TestLowersLinqSumAndAverageSelectorExtensionsToStaticCalls()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let sum: int = numbers.Sum((n: int) => n * 2) let avg: double = numbers.Average((n: int) => n * 2) if (sum == 20) { if (avg == 5.0) { 1 } else { 0 } } else { 0 }";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Sum", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Average", staticCalls);
+    }
+
     private static (CompilationUnit Unit, TypeCheckResult TypeCheck) ParseAndTypeCheck(string input)
     {
         var (unit, typeCheck, _) = ParseAndTypeCheckWithNames(input);

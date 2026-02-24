@@ -1,0 +1,11 @@
+use System
+use System.Linq
+
+module Demo.LinqMaxMin
+
+fn Main() {
+    let numbers: int[] = [5, 2, 8, 1, 9]
+    let max: int = numbers.Max()
+    let min: int = numbers.Min()
+    Console.WriteLine(max - min)
+}

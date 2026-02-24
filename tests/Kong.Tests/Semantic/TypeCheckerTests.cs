@@ -714,12 +714,20 @@ public class TypeCheckerTests
     }
 
     [Fact]
-    public void TestReportsUnsupportedStaticClrMethodOverloadsWhenNoCompatibleSignatureExists()
+    public void TestTypeChecksStaticClrMethodReturningGenericTuple()
     {
-        var (_, _, result) = ParseResolveAndCheck("System.Math.DivRem(10, 3)");
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.DivRem(10, 3)");
 
-        Assert.True(result.Diagnostics.HasErrors);
-        Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var statement = Assert.IsType<ExpressionStatement>(unit.Statements[1]);
+        var call = Assert.IsType<CallExpression>(statement.Expression);
+        var tupleType = Assert.IsType<ClrGenericTypeSymbol>(result.ExpressionTypes[call]);
+        Assert.Equal("System.ValueTuple`2", tupleType.GenericTypeName);
+        Assert.Equal(2, tupleType.TypeArguments.Count);
+        Assert.Equal(TypeSymbols.Int, tupleType.TypeArguments[0]);
+        Assert.Equal(TypeSymbols.Int, tupleType.TypeArguments[1]);
     }
 
     [Fact]
@@ -923,6 +931,149 @@ public class TypeCheckerTests
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T137");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqExtensionMethodChain()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let processed = numbers.Where((n: int) => n > 2).Select((n: int) => n * n).OrderByDescending((n: int) => n).ToList() processed";
+        var (unit, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+
+        var processedBinding = Assert.IsType<ExpressionStatement>(unit.Statements.Last());
+        var processedIdentifier = Assert.IsType<Identifier>(processedBinding.Expression);
+        Assert.True(result.ExpressionTypes.TryGetValue(processedIdentifier, out var processedType));
+        Assert.IsType<ClrGenericTypeSymbol>(processedType);
+        Assert.Equal(4, result.ResolvedExtensionMethodPaths.Count);
+        Assert.All(result.ResolvedExtensionMethodPaths.Values, path => Assert.StartsWith("System.Linq.Enumerable.", path, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TestReportsLinqPredicateTypeMismatch()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3] numbers.Where((n: int) => n + 1)";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T113" || d.Code == "T122");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqAnyAndAllExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let hasAny = numbers.Any() let allPositive = numbers.All((n: int) => n > 0) if (hasAny && allPositive) { 1 } else { 0 }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Equal(2, result.ResolvedExtensionMethodPaths.Count);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Any");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.All");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqGroupByExtension()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let grouped = numbers.GroupBy((n: int) => n > 2) let count: int = Enumerable.Count(grouped) count";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.GroupBy");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqThenByDescendingExtension()
+    {
+        var source = "use System.Linq let numbers: int[] = [21, 11, 12, 22, 13] let sorted = numbers.OrderBy((n: int) => n / 10).ThenByDescending((n: int) => n).ToList() let first: int = Enumerable.First(sorted) first";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.OrderBy");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.ThenByDescending");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.ToList");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqSelectManyExtension()
+    {
+        var source = "use System.Linq let groups: int[][] = [[1, 2], [3, 4, 5]] let flattened = groups.SelectMany((g: int[]) => g) let count: int = Enumerable.Count(flattened) count";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.SelectMany");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqDistinctAndUnionExtensions()
+    {
+        var source = "use System.Linq let left: int[] = [1, 2, 2, 3] let right: int[] = [3, 4] let unique = left.Distinct().Union(right) let count: int = Enumerable.Count(unique) count";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Distinct");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Union");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqMaxAndMinExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [5, 2, 8, 1, 9] let max: int = numbers.Max() let min: int = numbers.Min() max - min";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Max");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Min");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqSumAndAverageExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let sum: int = numbers.Sum() let avg: double = numbers.Average() if (sum == 15) { if (avg == 3.0) { 1 } else { 0 } } else { 0 }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Sum");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Average");
+    }
+
+    [Fact]
+    public void TestTypeChecksLinqSumAndAverageSelectorExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let sum: int = numbers.Sum((n: int) => n * 2) let avg: double = numbers.Average((n: int) => n * 2) if (sum == 20) { if (avg == 5.0) { 1 } else { 0 } } else { 0 }";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Sum");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Average");
+    }
+
+    [Fact]
+    public void TestReportsNoMatchingLinqAggregateOverloadsForInvalidArguments()
+    {
+        var source = "use System.Linq let left: int[] = [1, 2] let right: int[] = [2, 3] left.Union(right, 1)";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
+    }
+
+    [Fact]
+    public void TestReportsNoMatchingLinqAverageOverloadForNonNumericSequence()
+    {
+        var source = "use System.Linq let flags: bool[] = [true, false] flags.Average()";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
     }
 
     private static (CompilationUnit Unit, NameResolution Names, TypeCheckResult Result) ParseResolveAndCheck(string input)

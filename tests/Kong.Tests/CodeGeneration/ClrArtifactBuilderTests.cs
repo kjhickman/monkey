@@ -274,6 +274,105 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesLinqExtensionChain()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let processed = numbers.Where((n: int) => n > 2).Select((n: int) => n * n).OrderByDescending((n: int) => n).ToList() 1";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqAnyAndAllExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let hasAny = numbers.Any() let allPositive = numbers.All((n: int) => n > 0) if (hasAny && allPositive) { 1 } else { 0 }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqGroupByAndCount()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let grouped = numbers.GroupBy((n: int) => n > 2) Enumerable.Count(grouped)";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(2, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqThenByDescendingChain()
+    {
+        var source = "use System.Linq let numbers: int[] = [21, 11, 12, 22, 13] let sorted = numbers.OrderBy((n: int) => n / 10).ThenByDescending((n: int) => n).ToList() Enumerable.First(sorted)";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(13, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqSelectManyAndCount()
+    {
+        var source = "use System.Linq let groups: int[][] = [[1, 2], [3, 4, 5]] let flattened = groups.SelectMany((g: int[]) => g) Enumerable.Count(flattened)";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(5, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqDistinctAndUnion()
+    {
+        var source = "use System.Linq let left: int[] = [1, 2, 2, 3] let right: int[] = [3, 4] let unique = left.Distinct().Union(right) Enumerable.Count(unique)";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(4, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqMaxAndMinExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [5, 2, 8, 1, 9] let max: int = numbers.Max() let min: int = numbers.Min() max - min";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(8, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqSumAndAverageExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4, 5] let sum: int = numbers.Sum() let avg: double = numbers.Average() if (sum == 15) { if (avg == 3.0) { 1 } else { 0 } } else { 0 }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
+    public void TestExecutesLinqSumAndAverageSelectorExtensions()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let sum: int = numbers.Sum((n: int) => n * 2) let avg: double = numbers.Average((n: int) => n * 2) if (sum == 20) { if (avg == 5.0) { 1 } else { 0 } } else { 0 }";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(1, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesForInLoopOverArray()
     {
         var source = "let xs: int[] = [1, 2, 3] var total: int = 0 for i in xs { total = total + i } total";

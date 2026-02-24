@@ -11,6 +11,7 @@ public class TypeCheckResult
     public Dictionary<MemberAccessExpression, string> ResolvedStaticValuePaths { get; } = [];
     public Dictionary<CallExpression, string> ResolvedInstanceMethodMembers { get; } = [];
     public Dictionary<MemberAccessExpression, string> ResolvedInstanceValueMembers { get; } = [];
+    public Dictionary<CallExpression, string> ResolvedExtensionMethodPaths { get; } = [];
     public Dictionary<NewExpression, string> ResolvedConstructorTypePaths { get; } = [];
     public Dictionary<LetStatement, TypeSymbol> VariableTypes { get; } = [];
     public Dictionary<FunctionLiteral, FunctionTypeSymbol> FunctionTypes { get; } = [];
@@ -114,6 +115,7 @@ public class TypeChecker
         _result.InterfaceDefinitions.Clear();
         _result.ResolvedEnumVariantConstructions.Clear();
         _result.ResolvedMatches.Clear();
+        _result.ResolvedExtensionMethodPaths.Clear();
         foreach (var declaration in externalEnumDeclarations)
         {
             _externalEnumDeclarations.Add(declaration);
@@ -1514,6 +1516,12 @@ public class TypeChecker
             return instanceReturnType;
         }
 
+        if (expression.Function is MemberAccessExpression memberAccessExpression3 &&
+            TryCheckExtensionMethodCall(expression, memberAccessExpression3, clrArguments, out var extensionReturnType))
+        {
+            return extensionReturnType;
+        }
+
         if (expression.Function is MemberAccessExpression memberAccessExpression2 &&
             TryCheckStaticMethodCall(expression, memberAccessExpression2, clrArguments, out var staticReturnType))
         {
@@ -1785,6 +1793,12 @@ public class TypeChecker
             return new InterfaceTypeSymbol(interfaceType.InterfaceName, args);
         }
 
+        if (type is ClrGenericTypeSymbol clrGenericType)
+        {
+            var args = clrGenericType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new ClrGenericTypeSymbol(clrGenericType.GenericTypeName, args);
+        }
+
         return type;
     }
 
@@ -1925,6 +1939,11 @@ public class TypeChecker
         if (type is InterfaceTypeSymbol interfaceType)
         {
             return interfaceType.TypeArguments.Any(ContainsGenericParameters);
+        }
+
+        if (type is ClrGenericTypeSymbol clrGenericType)
+        {
+            return clrGenericType.TypeArguments.Any(ContainsGenericParameters);
         }
 
         return false;
@@ -2282,6 +2301,11 @@ public class TypeChecker
                 out var resolutionError,
                 out var resolutionMessage))
         {
+            if (resolutionError is StaticClrMethodResolutionError.MethodNotFound or StaticClrMethodResolutionError.UnsupportedParameterType)
+            {
+                return false;
+            }
+
             var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
             _result.Diagnostics.Report(memberAccessExpression.Span, resolutionMessage, code);
             return true;
@@ -2330,6 +2354,48 @@ public class TypeChecker
         _result.ResolvedStaticMethodPaths[callExpression] = resolvedMethodPath;
         returnType = binding.ReturnType;
 
+        return true;
+    }
+
+    private bool TryCheckExtensionMethodCall(
+        CallExpression callExpression,
+        MemberAccessExpression memberAccessExpression,
+        IReadOnlyList<ClrCallArgument> arguments,
+        out TypeSymbol returnType)
+    {
+        returnType = TypeSymbols.Error;
+        if (!IsPotentialInstanceReceiver(memberAccessExpression.Object))
+        {
+            return false;
+        }
+
+        var receiverType = CheckExpression(memberAccessExpression.Object);
+        if (receiverType == TypeSymbols.Error)
+        {
+            return true;
+        }
+
+        if (!StaticClrMethodResolver.TryResolveExtensionMethod(
+                _names.ImportedNamespaces,
+                memberAccessExpression.Member,
+                receiverType,
+                arguments,
+                out var binding,
+                out var resolutionError,
+                out var resolutionMessage))
+        {
+            if (resolutionError != StaticClrMethodResolutionError.MethodNotFound)
+            {
+                var code = resolutionError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+                _result.Diagnostics.Report(memberAccessExpression.Span, resolutionMessage, code);
+                return true;
+            }
+
+            return false;
+        }
+
+        _result.ResolvedExtensionMethodPaths[callExpression] = binding.MethodPath;
+        returnType = binding.ReturnType;
         return true;
     }
 
@@ -2808,6 +2874,25 @@ public class TypeChecker
             for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
             {
                 if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClrGenericTypeSymbol leftClrGeneric && right is ClrGenericTypeSymbol rightClrGeneric)
+        {
+            if (!string.Equals(leftClrGeneric.GenericTypeName, rightClrGeneric.GenericTypeName, StringComparison.Ordinal) ||
+                leftClrGeneric.TypeArguments.Count != rightClrGeneric.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClrGeneric.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClrGeneric.TypeArguments[i], rightClrGeneric.TypeArguments[i]))
                 {
                     return false;
                 }

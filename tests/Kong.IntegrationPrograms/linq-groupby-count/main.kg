@@ -1,0 +1,11 @@
+use System
+use System.Linq
+
+module Demo.LinqGroupByCount
+
+fn Main() {
+    let numbers: int[] = [1, 2, 3, 4, 5]
+    let grouped = numbers.GroupBy((n: int) => n > 2)
+    let count: int = Enumerable.Count(grouped)
+    Console.WriteLine(count)
+}

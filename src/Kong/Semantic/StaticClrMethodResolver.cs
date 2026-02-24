@@ -1,5 +1,6 @@
 using Mono.Cecil;
 using Kong.Parsing;
+using System.Collections.Concurrent;
 
 namespace Kong.Semantic;
 
@@ -7,7 +8,8 @@ public sealed record StaticClrMethodBinding(
     string MethodPath,
     IReadOnlyList<TypeSymbol> ParameterTypes,
     TypeSymbol ReturnType,
-    MethodDefinition MethodDefinition);
+    MethodDefinition MethodDefinition,
+    IReadOnlyList<TypeSymbol> MethodTypeArguments);
 
 public sealed record StaticClrValueBinding(
     string MemberPath,
@@ -32,6 +34,7 @@ public enum StaticClrMethodResolutionError
 public static class StaticClrMethodResolver
 {
     private static readonly Lazy<IReadOnlyList<AssemblyDefinition>> Assemblies = new(LoadTrustedAssemblies);
+    private static readonly ConcurrentDictionary<string, MethodDefinition[]> ExtensionMethodCandidatesCache = new(StringComparer.Ordinal);
 
     public static bool IsKnownMethodPath(string methodPath)
     {
@@ -98,12 +101,12 @@ public static class StaticClrMethodResolver
             }
         }
 
-        var scoredMatches = new List<(MethodDefinition Method, int Score)>(candidates.Count);
+        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments)>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (TryGetParameterMatchScore(candidate, arguments, out var score))
+            if (TryGetCandidateMatch(candidate, arguments, out var score, out var returnType, out var methodTypeArguments))
             {
-                scoredMatches.Add((candidate, score));
+                scoredMatches.Add((candidate, score, returnType, methodTypeArguments));
             }
         }
 
@@ -115,20 +118,24 @@ public static class StaticClrMethodResolver
         }
 
         var bestScore = scoredMatches.Min(m => m.Score);
-        var matches = scoredMatches
-            .Where(m => m.Score == bestScore)
-            .Select(m => m.Method)
+        var matches = scoredMatches.Where(m => m.Score == bestScore).ToList();
+        var compatibleMatches = matches.Where(m => m.ReturnType != TypeSymbols.Error).ToList();
+        compatibleMatches = compatibleMatches
+            .GroupBy(m => m.Method.FullName, StringComparer.Ordinal)
+            .Select(g => g.First())
             .ToList();
-
-        var compatibleMatches = matches
-            .Where(m => TryMapClrTypeReferenceToKongType(m.ReturnType, out _))
-            .ToList();
-
+        if (compatibleMatches.Count > 1)
+        {
+            var nonGenericMatches = compatibleMatches.Where(m => !m.Method.HasGenericParameters).ToList();
+            if (nonGenericMatches.Count > 0)
+            {
+                compatibleMatches = nonGenericMatches;
+            }
+        }
         if (compatibleMatches.Count == 0)
         {
-            var unsupportedReturn = matches[0].ReturnType.FullName;
             error = StaticClrMethodResolutionError.UnsupportedReturnType;
-            errorMessage = $"static method '{methodPath}' returns unsupported CLR type '{unsupportedReturn}'";
+            errorMessage = $"static method '{methodPath}' returns unsupported CLR type '{matches[0].Method.ReturnType.FullName}'";
             return false;
         }
 
@@ -140,9 +147,95 @@ public static class StaticClrMethodResolver
         }
 
         var selected = compatibleMatches[0];
-        _ = TryMapClrTypeReferenceToKongType(selected.ReturnType, out var returnType);
 
-        binding = new StaticClrMethodBinding(methodPath, arguments.Select(a => a.Type).ToArray(), returnType, selected);
+        binding = new StaticClrMethodBinding(methodPath, arguments.Select(a => a.Type).ToArray(), selected.ReturnType, selected.Method, selected.MethodTypeArguments);
+        return true;
+    }
+
+    public static bool TryResolveExtensionMethod(
+        IReadOnlyCollection<string> importedNamespaces,
+        string memberName,
+        TypeSymbol receiverType,
+        IReadOnlyList<ClrCallArgument> arguments,
+        out StaticClrMethodBinding binding,
+        out StaticClrMethodResolutionError error,
+        out string errorMessage)
+    {
+        binding = null!;
+        error = StaticClrMethodResolutionError.None;
+        errorMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(memberName))
+        {
+            error = StaticClrMethodResolutionError.InvalidMethodPath;
+            errorMessage = "invalid extension method name";
+            return false;
+        }
+
+        if (importedNamespaces.Count == 0)
+        {
+            error = StaticClrMethodResolutionError.MethodNotFound;
+            errorMessage = $"unknown extension method '{memberName}'";
+            return false;
+        }
+
+        var callArguments = new ClrCallArgument[arguments.Count + 1];
+        callArguments[0] = new ClrCallArgument(receiverType, CallArgumentModifier.None);
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            callArguments[i + 1] = arguments[i];
+        }
+
+        var candidates = GetExtensionMethodCandidates(importedNamespaces, memberName);
+        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments)>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            if (TryGetCandidateMatch(candidate, callArguments, out var score, out var returnType, out var methodTypeArguments))
+            {
+                scoredMatches.Add((candidate, score, returnType, methodTypeArguments));
+            }
+        }
+
+        if (scoredMatches.Count == 0)
+        {
+            error = StaticClrMethodResolutionError.NoMatchingOverload;
+            errorMessage = $"no matching overload for extension method '{memberName}' on receiver type '{receiverType}' with argument types ({string.Join(", ", callArguments.Select(a => a.Type))})";
+            return false;
+        }
+
+        var bestScore = scoredMatches.Min(m => m.Score);
+        var matches = scoredMatches.Where(m => m.Score == bestScore).ToList();
+        var compatibleMatches = matches.Where(m => m.ReturnType != TypeSymbols.Error).ToList();
+        compatibleMatches = compatibleMatches
+            .GroupBy(m => m.Method.FullName, StringComparer.Ordinal)
+            .Select(g => g.First())
+            .ToList();
+        if (compatibleMatches.Count > 1)
+        {
+            var nonGenericMatches = compatibleMatches.Where(m => !m.Method.HasGenericParameters).ToList();
+            if (nonGenericMatches.Count > 0)
+            {
+                compatibleMatches = nonGenericMatches;
+            }
+        }
+        if (compatibleMatches.Count == 0)
+        {
+            error = StaticClrMethodResolutionError.UnsupportedReturnType;
+            errorMessage = $"extension method '{memberName}' returns unsupported CLR type '{matches[0].Method.ReturnType.FullName}'";
+            return false;
+        }
+
+        if (compatibleMatches.Count > 1)
+        {
+            error = StaticClrMethodResolutionError.AmbiguousOverload;
+            errorMessage = $"ambiguous extension method call '{memberName}' for receiver type '{receiverType}'";
+            return false;
+        }
+
+        var selected = compatibleMatches[0];
+        var declaringType = NormalizeTypeName(selected.Method.DeclaringType.FullName);
+        var methodPath = declaringType + "." + selected.Method.Name;
+        binding = new StaticClrMethodBinding(methodPath, callArguments.Select(a => a.Type).ToArray(), selected.ReturnType, selected.Method, selected.MethodTypeArguments);
         return true;
     }
 
@@ -245,7 +338,7 @@ public static class StaticClrMethodResolver
         }
 
         methods = typeDefinition.Methods
-            .Where(m => m.IsPublic && m.IsStatic && m.Name == methodName && !m.HasGenericParameters)
+            .Where(m => m.IsPublic && m.IsStatic && m.Name == methodName)
             .ToList();
 
         if (methods.Count == 0)
@@ -279,12 +372,289 @@ public static class StaticClrMethodResolver
         return true;
     }
 
-    private static bool TryGetParameterMatchScore(MethodDefinition method, IReadOnlyList<ClrCallArgument> arguments, out int score)
+    private static IReadOnlyList<MethodDefinition> GetExtensionMethodCandidates(IReadOnlyCollection<string> importedNamespaces, string memberName)
+    {
+        var cacheKey = BuildExtensionMethodCacheKey(importedNamespaces, memberName);
+        if (ExtensionMethodCandidatesCache.TryGetValue(cacheKey, out var cachedCandidates))
+        {
+            return cachedCandidates;
+        }
+
+        var namespaceSet = new HashSet<string>(importedNamespaces, StringComparer.Ordinal);
+        var candidates = new List<MethodDefinition>();
+
+        foreach (var assembly in Assemblies.Value)
+        {
+            foreach (var module in assembly.Modules)
+            {
+                foreach (var type in module.Types)
+                {
+                    CollectExtensionMethodsFromType(type, namespaceSet, memberName, candidates);
+                }
+            }
+        }
+
+        var resolvedCandidates = candidates.ToArray();
+        ExtensionMethodCandidatesCache[cacheKey] = resolvedCandidates;
+        return resolvedCandidates;
+    }
+
+    private static string BuildExtensionMethodCacheKey(IReadOnlyCollection<string> importedNamespaces, string memberName)
+    {
+        var namespaces = importedNamespaces
+            .Where(ns => !string.IsNullOrWhiteSpace(ns))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(ns => ns, StringComparer.Ordinal);
+        return string.Join(";", namespaces) + "|" + memberName;
+    }
+
+    private static void CollectExtensionMethodsFromType(
+        TypeDefinition type,
+        IReadOnlySet<string> importedNamespaces,
+        string memberName,
+        List<MethodDefinition> candidates)
+    {
+        if (!string.IsNullOrEmpty(type.Namespace) &&
+            importedNamespaces.Contains(type.Namespace) &&
+            type.IsAbstract && type.IsSealed)
+        {
+            foreach (var method in type.Methods)
+            {
+                if (!method.IsPublic || !method.IsStatic || method.Name != memberName || method.Parameters.Count == 0)
+                {
+                    continue;
+                }
+
+                var isExtensionMethod = method.CustomAttributes.Any(a => a.AttributeType.FullName == "System.Runtime.CompilerServices.ExtensionAttribute") ||
+                                        type.CustomAttributes.Any(a => a.AttributeType.FullName == "System.Runtime.CompilerServices.ExtensionAttribute");
+                if (isExtensionMethod)
+                {
+                    candidates.Add(method);
+                }
+            }
+        }
+
+        foreach (var nestedType in type.NestedTypes)
+        {
+            CollectExtensionMethodsFromType(nestedType, importedNamespaces, memberName, candidates);
+        }
+    }
+
+    private static bool TryGetCandidateMatch(
+        MethodDefinition method,
+        IReadOnlyList<ClrCallArgument> arguments,
+        out int score,
+        out TypeSymbol returnType,
+        out IReadOnlyList<TypeSymbol> methodTypeArguments)
+    {
+        score = int.MaxValue;
+        returnType = TypeSymbols.Error;
+        methodTypeArguments = [];
+
+        var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        if (!TryInferGenericArguments(method, arguments, inference))
+        {
+            return false;
+        }
+
+        if (!TryGetParameterMatchScore(method, arguments, inference, out score))
+        {
+            return false;
+        }
+
+        if (!TryMapClrTypeReferenceToKongType(method.ReturnType, inference, out returnType))
+        {
+            returnType = TypeSymbols.Error;
+        }
+
+        if (method.HasGenericParameters)
+        {
+            var resolvedArguments = new List<TypeSymbol>(method.GenericParameters.Count);
+            foreach (var genericParameter in method.GenericParameters)
+            {
+                if (!inference.TryGetValue(genericParameter.Name, out var argumentType))
+                {
+                    return false;
+                }
+
+                resolvedArguments.Add(argumentType);
+            }
+
+            methodTypeArguments = resolvedArguments;
+        }
+
+        return true;
+    }
+
+    private static bool TryInferGenericArguments(
+        MethodDefinition method,
+        IReadOnlyList<ClrCallArgument> arguments,
+        Dictionary<string, TypeSymbol> inference)
+    {
+        if (!method.HasGenericParameters)
+        {
+            return true;
+        }
+
+        var parameters = method.Parameters;
+        var hasParamsArray = HasParamsArray(method, inference, out var _);
+        var fixedCount = hasParamsArray ? parameters.Count - 1 : parameters.Count;
+        var directCount = Math.Min(arguments.Count, fixedCount);
+
+        for (var i = 0; i < directCount; i++)
+        {
+            var parameterType = parameters[i].ParameterType is ByReferenceType byReferenceType
+                ? byReferenceType.ElementType
+                : parameters[i].ParameterType;
+            if (!TryInferGenericFromClrType(parameterType, arguments[i].Type, inference))
+            {
+                return false;
+            }
+        }
+
+        if (hasParamsArray && parameters[^1].ParameterType is Mono.Cecil.ArrayType paramsArray)
+        {
+            for (var i = fixedCount; i < arguments.Count; i++)
+            {
+                if (!TryInferGenericFromClrType(paramsArray.ElementType, arguments[i].Type, inference))
+                {
+                    return false;
+                }
+            }
+        }
+
+        foreach (var genericParameter in method.GenericParameters)
+        {
+            if (!inference.ContainsKey(genericParameter.Name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryInferGenericFromClrType(TypeReference parameterType, TypeSymbol argumentType, Dictionary<string, TypeSymbol> inference)
+    {
+        if (parameterType is GenericParameter genericParameter)
+        {
+            if (inference.TryGetValue(genericParameter.Name, out var existing))
+            {
+                return TypeEquals(existing, argumentType);
+            }
+
+            inference[genericParameter.Name] = argumentType;
+            return true;
+        }
+
+        if (parameterType is ByReferenceType byReferenceType)
+        {
+            return TryInferGenericFromClrType(byReferenceType.ElementType, argumentType, inference);
+        }
+
+        if (parameterType is Mono.Cecil.ArrayType arrayType)
+        {
+            return argumentType is ArrayTypeSymbol arrayArgument &&
+                   TryInferGenericFromClrType(arrayType.ElementType, arrayArgument.ElementType, inference);
+        }
+
+        if (parameterType is GenericInstanceType genericInstanceType)
+        {
+            if (TryInferGenericFromDelegateType(genericInstanceType, argumentType, inference))
+            {
+                return true;
+            }
+
+            if (genericInstanceType.GenericArguments.Count == 1 &&
+                genericInstanceType.ElementType.FullName is "System.Collections.Generic.IEnumerable`1" or
+                    "System.Linq.IOrderedEnumerable`1" or
+                    "System.Linq.IQueryable`1" &&
+                argumentType is ArrayTypeSymbol arrayArgument)
+            {
+                return TryInferGenericFromClrType(genericInstanceType.GenericArguments[0], arrayArgument.ElementType, inference);
+            }
+
+            if (genericInstanceType.GenericArguments.Count == 1 &&
+                genericInstanceType.ElementType.FullName is "System.Collections.Generic.IEnumerable`1" or
+                    "System.Linq.IOrderedEnumerable`1" or
+                    "System.Linq.IQueryable`1" &&
+                argumentType is ClrGenericTypeSymbol { TypeArguments.Count: 1 } clrGenericArgumentForSequence)
+            {
+                return TryInferGenericFromClrType(genericInstanceType.GenericArguments[0], clrGenericArgumentForSequence.TypeArguments[0], inference);
+            }
+
+            if (argumentType is ClrGenericTypeSymbol clrGenericArgument &&
+                string.Equals(NormalizeTypeName(genericInstanceType.ElementType.FullName), clrGenericArgument.GenericTypeName, StringComparison.Ordinal) &&
+                genericInstanceType.GenericArguments.Count == clrGenericArgument.TypeArguments.Count)
+            {
+                for (var i = 0; i < genericInstanceType.GenericArguments.Count; i++)
+                {
+                    if (!TryInferGenericFromClrType(genericInstanceType.GenericArguments[i], clrGenericArgument.TypeArguments[i], inference))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryInferGenericFromDelegateType(GenericInstanceType parameterType, TypeSymbol argumentType, Dictionary<string, TypeSymbol> inference)
+    {
+        var delegateName = NormalizeTypeName(parameterType.ElementType.FullName);
+        if (delegateName == "System.Action")
+        {
+            return argumentType is FunctionTypeSymbol { ParameterTypes.Count: 0, ReturnType: var returnType } && returnType == TypeSymbols.Void;
+        }
+
+        if (!delegateName.StartsWith("System.Func`", StringComparison.Ordinal) &&
+            !delegateName.StartsWith("System.Action`", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (argumentType is not FunctionTypeSymbol functionType)
+        {
+            return false;
+        }
+
+        var expectedParameterCount = delegateName.StartsWith("System.Func`", StringComparison.Ordinal)
+            ? parameterType.GenericArguments.Count - 1
+            : parameterType.GenericArguments.Count;
+        if (functionType.ParameterTypes.Count != expectedParameterCount)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < expectedParameterCount; i++)
+        {
+            if (!TryInferGenericFromClrType(parameterType.GenericArguments[i], functionType.ParameterTypes[i], inference))
+            {
+                return false;
+            }
+        }
+
+        if (delegateName.StartsWith("System.Func`", StringComparison.Ordinal))
+        {
+            return TryInferGenericFromClrType(parameterType.GenericArguments[^1], functionType.ReturnType, inference);
+        }
+
+        return functionType.ReturnType == TypeSymbols.Void;
+    }
+
+    private static bool TryGetParameterMatchScore(
+        MethodDefinition method,
+        IReadOnlyList<ClrCallArgument> arguments,
+        IReadOnlyDictionary<string, TypeSymbol> inference,
+        out int score)
     {
         score = 0;
 
         var parameters = method.Parameters;
-        var hasParamsArray = HasParamsArray(method, out var paramsElementType);
+        var hasParamsArray = HasParamsArray(method, inference, out var paramsElementType);
         var fixedParameterCount = hasParamsArray ? parameters.Count - 1 : parameters.Count;
 
         var requiredFixedCount = 0;
@@ -309,14 +679,14 @@ public static class StaticClrMethodResolver
         var bestScore = int.MaxValue;
 
         if (arguments.Count <= parameters.Count &&
-            TryScoreDirectOrOptionalCall(parameters, arguments, out var directScore))
+            TryScoreDirectOrOptionalCall(parameters, arguments, inference, out var directScore))
         {
             bestScore = directScore;
         }
 
         if (hasParamsArray && paramsElementType != TypeSymbols.Error &&
             arguments.Count >= fixedParameterCount &&
-            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, arguments, out var expandedScore))
+            TryScoreExpandedParamsCall(parameters, fixedParameterCount, paramsElementType, arguments, inference, out var expandedScore))
         {
             if (expandedScore < bestScore)
             {
@@ -336,6 +706,7 @@ public static class StaticClrMethodResolver
     private static bool TryScoreDirectOrOptionalCall(
         IList<ParameterDefinition> parameters,
         IReadOnlyList<ClrCallArgument> arguments,
+        IReadOnlyDictionary<string, TypeSymbol> inference,
         out int score)
     {
         score = 0;
@@ -347,7 +718,7 @@ public static class StaticClrMethodResolver
 
         for (var i = 0; i < arguments.Count; i++)
         {
-            if (!TryGetParameterTypeAndModifier(parameters[i], out var parameterType, out var expectedModifier) ||
+            if (!TryGetParameterTypeAndModifier(parameters[i], inference, out var parameterType, out var expectedModifier) ||
                 parameterType == TypeSymbols.Void)
             {
                 return false;
@@ -384,6 +755,7 @@ public static class StaticClrMethodResolver
         int fixedParameterCount,
         TypeSymbol paramsElementType,
         IReadOnlyList<ClrCallArgument> arguments,
+        IReadOnlyDictionary<string, TypeSymbol> inference,
         out int score)
     {
         score = 0;
@@ -401,7 +773,7 @@ public static class StaticClrMethodResolver
                 continue;
             }
 
-            if (!TryGetParameterTypeAndModifier(parameters[i], out var parameterType, out var expectedModifier) ||
+            if (!TryGetParameterTypeAndModifier(parameters[i], inference, out var parameterType, out var expectedModifier) ||
                 parameterType == TypeSymbols.Void)
             {
                 return false;
@@ -444,9 +816,62 @@ public static class StaticClrMethodResolver
     {
         score = int.MaxValue;
 
-        if (source == target)
+        if (TypeEquals(source, target))
         {
             score = 0;
+            return true;
+        }
+
+        if (source is FunctionTypeSymbol sourceFunction && target is FunctionTypeSymbol targetFunction)
+        {
+            if (sourceFunction.ParameterTypes.Count != targetFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < sourceFunction.ParameterTypes.Count; i++)
+            {
+                if (!TypeEquals(sourceFunction.ParameterTypes[i], targetFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            if (TryGetConversionScore(sourceFunction.ReturnType, targetFunction.ReturnType, out var returnScore))
+            {
+                score = returnScore + 1;
+                return true;
+            }
+
+            return false;
+        }
+
+        if (source is ArrayTypeSymbol sourceArray &&
+            target is ClrGenericTypeSymbol targetGeneric &&
+            targetGeneric.TypeArguments.Count == 1 &&
+            targetGeneric.GenericTypeName is "System.Collections.Generic.IEnumerable`1" or "System.Collections.Generic.IReadOnlyList`1" or "System.Collections.Generic.IReadOnlyCollection`1" &&
+            TypeEquals(sourceArray.ElementType, targetGeneric.TypeArguments[0]))
+        {
+            score = 1;
+            return true;
+        }
+
+        if (source is ArrayTypeSymbol &&
+            target is ClrNominalTypeSymbol nominalTarget &&
+            nominalTarget.ClrTypeFullName is "System.Collections.IEnumerable")
+        {
+            score = 2;
+            return true;
+        }
+
+        if (source is ClrGenericTypeSymbol sourceGeneric &&
+            target is ClrGenericTypeSymbol targetGenericType &&
+            sourceGeneric.TypeArguments.Count == 1 &&
+            targetGenericType.TypeArguments.Count == 1 &&
+            targetGenericType.GenericTypeName is "System.Collections.Generic.IEnumerable`1" or "System.Collections.Generic.IReadOnlyList`1" or "System.Collections.Generic.IReadOnlyCollection`1" &&
+            TypeEquals(sourceGeneric.TypeArguments[0], targetGenericType.TypeArguments[0]))
+        {
+            score = 1;
             return true;
         }
 
@@ -506,7 +931,7 @@ public static class StaticClrMethodResolver
 
         foreach (var parameter in method.Parameters)
         {
-            if (!TryMapClrTypeReferenceToKongType(parameter.ParameterType, out var parameterType))
+            if (!TryMapClrTypeReferenceToKongType(parameter.ParameterType, null, out var parameterType))
             {
                 return false;
             }
@@ -626,6 +1051,23 @@ public static class StaticClrMethodResolver
             return true;
         }
 
+        if (type is ClrNominalTypeSymbol nominalType)
+        {
+            clrTypeName = nominalType.ClrTypeFullName;
+            return true;
+        }
+
+        if (type is ClrGenericTypeSymbol genericType)
+        {
+            clrTypeName = genericType.GenericTypeName;
+            return true;
+        }
+
+        if (type is FunctionTypeSymbol functionType)
+        {
+            return TryMapFunctionTypeToClrFullName(functionType, out clrTypeName);
+        }
+
         if (type is ArrayTypeSymbol array)
         {
             if (!TryMapKongTypeToClrFullName(array.ElementType, out var elementClrName))
@@ -640,16 +1082,60 @@ public static class StaticClrMethodResolver
         return false;
     }
 
+    private static bool TryMapFunctionTypeToClrFullName(FunctionTypeSymbol functionType, out string clrTypeName)
+    {
+        if (functionType.ReturnType == TypeSymbols.Void)
+        {
+            clrTypeName = functionType.ParameterTypes.Count switch
+            {
+                0 => "System.Action",
+                <= 16 => $"System.Action`{functionType.ParameterTypes.Count}",
+                _ => string.Empty,
+            };
+
+            return clrTypeName.Length > 0;
+        }
+
+        if (functionType.ParameterTypes.Count > 16)
+        {
+            clrTypeName = string.Empty;
+            return false;
+        }
+
+        clrTypeName = $"System.Func`{functionType.ParameterTypes.Count + 1}";
+        return true;
+    }
+
     private static bool TryMapClrTypeReferenceToKongType(TypeReference clrType, out TypeSymbol type)
     {
+        return TryMapClrTypeReferenceToKongType(clrType, null, out type);
+    }
+
+    private static bool TryMapClrTypeReferenceToKongType(
+        TypeReference clrType,
+        IReadOnlyDictionary<string, TypeSymbol>? genericArguments,
+        out TypeSymbol type)
+    {
+        if (clrType is GenericParameter genericParameter)
+        {
+            if (genericArguments != null && genericArguments.TryGetValue(genericParameter.Name, out var inferredType))
+            {
+                type = inferredType;
+                return true;
+            }
+
+            type = new GenericParameterTypeSymbol(genericParameter.Name);
+            return true;
+        }
+
         if (clrType is ByReferenceType byReferenceType)
         {
-            return TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, out type);
+            return TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, genericArguments, out type);
         }
 
         if (clrType is Mono.Cecil.ArrayType arrayType)
         {
-            if (!TryMapClrTypeReferenceToKongType(arrayType.ElementType, out var elementType))
+            if (!TryMapClrTypeReferenceToKongType(arrayType.ElementType, genericArguments, out var elementType))
             {
                 type = TypeSymbols.Error;
                 return false;
@@ -659,10 +1145,105 @@ public static class StaticClrMethodResolver
             return true;
         }
 
-        return TryMapClrFullNameToKongType(NormalizeTypeName(clrType.FullName), out type);
+        if (clrType is GenericInstanceType genericInstanceType)
+        {
+            if (TryMapFuncOrActionType(genericInstanceType, genericArguments, out type))
+            {
+                return true;
+            }
+
+            var genericTypeName = NormalizeTypeName(genericInstanceType.ElementType.FullName);
+
+            var genericTypeArguments = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count);
+            foreach (var genericArgument in genericInstanceType.GenericArguments)
+            {
+                if (!TryMapClrTypeReferenceToKongType(genericArgument, genericArguments, out var mappedArgument))
+                {
+                    type = TypeSymbols.Error;
+                    return false;
+                }
+
+                genericTypeArguments.Add(mappedArgument);
+            }
+
+            type = new ClrGenericTypeSymbol(genericTypeName, genericTypeArguments);
+            return true;
+        }
+
+        var normalized = NormalizeTypeName(clrType.FullName);
+        if (TryMapClrFullNameToKongType(normalized, out type))
+        {
+            return true;
+        }
+
+        type = TypeSymbols.Error;
+        return false;
+    }
+
+    private static bool TryMapFuncOrActionType(
+        GenericInstanceType genericInstanceType,
+        IReadOnlyDictionary<string, TypeSymbol>? genericArguments,
+        out TypeSymbol type)
+    {
+        var normalizedName = NormalizeTypeName(genericInstanceType.ElementType.FullName);
+        if (normalizedName == "System.Action")
+        {
+            type = new FunctionTypeSymbol([], TypeSymbols.Void);
+            return true;
+        }
+
+        if (normalizedName.StartsWith("System.Action`", StringComparison.Ordinal))
+        {
+            var parameterTypes = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count);
+            foreach (var genericArgument in genericInstanceType.GenericArguments)
+            {
+                if (!TryMapClrTypeReferenceToKongType(genericArgument, genericArguments, out var parameterType))
+                {
+                    type = TypeSymbols.Error;
+                    return false;
+                }
+
+                parameterTypes.Add(parameterType);
+            }
+
+            type = new FunctionTypeSymbol(parameterTypes, TypeSymbols.Void);
+            return true;
+        }
+
+        if (normalizedName.StartsWith("System.Func`", StringComparison.Ordinal) && genericInstanceType.GenericArguments.Count > 0)
+        {
+            var parameterTypes = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count - 1);
+            for (var i = 0; i < genericInstanceType.GenericArguments.Count - 1; i++)
+            {
+                if (!TryMapClrTypeReferenceToKongType(genericInstanceType.GenericArguments[i], genericArguments, out var parameterType))
+                {
+                    type = TypeSymbols.Error;
+                    return false;
+                }
+
+                parameterTypes.Add(parameterType);
+            }
+
+            if (!TryMapClrTypeReferenceToKongType(genericInstanceType.GenericArguments[^1], genericArguments, out var returnType))
+            {
+                type = TypeSymbols.Error;
+                return false;
+            }
+
+            type = new FunctionTypeSymbol(parameterTypes, returnType);
+            return true;
+        }
+
+        type = TypeSymbols.Error;
+        return false;
     }
 
     private static bool HasParamsArray(MethodDefinition method, out TypeSymbol elementType)
+    {
+        return HasParamsArray(method, null, out elementType);
+    }
+
+    private static bool HasParamsArray(MethodDefinition method, IReadOnlyDictionary<string, TypeSymbol>? genericArguments, out TypeSymbol elementType)
     {
         elementType = TypeSymbols.Error;
         if (method.Parameters.Count == 0)
@@ -681,7 +1262,7 @@ public static class StaticClrMethodResolver
             return false;
         }
 
-        return TryMapClrTypeReferenceToKongType(paramsArrayType.ElementType, out elementType);
+        return TryMapClrTypeReferenceToKongType(paramsArrayType.ElementType, genericArguments, out elementType);
     }
 
     private static bool IsOptionalParameter(ParameterDefinition parameter)
@@ -691,13 +1272,14 @@ public static class StaticClrMethodResolver
 
     private static bool TryGetParameterTypeAndModifier(
         ParameterDefinition parameter,
+        IReadOnlyDictionary<string, TypeSymbol>? genericArguments,
         out TypeSymbol parameterType,
         out CallArgumentModifier modifier)
     {
         modifier = CallArgumentModifier.None;
         if (parameter.ParameterType is ByReferenceType byReferenceType)
         {
-            if (!TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, out parameterType))
+            if (!TryMapClrTypeReferenceToKongType(byReferenceType.ElementType, genericArguments, out parameterType))
             {
                 return false;
             }
@@ -706,7 +1288,7 @@ public static class StaticClrMethodResolver
             return true;
         }
 
-        return TryMapClrTypeReferenceToKongType(parameter.ParameterType, out parameterType);
+        return TryMapClrTypeReferenceToKongType(parameter.ParameterType, genericArguments, out parameterType);
     }
 
     private static bool TryMapClrFullNameToKongType(string clrTypeName, out TypeSymbol type)
@@ -769,6 +1351,59 @@ public static class StaticClrMethodResolver
             default:
                 return false;
         }
+    }
+
+    private static bool TypeEquals(TypeSymbol left, TypeSymbol right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left is ArrayTypeSymbol leftArray && right is ArrayTypeSymbol rightArray)
+        {
+            return TypeEquals(leftArray.ElementType, rightArray.ElementType);
+        }
+
+        if (left is FunctionTypeSymbol leftFunction && right is FunctionTypeSymbol rightFunction)
+        {
+            if (!TypeEquals(leftFunction.ReturnType, rightFunction.ReturnType) ||
+                leftFunction.ParameterTypes.Count != rightFunction.ParameterTypes.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftFunction.ParameterTypes.Count; i++)
+            {
+                if (!TypeEquals(leftFunction.ParameterTypes[i], rightFunction.ParameterTypes[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClrGenericTypeSymbol leftClrGeneric && right is ClrGenericTypeSymbol rightClrGeneric)
+        {
+            if (!string.Equals(leftClrGeneric.GenericTypeName, rightClrGeneric.GenericTypeName, StringComparison.Ordinal) ||
+                leftClrGeneric.TypeArguments.Count != rightClrGeneric.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClrGeneric.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClrGeneric.TypeArguments[i], rightClrGeneric.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return left == right;
     }
 
     private static string NormalizeTypeName(string clrTypeName)

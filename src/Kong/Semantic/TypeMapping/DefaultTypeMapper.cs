@@ -146,6 +146,29 @@ public class DefaultTypeMapper : ITypeMapper
             return module.ImportReference(typeDefinition);
         }
 
+        if (kongType is ClrGenericTypeSymbol genericType)
+        {
+            if (!ConstructorClrResolver.TryResolveTypeDefinition(genericType.GenericTypeName, out var genericTypeDefinition))
+            {
+                diagnostics.Report(Span.Empty, $"CLR backend could not load runtime generic type '{genericType.GenericTypeName}'", "IL001");
+                return null;
+            }
+
+            var genericInstance = new GenericInstanceType(module.ImportReference(genericTypeDefinition));
+            foreach (var typeArgument in genericType.TypeArguments)
+            {
+                var mappedTypeArgument = TryMapKongType(typeArgument, module, diagnostics);
+                if (mappedTypeArgument == null)
+                {
+                    return null;
+                }
+
+                genericInstance.GenericArguments.Add(mappedTypeArgument);
+            }
+
+            return genericInstance;
+        }
+
         if (kongType is GenericParameterTypeSymbol)
         {
             return module.TypeSystem.Object;
@@ -228,6 +251,11 @@ public class DefaultTypeMapper : ITypeMapper
         if (type is ClrNominalTypeSymbol)
         {
             return true;
+        }
+
+        if (type is ClrGenericTypeSymbol clrGenericType)
+        {
+            return clrGenericType.TypeArguments.All(IsTypeSupported);
         }
 
         if (type is GenericParameterTypeSymbol)

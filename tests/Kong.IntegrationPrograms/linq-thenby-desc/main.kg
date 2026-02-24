@@ -1,0 +1,15 @@
+use System
+use System.Linq
+
+module Demo.LinqThenByDesc
+
+fn Main() {
+    let numbers: int[] = [21, 11, 12, 22, 13]
+    let sorted = numbers
+        .OrderBy((n: int) => n / 10)
+        .ThenByDescending((n: int) => n)
+        .ToList()
+
+    let first: int = Enumerable.First(sorted)
+    Console.WriteLine(first)
+}

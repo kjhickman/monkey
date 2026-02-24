@@ -1,0 +1,11 @@
+use System
+use System.Linq
+
+module Demo.LinqSelectMany
+
+fn Main() {
+    let groups: int[][] = [[1, 2], [3, 4, 5]]
+    let flattened = groups.SelectMany((g: int[]) => g)
+    let count: int = Enumerable.Count(flattened)
+    Console.WriteLine(count)
+}

@@ -953,7 +953,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (binding.ReturnType != staticReturnType)
+                        if (!TypeEquals(binding.ReturnType, staticReturnType))
                         {
                             diagnostics.Report(Span.Empty,
                                 $"phase-5 CLR backend expected static call '{staticCall.MethodPath}' to return '{staticReturnType}', but resolver returned '{binding.ReturnType}'",
@@ -961,12 +961,17 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCall.Arguments, staticCall.ArgumentTypes, staticCall.ArgumentModifiers, staticCall.ByRefLocals, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCall.Arguments, staticCall.ArgumentTypes, staticCall.ArgumentModifiers, staticCall.ByRefLocals, binding.MethodDefinition, binding.MethodTypeArguments, diagnostics, typeMapper))
                         {
                             return false;
                         }
 
-                        var staticMethod = module.ImportReference(binding.MethodDefinition);
+                        var staticMethod = ImportResolvedMethod(module, binding.MethodDefinition, binding.MethodTypeArguments, diagnostics, typeMapper);
+                        if (staticMethod == null)
+                        {
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Call, staticMethod);
                         il.Emit(OpCodes.Stloc, valueLocals[staticCall.Destination]);
                         break;
@@ -1017,7 +1022,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (binding.ReturnType != TypeSymbols.Void)
+                        if (!TypeEquals(binding.ReturnType, TypeSymbols.Void))
                         {
                             diagnostics.Report(Span.Empty,
                                 $"phase-5 CLR backend expected static call '{staticCallVoid.MethodPath}' to return 'void', but resolver returned '{binding.ReturnType}'",
@@ -1025,12 +1030,17 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCallVoid.Arguments, staticCallVoid.ArgumentTypes, staticCallVoid.ArgumentModifiers, staticCallVoid.ByRefLocals, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, staticCallVoid.Arguments, staticCallVoid.ArgumentTypes, staticCallVoid.ArgumentModifiers, staticCallVoid.ByRefLocals, binding.MethodDefinition, binding.MethodTypeArguments, diagnostics, typeMapper))
                         {
                             return false;
                         }
 
-                        var staticVoidMethod = module.ImportReference(binding.MethodDefinition);
+                        var staticVoidMethod = ImportResolvedMethod(module, binding.MethodDefinition, binding.MethodTypeArguments, diagnostics, typeMapper);
+                        if (staticVoidMethod == null)
+                        {
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Call, staticVoidMethod);
                         break;
                     }
@@ -1055,7 +1065,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (binding.ReturnType != instanceReturnType)
+                        if (!TypeEquals(binding.ReturnType, instanceReturnType))
                         {
                             diagnostics.Report(Span.Empty,
                                 $"phase-5 CLR backend expected instance call '{instanceCall.MemberName}' to return '{instanceReturnType}', but resolver returned '{binding.ReturnType}'",
@@ -1064,12 +1074,17 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Ldloc, valueLocals[instanceCall.Receiver]);
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCall.Arguments, instanceCall.ArgumentTypes, instanceCall.ArgumentModifiers, instanceCall.ByRefLocals, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCall.Arguments, instanceCall.ArgumentTypes, instanceCall.ArgumentModifiers, instanceCall.ByRefLocals, binding.MethodDefinition, [], diagnostics, typeMapper))
                         {
                             return false;
                         }
 
-                        var importedMethod = module.ImportReference(binding.MethodDefinition);
+                        var importedMethod = ImportResolvedMethod(module, binding.MethodDefinition, [], diagnostics, typeMapper);
+                        if (importedMethod == null)
+                        {
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Callvirt, importedMethod);
                         il.Emit(OpCodes.Stloc, valueLocals[instanceCall.Destination]);
                         break;
@@ -1089,7 +1104,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (binding.ReturnType != TypeSymbols.Void)
+                        if (!TypeEquals(binding.ReturnType, TypeSymbols.Void))
                         {
                             diagnostics.Report(Span.Empty,
                                 $"phase-5 CLR backend expected instance call '{instanceCallVoid.MemberName}' to return 'void', but resolver returned '{binding.ReturnType}'",
@@ -1098,12 +1113,17 @@ public class ClrArtifactBuilder
                         }
 
                         il.Emit(OpCodes.Ldloc, valueLocals[instanceCallVoid.Receiver]);
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCallVoid.Arguments, instanceCallVoid.ArgumentTypes, instanceCallVoid.ArgumentModifiers, instanceCallVoid.ByRefLocals, binding.MethodDefinition, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, instanceCallVoid.Arguments, instanceCallVoid.ArgumentTypes, instanceCallVoid.ArgumentModifiers, instanceCallVoid.ByRefLocals, binding.MethodDefinition, [], diagnostics, typeMapper))
                         {
                             return false;
                         }
 
-                        var importedMethod = module.ImportReference(binding.MethodDefinition);
+                        var importedMethod = ImportResolvedMethod(module, binding.MethodDefinition, [], diagnostics, typeMapper);
+                        if (importedMethod == null)
+                        {
+                            return false;
+                        }
+
                         il.Emit(OpCodes.Callvirt, importedMethod);
                         break;
                     }
@@ -1388,7 +1408,7 @@ public class ClrArtifactBuilder
                             il.Emit(OpCodes.Ldloc, valueLocals[argument]);
                         }
 
-                        var invokeMethod = BuildDelegateInvoke(invokeFunctionType, module, diagnostics, delegateTypeMap);
+                        var invokeMethod = BuildDelegateInvoke(invokeFunctionType, module, diagnostics, typeMapper);
                         if (invokeMethod == null)
                         {
                             return false;
@@ -1412,7 +1432,7 @@ public class ClrArtifactBuilder
                             il.Emit(OpCodes.Ldloc, valueLocals[argument]);
                         }
 
-                        var invokeVoidMethod = BuildDelegateInvoke(invokeVoidFunctionType, module, diagnostics, delegateTypeMap);
+                        var invokeVoidMethod = BuildDelegateInvoke(invokeVoidFunctionType, module, diagnostics, typeMapper);
                         if (invokeVoidMethod == null)
                         {
                             return false;
@@ -1502,7 +1522,7 @@ public class ClrArtifactBuilder
                             return false;
                         }
 
-                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, newObject.Arguments.Select(a => (IrValueId?)a).ToArray(), newObject.ArgumentTypes, BuildNoModifiers(newObject.ArgumentTypes.Count), BuildNoByRefLocals(newObject.ArgumentTypes.Count), binding.Constructor, diagnostics))
+                        if (!EmitResolvedStaticCallArguments(module, il, valueLocals, localVariables, parameterLocalIndexes, newObject.Arguments.Select(a => (IrValueId?)a).ToArray(), newObject.ArgumentTypes, BuildNoModifiers(newObject.ArgumentTypes.Count), BuildNoByRefLocals(newObject.ArgumentTypes.Count), binding.Constructor, [], diagnostics, typeMapper))
                         {
                             return false;
                         }
@@ -1792,6 +1812,29 @@ public class ClrArtifactBuilder
             return module.ImportReference(typeDefinition);
         }
 
+        if (type is ClrGenericTypeSymbol genericType)
+        {
+            if (!ConstructorClrResolver.TryResolveTypeDefinition(genericType.GenericTypeName, out var genericTypeDefinition))
+            {
+                diagnostics.Report(Span.Empty, $"phase-4 CLR backend could not load runtime generic type '{genericType.GenericTypeName}'", "IL001");
+                return null;
+            }
+
+            var genericInstance = new GenericInstanceType(module.ImportReference(genericTypeDefinition));
+            foreach (var typeArgument in genericType.TypeArguments)
+            {
+                var mappedTypeArgument = MapType(typeArgument, module, diagnostics, delegateTypeMap, enumTypeMap, classTypeMap, interfaceTypeMap);
+                if (mappedTypeArgument == null)
+                {
+                    return null;
+                }
+
+                genericInstance.GenericArguments.Add(mappedTypeArgument);
+            }
+
+            return genericInstance;
+        }
+
         if (type is GenericParameterTypeSymbol)
         {
             return module.TypeSystem.Object;
@@ -1959,22 +2002,35 @@ public class ClrArtifactBuilder
         FunctionTypeSymbol functionType,
         ModuleDefinition module,
         DiagnosticBag diagnostics,
-        IReadOnlyDictionary<string, TypeDefinition> delegateTypeMap)
+        ITypeMapper typeMapper)
     {
-        if (!delegateTypeMap.TryGetValue(functionType.Name, out var delegateType))
+        var delegateType = MapType(functionType, module, diagnostics, typeMapper);
+        if (delegateType == null)
         {
             diagnostics.Report(Span.Empty, $"phase-6 CLR backend is missing delegate type for '{functionType}'", "IL001");
             return null;
         }
 
-        var invokeDefinition = delegateType.Methods.FirstOrDefault(m => m.Name == "Invoke");
+        var resolvedDelegateType = delegateType.Resolve();
+        if (resolvedDelegateType == null)
+        {
+            diagnostics.Report(Span.Empty, "phase-6 CLR backend could not resolve delegate type", "IL001");
+            return null;
+        }
+
+        var invokeDefinition = resolvedDelegateType.Methods.FirstOrDefault(m => m.Name == "Invoke");
         if (invokeDefinition == null)
         {
             diagnostics.Report(Span.Empty, "phase-6 CLR backend could not resolve delegate invoke method", "IL001");
             return null;
         }
 
-        return module.ImportReference(invokeDefinition);
+        if (delegateType is GenericInstanceType genericDelegateType)
+        {
+            return module.ImportReference(invokeDefinition, genericDelegateType);
+        }
+
+        return module.ImportReference(invokeDefinition, resolvedDelegateType);
     }
 
     private static DisplayClassInfo? BuildDisplayClass(
@@ -2125,6 +2181,52 @@ public class ClrArtifactBuilder
         return Enumerable.Repeat<IrLocalId?>(null, count).ToArray();
     }
 
+    private static MethodReference? ImportResolvedMethod(
+        ModuleDefinition module,
+        MethodDefinition method,
+        IReadOnlyList<TypeSymbol> methodTypeArguments,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        var importedMethod = module.ImportReference(method);
+        if (methodTypeArguments.Count == 0)
+        {
+            return importedMethod;
+        }
+
+        var genericMethod = new GenericInstanceMethod(importedMethod);
+        foreach (var typeArgument in methodTypeArguments)
+        {
+            var mappedTypeArgument = MapType(typeArgument, module, diagnostics, typeMapper);
+            if (mappedTypeArgument == null)
+            {
+                return null;
+            }
+
+            genericMethod.GenericArguments.Add(mappedTypeArgument);
+        }
+
+        return genericMethod;
+    }
+
+    private static Dictionary<string, TypeSymbol> BuildMethodGenericArgumentMap(
+        MethodDefinition method,
+        IReadOnlyList<TypeSymbol> methodTypeArguments)
+    {
+        var map = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
+        if (!method.HasGenericParameters || methodTypeArguments.Count == 0)
+        {
+            return map;
+        }
+
+        for (var i = 0; i < method.GenericParameters.Count && i < methodTypeArguments.Count; i++)
+        {
+            map[method.GenericParameters[i].Name] = methodTypeArguments[i];
+        }
+
+        return map;
+    }
+
     private static bool EmitResolvedStaticCallArguments(
         ModuleDefinition module,
         ILProcessor il,
@@ -2136,8 +2238,11 @@ public class ClrArtifactBuilder
         IReadOnlyList<CallArgumentModifier> argumentModifiers,
         IReadOnlyList<IrLocalId?> byRefLocals,
         MethodDefinition method,
-        DiagnosticBag diagnostics)
+        IReadOnlyList<TypeSymbol> methodTypeArguments,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
     {
+        var genericArguments = BuildMethodGenericArgumentMap(method, methodTypeArguments);
         var parameters = method.Parameters;
         var hasParamsArray = parameters.Count > 0 &&
             parameters[^1].CustomAttributes.Any(a => a.AttributeType.FullName == "System.ParamArrayAttribute") &&
@@ -2153,13 +2258,13 @@ public class ClrArtifactBuilder
 
             for (var i = 0; i < arguments.Count; i++)
             {
-                if (!TryMapParameterType(parameters[i], out var parameterType))
+                if (!TryMapParameterType(parameters[i], genericArguments, out var parameterType))
                 {
                     diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported parameter type '{parameters[i].ParameterType.FullName}'", "IL001");
                     return false;
                 }
 
-                if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics))
+                if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics, typeMapper))
                 {
                     return false;
                 }
@@ -2185,13 +2290,13 @@ public class ClrArtifactBuilder
 
         for (var i = 0; i < fixedCount; i++)
         {
-            if (!TryMapParameterType(parameters[i], out var parameterType))
+            if (!TryMapParameterType(parameters[i], genericArguments, out var parameterType))
             {
                 diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported parameter type '{parameters[i].ParameterType.FullName}'", "IL001");
                 return false;
             }
 
-            if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics))
+            if (!EmitCallArgument(module, il, valueLocals, localVariables, parameterLocalIndexes, method, i, arguments[i], argumentTypes[i], argumentModifiers[i], byRefLocals[i], parameterType, parameters[i], diagnostics, typeMapper))
             {
                 return false;
             }
@@ -2203,7 +2308,7 @@ public class ClrArtifactBuilder
             return false;
         }
 
-        if (!TryMapType(paramsArrayType.ElementType, out var paramsElementType))
+        if (!TryMapType(paramsArrayType.ElementType, genericArguments, out var paramsElementType))
         {
             diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported params element type '{paramsArrayType.ElementType.FullName}'", "IL001");
             return false;
@@ -2296,7 +2401,8 @@ public class ClrArtifactBuilder
         IrLocalId? byRefLocal,
         TypeSymbol parameterType,
         ParameterDefinition targetParameter,
-        DiagnosticBag diagnostics)
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
     {
         if (targetParameter.ParameterType is ByReferenceType)
         {
@@ -2335,8 +2441,207 @@ public class ClrArtifactBuilder
             return false;
         }
 
+        if (argumentType is FunctionTypeSymbol && parameterType is FunctionTypeSymbol parameterFunctionType)
+        {
+            var parameterDelegateType = BuildSystemDelegateTypeReference(parameterFunctionType, module, diagnostics, typeMapper);
+            if (parameterDelegateType == null)
+            {
+                diagnostics.Report(Span.Empty,
+                    $"phase-5 CLR backend could not map delegate parameter type '{parameterFunctionType}'",
+                    "IL001");
+                return false;
+            }
+
+            if (!EmitDelegateArgumentConversion(il, valueLocals[argumentValue.Value], parameterDelegateType, module, diagnostics))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         EmitArgumentWithConversion(il, valueLocals[argumentValue.Value], argumentType, parameterType);
         return true;
+    }
+
+    private static bool EmitDelegateArgumentConversion(
+        ILProcessor il,
+        VariableDefinition sourceDelegate,
+        TypeReference targetDelegateType,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics)
+    {
+        var systemType = module.ImportReference(typeof(Type));
+        var delegateType = module.ImportReference(typeof(Delegate));
+        var runtimeTypeHandle = module.ImportReference(typeof(RuntimeTypeHandle));
+        var methodInfoType = module.ImportReference(typeof(System.Reflection.MethodInfo));
+
+        var getTypeFromHandle = new MethodReference(nameof(Type.GetTypeFromHandle), systemType, systemType)
+        {
+            HasThis = false,
+        };
+        getTypeFromHandle.Parameters.Add(new ParameterDefinition(runtimeTypeHandle));
+
+        var getTarget = new MethodReference("get_Target", module.TypeSystem.Object, delegateType)
+        {
+            HasThis = true,
+        };
+
+        var getMethod = new MethodReference("get_Method", methodInfoType, delegateType)
+        {
+            HasThis = true,
+        };
+
+        var createDelegateFromTargetAndMethod = new MethodReference(nameof(Delegate.CreateDelegate), delegateType, delegateType)
+        {
+            HasThis = false,
+        };
+        createDelegateFromTargetAndMethod.Parameters.Add(new ParameterDefinition(systemType));
+        createDelegateFromTargetAndMethod.Parameters.Add(new ParameterDefinition(module.TypeSystem.Object));
+        createDelegateFromTargetAndMethod.Parameters.Add(new ParameterDefinition(methodInfoType));
+
+        il.Emit(OpCodes.Ldtoken, module.ImportReference(targetDelegateType));
+        il.Emit(OpCodes.Call, module.ImportReference(getTypeFromHandle));
+        il.Emit(OpCodes.Ldloc, sourceDelegate);
+        il.Emit(OpCodes.Callvirt, module.ImportReference(getTarget));
+        il.Emit(OpCodes.Ldloc, sourceDelegate);
+        il.Emit(OpCodes.Callvirt, module.ImportReference(getMethod));
+        il.Emit(OpCodes.Call, module.ImportReference(createDelegateFromTargetAndMethod));
+        il.Emit(OpCodes.Castclass, module.ImportReference(targetDelegateType));
+        return true;
+    }
+
+    private static TypeReference? BuildSystemDelegateTypeReference(
+        FunctionTypeSymbol functionType,
+        ModuleDefinition module,
+        DiagnosticBag diagnostics,
+        ITypeMapper typeMapper)
+    {
+        if (functionType.ReturnType == TypeSymbols.Void)
+        {
+            if (functionType.ParameterTypes.Count == 0)
+            {
+                return module.ImportReference(typeof(Action));
+            }
+
+            if (functionType.ParameterTypes.Count > 16)
+            {
+                diagnostics.Report(Span.Empty,
+                    $"phase-5 CLR backend only supports Action delegates up to arity 16, got {functionType.ParameterTypes.Count}",
+                    "IL001");
+                return null;
+            }
+
+            var actionOpenType = GetActionOpenGenericType(functionType.ParameterTypes.Count);
+            if (actionOpenType == null)
+            {
+                diagnostics.Report(Span.Empty,
+                    $"phase-5 CLR backend could not map Action delegate arity {functionType.ParameterTypes.Count}",
+                    "IL001");
+                return null;
+            }
+
+            var actionInstance = new GenericInstanceType(module.ImportReference(actionOpenType));
+            foreach (var parameterType in functionType.ParameterTypes)
+            {
+                var mapped = MapType(parameterType, module, diagnostics, typeMapper);
+                if (mapped == null)
+                {
+                    return null;
+                }
+
+                actionInstance.GenericArguments.Add(mapped);
+            }
+
+            return module.ImportReference(actionInstance);
+        }
+
+        if (functionType.ParameterTypes.Count > 16)
+        {
+            diagnostics.Report(Span.Empty,
+                $"phase-5 CLR backend only supports Func delegates up to arity 16, got {functionType.ParameterTypes.Count}",
+                "IL001");
+            return null;
+        }
+
+        var funcOpenType = GetFuncOpenGenericType(functionType.ParameterTypes.Count + 1);
+        if (funcOpenType == null)
+        {
+            diagnostics.Report(Span.Empty,
+                $"phase-5 CLR backend could not map Func delegate arity {functionType.ParameterTypes.Count + 1}",
+                "IL001");
+            return null;
+        }
+
+        var funcInstance = new GenericInstanceType(module.ImportReference(funcOpenType));
+        foreach (var parameterType in functionType.ParameterTypes)
+        {
+            var mapped = MapType(parameterType, module, diagnostics, typeMapper);
+            if (mapped == null)
+            {
+                return null;
+            }
+
+            funcInstance.GenericArguments.Add(mapped);
+        }
+
+        var mappedReturn = MapType(functionType.ReturnType, module, diagnostics, typeMapper);
+        if (mappedReturn == null)
+        {
+            return null;
+        }
+
+        funcInstance.GenericArguments.Add(mappedReturn);
+        return module.ImportReference(funcInstance);
+    }
+
+    private static Type? GetActionOpenGenericType(int arity)
+    {
+        return arity switch
+        {
+            1 => typeof(Action<>),
+            2 => typeof(Action<,>),
+            3 => typeof(Action<,,>),
+            4 => typeof(Action<,,,>),
+            5 => typeof(Action<,,,,>),
+            6 => typeof(Action<,,,,,>),
+            7 => typeof(Action<,,,,,,>),
+            8 => typeof(Action<,,,,,,,>),
+            9 => typeof(Action<,,,,,,,,>),
+            10 => typeof(Action<,,,,,,,,,>),
+            11 => typeof(Action<,,,,,,,,,,>),
+            12 => typeof(Action<,,,,,,,,,,,>),
+            13 => typeof(Action<,,,,,,,,,,,,>),
+            14 => typeof(Action<,,,,,,,,,,,,,>),
+            15 => typeof(Action<,,,,,,,,,,,,,,>),
+            16 => typeof(Action<,,,,,,,,,,,,,,,>),
+            _ => null,
+        };
+    }
+
+    private static Type? GetFuncOpenGenericType(int arity)
+    {
+        return arity switch
+        {
+            1 => typeof(Func<>),
+            2 => typeof(Func<,>),
+            3 => typeof(Func<,,>),
+            4 => typeof(Func<,,,>),
+            5 => typeof(Func<,,,,>),
+            6 => typeof(Func<,,,,,>),
+            7 => typeof(Func<,,,,,,>),
+            8 => typeof(Func<,,,,,,,>),
+            9 => typeof(Func<,,,,,,,,>),
+            10 => typeof(Func<,,,,,,,,,>),
+            11 => typeof(Func<,,,,,,,,,,>),
+            12 => typeof(Func<,,,,,,,,,,,>),
+            13 => typeof(Func<,,,,,,,,,,,,>),
+            14 => typeof(Func<,,,,,,,,,,,,,>),
+            15 => typeof(Func<,,,,,,,,,,,,,,>),
+            16 => typeof(Func<,,,,,,,,,,,,,,,>),
+            17 => typeof(Func<,,,,,,,,,,,,,,,,>),
+            _ => null,
+        };
     }
 
     private static bool EmitClassFieldLoadConversion(
@@ -2479,7 +2784,7 @@ public class ClrArtifactBuilder
 
     private static bool EmitDefaultArgument(ILProcessor il, ParameterDefinition parameter, DiagnosticBag diagnostics)
     {
-        if (!TryMapParameterType(parameter, out var parameterType))
+        if (!TryMapParameterType(parameter, new Dictionary<string, TypeSymbol>(StringComparer.Ordinal), out var parameterType))
         {
             diagnostics.Report(Span.Empty, $"phase-5 CLR backend unsupported optional parameter type '{parameter.ParameterType.FullName}'", "IL001");
             return false;
@@ -2642,21 +2947,111 @@ public class ClrArtifactBuilder
         il.Emit(OpCodes.Ldelem_Ref);
     }
 
-    private static bool TryMapParameterType(ParameterDefinition parameter, out TypeSymbol parameterType)
+    private static bool TryMapParameterType(
+        ParameterDefinition parameter,
+        IReadOnlyDictionary<string, TypeSymbol> genericArguments,
+        out TypeSymbol parameterType)
     {
-        return TryMapType(parameter.ParameterType, out parameterType);
+        return TryMapType(parameter.ParameterType, genericArguments, out parameterType);
     }
 
     private static bool TryMapType(TypeReference typeReference, out TypeSymbol type)
     {
+        return TryMapType(typeReference, new Dictionary<string, TypeSymbol>(StringComparer.Ordinal), out type);
+    }
+
+    private static bool TryMapType(
+        TypeReference typeReference,
+        IReadOnlyDictionary<string, TypeSymbol> genericArguments,
+        out TypeSymbol type)
+    {
+        if (typeReference is GenericParameter genericParameter)
+        {
+            if (genericArguments.TryGetValue(genericParameter.Name, out var genericArgumentType))
+            {
+                type = genericArgumentType;
+                return true;
+            }
+
+            type = TypeSymbols.Error;
+            return false;
+        }
+
         if (typeReference is ByReferenceType byReferenceType)
         {
-            return TryMapType(byReferenceType.ElementType, out type);
+            return TryMapType(byReferenceType.ElementType, genericArguments, out type);
+        }
+
+        if (typeReference is GenericInstanceType genericInstanceType)
+        {
+            var normalizedDelegateName = genericInstanceType.ElementType.FullName.Replace("/", ".");
+            if (normalizedDelegateName == "System.Action")
+            {
+                type = new FunctionTypeSymbol([], TypeSymbols.Void);
+                return true;
+            }
+
+            if (normalizedDelegateName.StartsWith("System.Action`", StringComparison.Ordinal))
+            {
+                var parameterTypes = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count);
+                foreach (var genericArgument in genericInstanceType.GenericArguments)
+                {
+                    if (!TryMapType(genericArgument, genericArguments, out var parameterType))
+                    {
+                        type = TypeSymbols.Error;
+                        return false;
+                    }
+
+                    parameterTypes.Add(parameterType);
+                }
+
+                type = new FunctionTypeSymbol(parameterTypes, TypeSymbols.Void);
+                return true;
+            }
+
+            if (normalizedDelegateName.StartsWith("System.Func`", StringComparison.Ordinal) && genericInstanceType.GenericArguments.Count > 0)
+            {
+                var parameterTypes = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count - 1);
+                for (var i = 0; i < genericInstanceType.GenericArguments.Count - 1; i++)
+                {
+                    if (!TryMapType(genericInstanceType.GenericArguments[i], genericArguments, out var parameterType))
+                    {
+                        type = TypeSymbols.Error;
+                        return false;
+                    }
+
+                    parameterTypes.Add(parameterType);
+                }
+
+                if (!TryMapType(genericInstanceType.GenericArguments[^1], genericArguments, out var returnType))
+                {
+                    type = TypeSymbols.Error;
+                    return false;
+                }
+
+                type = new FunctionTypeSymbol(parameterTypes, returnType);
+                return true;
+            }
+
+            var mappedGenericArguments = new List<TypeSymbol>(genericInstanceType.GenericArguments.Count);
+            foreach (var genericArgument in genericInstanceType.GenericArguments)
+            {
+                if (!TryMapType(genericArgument, genericArguments, out var genericTypeArgument))
+                {
+                    type = TypeSymbols.Error;
+                    return false;
+                }
+
+                mappedGenericArguments.Add(genericTypeArgument);
+            }
+
+            type = new ClrGenericTypeSymbol(genericInstanceType.ElementType.FullName.Replace("/", "."), mappedGenericArguments);
+            return true;
         }
 
         if (typeReference is Mono.Cecil.ArrayType arrayType)
         {
-            if (!TryMapType(arrayType.ElementType, out var elementType))
+            if (!TryMapType(arrayType.ElementType, genericArguments, out var elementType))
             {
                 type = TypeSymbols.Error;
                 return false;
@@ -2748,6 +3143,12 @@ public class ClrArtifactBuilder
             return new InterfaceTypeSymbol(interfaceType.InterfaceName, args);
         }
 
+        if (type is ClrGenericTypeSymbol clrGenericType)
+        {
+            var args = clrGenericType.TypeArguments.Select(a => SubstituteGenericParameters(a, substitution)).ToList();
+            return new ClrGenericTypeSymbol(clrGenericType.GenericTypeName, args);
+        }
+
         return type;
     }
 
@@ -2831,6 +3232,25 @@ public class ClrArtifactBuilder
             for (var i = 0; i < leftInterface.TypeArguments.Count; i++)
             {
                 if (!TypeEquals(leftInterface.TypeArguments[i], rightInterface.TypeArguments[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (left is ClrGenericTypeSymbol leftClrGeneric && right is ClrGenericTypeSymbol rightClrGeneric)
+        {
+            if (!string.Equals(leftClrGeneric.GenericTypeName, rightClrGeneric.GenericTypeName, StringComparison.Ordinal) ||
+                leftClrGeneric.TypeArguments.Count != rightClrGeneric.TypeArguments.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < leftClrGeneric.TypeArguments.Count; i++)
+            {
+                if (!TypeEquals(leftClrGeneric.TypeArguments[i], rightClrGeneric.TypeArguments[i]))
                 {
                     return false;
                 }
