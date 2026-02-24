@@ -1,10 +1,10 @@
-namespace Demo.Arrays;
+namespace Demo.Arrays
 
 public fn Pick(matrix: int[][]) -> int {
-    let row: int[] = matrix[1];
-    row[0];
+    let row: int[] = matrix[1]
+    row[0]
 }
 
 public fn Word(words: string[]) -> string {
-    words[1];
+    words[1]
 }

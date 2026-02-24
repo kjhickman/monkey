@@ -76,7 +76,7 @@ public class DiagnosticTests
     [Fact]
     public void TestParserProducesDiagnosticsOnError()
     {
-        var l = new Lexer("let = 5;");
+        var l = new Lexer("let = 5");
         var p = new Parser(l);
         p.ParseCompilationUnit();
 
@@ -89,7 +89,7 @@ public class DiagnosticTests
     [Fact]
     public void TestParserNoPrefixParseFnDiagnostic()
     {
-        var l = new Lexer("=;");
+        var l = new Lexer("=");
         var p = new Parser(l);
         p.ParseCompilationUnit();
 

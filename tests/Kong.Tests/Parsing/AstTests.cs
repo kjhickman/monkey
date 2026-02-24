@@ -29,7 +29,7 @@ public class AstTests
             ],
         };
 
-        Assert.Equal("let myVar = anotherVar;", program.String());
+        Assert.Equal("let myVar = anotherVar", program.String());
     }
 
     [Fact]
@@ -82,6 +82,6 @@ public class AstTests
             ],
         };
 
-        Assert.Equal("let x: int = 5;", program.String());
+        Assert.Equal("let x: int = 5", program.String());
     }
 }

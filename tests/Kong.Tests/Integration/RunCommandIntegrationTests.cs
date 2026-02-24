@@ -9,7 +9,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandReportsInferenceDiagnostic()
     {
-        var filePath = CreateTempProgram("fn Main() { let x = if (true) { 1 }; }");
+        var filePath = CreateTempProgram("fn Main() { let x = if (true) { 1 } }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -25,7 +25,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandFailsFastBeforeCompilerDiagnostics()
     {
-        var filePath = CreateTempProgram("fn Main() { foobar; }");
+        var filePath = CreateTempProgram("fn Main() { foobar }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -42,7 +42,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesValidProgram()
     {
-        var filePath = CreateTempProgram("fn Main() { let x = 2; x + 3; }");
+        var filePath = CreateTempProgram("fn Main() { let x = 2 x + 3 }");
         try
         {
             var (_, stderr, _) = ExecuteRunCommand(filePath);
@@ -57,7 +57,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesSimpleAdditionWithClrPhase1Backend()
     {
-        var filePath = CreateTempProgram("fn Main() { 1 + 1; }");
+        var filePath = CreateTempProgram("fn Main() { 1 + 1 }");
         try
         {
             var (_, stderr, _) = ExecuteRunCommand(filePath);
@@ -72,7 +72,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesFunctionCallWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { fn(x: int) -> int { return x + 1; }(5); }");
+        var filePath = CreateTempProgram("fn Main() { fn(x: int) -> int { return x + 1 }(5) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -88,7 +88,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesArrayAndStaticClrProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let xs: int[] = [1, 2, 3]; System.Console.WriteLine(xs[0]); System.Math.Abs(-4); }");
+        var filePath = CreateTempProgram("fn Main() { let xs: int[] = [1, 2, 3] System.Console.WriteLine(xs[0]) System.Math.Abs(-4) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -105,7 +105,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesStringAndByteArrayProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let ss: string[] = [\"kong\", \"lang\"]; let bs: byte[] = [1b, 2b, 3b]; if (ss[1] == \"lang\") { if (bs[2] == 3b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }");
+        var filePath = CreateTempProgram("fn Main() { let ss: string[] = [\"kong\", \"lang\"] let bs: byte[] = [1b, 2b, 3b] if (ss[1] == \"lang\") { if (bs[2] == 3b) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -122,7 +122,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesNestedIntArrayProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; System.Console.WriteLine(ys[0]); }");
+        var filePath = CreateTempProgram("fn Main() { let xss: int[][] = [[1, 2], [3, 4]] let ys: int[] = xss[1] System.Console.WriteLine(ys[0]) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -139,7 +139,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesClosureProgramWithClrBackend()
     {
-        var filePath = CreateTempProgram("fn Main() { let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10); }");
+        var filePath = CreateTempProgram("fn Main() { let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -155,7 +155,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandExecutesNamedFunctionDeclarationProgram()
     {
-        var filePath = CreateTempProgram("fn Add(x: int, y: int) -> int { x + y; } fn Main() { Add(20, 22); }");
+        var filePath = CreateTempProgram("fn Add(x: int, y: int) -> int { x + y } fn Main() { Add(20, 22) }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -171,7 +171,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandPropagatesMainIntExitCodeSilently()
     {
-        var filePath = CreateTempProgram("fn Main() -> int { 7; }");
+        var filePath = CreateTempProgram("fn Main() -> int { 7 }");
         try
         {
             var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -187,7 +187,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrOutput()
     {
-        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42); }");
+        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42) }");
         try
         {
             var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -204,7 +204,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrWriteLineOutput()
     {
-        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42); }");
+        var filePath = CreateTempProgram("fn Main() { System.Console.WriteLine(42) }");
         try
         {
             var (stdout, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -221,7 +221,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsImportedStaticClrWriteLineOutput()
     {
-        var filePath = CreateTempProgram("import System.Console; fn Main() { Console.WriteLine(42); }");
+        var filePath = CreateTempProgram("import System.Console fn Main() { Console.WriteLine(42) }");
         try
         {
             var (_, _, exitCode) = ExecuteRunCommand(filePath);
@@ -236,7 +236,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsNamespaceImportForStaticClrWriteLineOutput()
     {
-        var filePath = CreateTempProgram("import System; fn Main() { Console.WriteLine(42); }");
+        var filePath = CreateTempProgram("import System fn Main() { Console.WriteLine(42) }");
         try
         {
             var (_, _, exitCode) = ExecuteRunCommand(filePath);
@@ -253,7 +253,7 @@ public class RunCommandIntegrationTests
     {
         var tempFilePath = Path.Combine(Path.GetTempPath(), $"kong-io-test-{Guid.NewGuid():N}.txt");
         var escapedPath = tempFilePath.Replace("\\", "\\\\");
-        var source = $"import System; import System.IO; fn Main() {{ File.WriteAllText(\"{escapedPath}\", \"hello\"); Console.WriteLine(File.ReadAllText(\"{escapedPath}\")); File.Delete(\"{escapedPath}\"); }}";
+        var source = $"import System import System.IO fn Main() {{ File.WriteAllText(\"{escapedPath}\", \"hello\") Console.WriteLine(File.ReadAllText(\"{escapedPath}\")) File.Delete(\"{escapedPath}\") }}";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -283,8 +283,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; public fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
+            File.WriteAllText(utilPath, "namespace Util public fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "import Util namespace App fn Main() { Add(20, 22) }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -302,7 +302,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandRejectsPathImportSyntax()
     {
-        var filePath = CreateTempProgram("import \"./missing.kg\"; fn Main() { 0; }");
+        var filePath = CreateTempProgram("import \"./missing.kg\" fn Main() { 0 }");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);
@@ -326,9 +326,9 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Shared; public fn Inc(x: int) -> int { x + 1; }");
-            File.WriteAllText(mathPath, "namespace Shared; public fn Twice(x: int) -> int { x * 2; }");
-            File.WriteAllText(mainPath, "import Shared; namespace App; fn Main() { Twice(Inc(20)); }");
+            File.WriteAllText(utilPath, "namespace Shared public fn Inc(x: int) -> int { x + 1 }");
+            File.WriteAllText(mathPath, "namespace Shared public fn Twice(x: int) -> int { x * 2 }");
+            File.WriteAllText(mainPath, "import Shared namespace App fn Main() { Twice(Inc(20)) }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -353,8 +353,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Helpers fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { Add(1, 2) }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -379,8 +379,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import Helpers; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Helpers fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "import Helpers namespace App fn Main() { Add(1, 2) }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -405,8 +405,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace Shared; fn Main() { Add(20, 22); }");
+            File.WriteAllText(utilPath, "namespace Shared fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace Shared fn Main() { Add(20, 22) }");
 
             var (_, stderr, exitCode) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stderr.Trim());
@@ -431,8 +431,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace Shared; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Shared fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace Shared fn Add(x: int, y: int) -> int { x - y } fn Main() { Add(1, 2) }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -457,8 +457,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { 1; }");
+            File.WriteAllText(utilPath, "fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { 1 }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -483,8 +483,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; fn Helper() { import System; } fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
+            File.WriteAllText(utilPath, "namespace Util fn Helper() { import System } fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { 0 }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -509,8 +509,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; fn Add(x: int, y: int) -> int { missing; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
+            File.WriteAllText(utilPath, "namespace Util fn Add(x: int, y: int) -> int { missing }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { 0 }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -536,8 +536,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; 1;");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
+            File.WriteAllText(utilPath, "namespace Util 1");
+            File.WriteAllText(mainPath, "namespace App fn Main() { 0 }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -562,8 +562,8 @@ public class RunCommandIntegrationTests
 
         try
         {
-            File.WriteAllText(utilPath, "namespace Util; fn Main() { 1; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { 0; }");
+            File.WriteAllText(utilPath, "namespace Util fn Main() { 1 }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { 0 }");
 
             var (stdout, stderr, _) = ExecuteRunCommand(mainPath);
             Assert.Equal(string.Empty, stdout.Trim());
@@ -581,7 +581,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrPathAndDirectoryCalls()
     {
-        var filePath = CreateTempProgram("import System.IO; fn Main() { let p: string = Path.Combine(\"/tmp\", \"kong-path-test.txt\"); if (Directory.Exists(Directory.GetCurrentDirectory())) { System.Console.WriteLine(Path.GetFileName(p)); } else { System.Console.WriteLine(\"missing\"); } }");
+        var filePath = CreateTempProgram("import System.IO fn Main() { let p: string = Path.Combine(\"/tmp\", \"kong-path-test.txt\") if (Directory.Exists(Directory.GetCurrentDirectory())) { System.Console.WriteLine(Path.GetFileName(p)) } else { System.Console.WriteLine(\"missing\") } }");
         try
         {
             var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -597,7 +597,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrEnvironmentCalls()
     {
-        var filePath = CreateTempProgram("import System; fn Main() { Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\"); if (Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") == \"ok\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }");
+        var filePath = CreateTempProgram("import System fn Main() { Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\") if (Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") == \"ok\") { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }");
         try
         {
             var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -614,7 +614,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrPropertyAccess()
     {
-        var filePath = CreateTempProgram("import System; fn Main() { if (Environment.NewLine != \"\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }");
+        var filePath = CreateTempProgram("import System fn Main() { if (Environment.NewLine != \"\") { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }");
         try
         {
             var (_, stderr, exitCode) = ExecuteRunCommand(filePath);
@@ -630,7 +630,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrDoubleCharAndByteTypes()
     {
-        var source = "fn Main() { let d: double = System.Convert.ToDouble(\"4\"); let root: double = System.Math.Sqrt(d); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { let d: double = System.Convert.ToDouble(\"4\") let root: double = System.Math.Sqrt(d) let c: char = System.Char.Parse(\"A\") let b: byte = System.Byte.Parse(\"42\") if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -648,7 +648,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsDoubleCharAndByteLiterals()
     {
-        var source = "fn Main() { let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; if (d > 1.0) { if (c == 'a') { if (b == 42b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { let d: double = 1.5 let c: char = 'a' let b: byte = 42b if (d > 1.0) { if (c == 'a') { if (b == 42b) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -666,7 +666,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsAdditionalStaticClrBclCalls()
     {
-        var source = "fn Main() { let low: int = System.Math.Min(10, 3); let high: int = System.Math.Max(10, 3); let clamped: int = System.Math.Clamp(high, 0, 100); let label: string = System.String.Concat(\"v\", \"13\"); if (low == 3) { if (clamped == 10) { if (System.String.Equals(label, \"v13\")) { if (!System.String.IsNullOrEmpty(label)) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { let low: int = System.Math.Min(10, 3) let high: int = System.Math.Max(10, 3) let clamped: int = System.Math.Clamp(high, 0, 100) let label: string = System.String.Concat(\"v\", \"13\") if (low == 3) { if (clamped == 10) { if (System.String.Equals(label, \"v13\")) { if (!System.String.IsNullOrEmpty(label)) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -684,7 +684,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrParamsAndNumericWideningCalls()
     {
-        var source = "fn Main() { let root: double = System.Math.Sqrt(9); let label: string = System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\"); if (root == 3.0) { if (label == \"abcde\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { let root: double = System.Math.Sqrt(9) let label: string = System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\") if (root == 3.0) { if (label == \"abcde\") { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -702,7 +702,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsLogicalOperatorsWithShortCircuiting()
     {
-        var source = "fn Hit() -> bool { System.Console.WriteLine(9); true; } fn Main() { let a: bool = false && Hit(); let b: bool = true || Hit(); if (!a) { if (b) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } } else { System.Console.WriteLine(0); } }";
+        var source = "fn Hit() -> bool { System.Console.WriteLine(9) true } fn Main() { let a: bool = false && Hit() let b: bool = true || Hit() if (!a) { if (b) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -721,7 +721,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsInstanceClrStringMembers()
     {
-        var source = "fn Main() { let s: string = \" hello \"; let t: string = s.Trim(); if (t.Contains(\"ell\") && t.Length == 5) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { let s: string = \" hello \" let t: string = s.Trim() if (t.Contains(\"ell\") && t.Length == 5) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -739,7 +739,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsConstructorInterop()
     {
-        var source = "import System.Text; fn Main() { let sb = new StringBuilder(); sb.Append(\"ab\"); sb.Append(\"c\"); if (sb.ToString() == \"abc\") { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }";
+        var source = "import System.Text fn Main() { let sb = new StringBuilder() sb.Append(\"ab\") sb.Append(\"c\") if (sb.ToString() == \"abc\") { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -757,7 +757,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsVarReassignment()
     {
-        var source = "fn Main() { var x: int = 1; x = x + 1; if (x == 2) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }";
+        var source = "fn Main() { var x: int = 1 x = x + 1 if (x == 2) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -775,7 +775,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsStaticClrOutArguments()
     {
-        var source = "import System; fn Main() { var value: bool = false; let ok: bool = Boolean.TryParse(\"true\", out value); if (ok && value) { System.Console.WriteLine(1); } else { System.Console.WriteLine(0); } }";
+        var source = "import System fn Main() { var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value) if (ok && value) { System.Console.WriteLine(1) } else { System.Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -793,7 +793,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsForInLoop()
     {
-        var source = "import System; fn Main() { let array: int[] = [1, 2, 3]; var total: int = 0; for i in array { total = total + i; } if (total == 6) { Console.WriteLine(1); } else { Console.WriteLine(0); } }";
+        var source = "import System fn Main() { let array: int[] = [1, 2, 3] var total: int = 0 for i in array { total = total + i } if (total == 6) { Console.WriteLine(1) } else { Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -811,7 +811,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandSupportsArrayElementAssignmentAndLoopControl()
     {
-        var source = "import System; fn Main() { var xs: int[] = [1, 2, 3]; xs[1] = 42; var total: int = 0; for i in xs { continue; total = total + i; } for j in xs { total = total + j; break; total = total + 100; } if (xs[1] == 42 && total == 1) { Console.WriteLine(1); } else { Console.WriteLine(0); } }";
+        var source = "import System fn Main() { var xs: int[] = [1, 2, 3] xs[1] = 42 var total: int = 0 for i in xs { continue total = total + i } for j in xs { total = total + j break total = total + 100 } if (xs[1] == 42 && total == 1) { Console.WriteLine(1) } else { Console.WriteLine(0) } }";
         var filePath = CreateTempProgram(source);
         try
         {
@@ -829,7 +829,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandReportsUnsupportedIfWithoutElseBeforeLowering()
     {
-        var filePath = CreateTempProgram("fn Main() { if (true) { 1 }; }");
+        var filePath = CreateTempProgram("fn Main() { if (true) { 1 } }");
         try
         {
             var (_, stderr, _) = ExecuteRunCommand(filePath);
@@ -845,7 +845,7 @@ public class RunCommandIntegrationTests
     [Fact]
     public void TestRunCommandDoesNotFallbackToVmByDefault()
     {
-        var filePath = CreateTempProgram("\"hello\";");
+        var filePath = CreateTempProgram("\"hello\"");
         try
         {
             var (stdout, stderr, _) = ExecuteRunCommand(filePath);

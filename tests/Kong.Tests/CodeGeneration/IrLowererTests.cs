@@ -11,7 +11,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersSimpleAdditionExpression()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("1 + 1;");
+        var (unit, typeCheck) = ParseAndTypeCheck("1 + 1");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -35,7 +35,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersLetBindingAndIdentifierUsage()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let x = 2; x + 3;");
+        var (unit, typeCheck) = ParseAndTypeCheck("let x = 2 x + 3");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -53,7 +53,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersIfExpressionIntoBranchBlocks()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("if (true) { 10 } else { 20 };");
+        var (unit, typeCheck) = ParseAndTypeCheck("if (true) { 10 } else { 20 }");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -69,7 +69,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersLogicalOperatorsWithShortCircuitBranches()
     {
-        var source = "let a: bool = false && true; let b: bool = true || false; if (a == b) { 1 } else { 0 };";
+        var source = "let a: bool = false && true let b: bool = true || false if (a == b) { 1 } else { 0 }";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -84,7 +84,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersFunctionLiteralCall()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("fn(x: int) -> int { return x + 1; }(2);");
+        var (unit, typeCheck) = ParseAndTypeCheck("fn(x: int) -> int { return x + 1 }(2)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -98,7 +98,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersArrayLiteralAndIndexExpression()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let xs: int[] = [1, 2, 3]; xs[1];");
+        var (unit, typeCheck) = ParseAndTypeCheck("let xs: int[] = [1, 2, 3] xs[1]");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -113,7 +113,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStringArrayLiteralAndIndexExpression()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let xs: string[] = [\"a\", \"b\"]; let second: string = xs[1]; 1;");
+        var (unit, typeCheck) = ParseAndTypeCheck("let xs: string[] = [\"a\", \"b\"] let second: string = xs[1] 1");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -128,7 +128,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNestedIntArrayLiteralAndIndexExpression()
     {
-        var source = "let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];";
+        var source = "let xss: int[][] = [[1, 2], [3, 4]] let ys: int[] = xss[1] ys[0]";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -145,7 +145,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrCallVoid()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("System.Console.WriteLine(1);");
+        var (unit, typeCheck) = ParseAndTypeCheck("System.Console.WriteLine(1)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -159,7 +159,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrMethodCall()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("System.Math.Abs(-42);");
+        var (unit, typeCheck) = ParseAndTypeCheck("System.Math.Abs(-42)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -176,7 +176,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersImportedStaticClrMethodCallToQualifiedPath()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System.Math; Math.Abs(-42);");
+        var (unit, typeCheck) = ParseAndTypeCheck("import System.Math Math.Abs(-42)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -190,7 +190,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNamespaceImportedStaticClrCallToQualifiedPath()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System; Console.WriteLine(1);");
+        var (unit, typeCheck) = ParseAndTypeCheck("import System Console.WriteLine(1)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -204,7 +204,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersTwoArgumentStaticClrMethodCall()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("System.Math.Max(10, 3);");
+        var (unit, typeCheck) = ParseAndTypeCheck("System.Math.Max(10, 3)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -221,7 +221,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrPropertyAccess()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System; if (Environment.NewLine != \"\") { 1; } else { 0; }");
+        var (unit, typeCheck) = ParseAndTypeCheck("import System if (Environment.NewLine != \"\") { 1 } else { 0 }");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -235,7 +235,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersInstanceClrMethodCall()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \" hello \"; s.Trim(); 1;");
+        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \" hello \" s.Trim() 1");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -250,7 +250,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersInstanceClrPropertyAccess()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \"abc\"; s.Length; 1;");
+        var (unit, typeCheck) = ParseAndTypeCheck("let s: string = \"abc\" s.Length 1");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -265,7 +265,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersConstructorInterop()
     {
-        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"a\"); 1;";
+        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"a\") 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -281,7 +281,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersInterfaceMethodCallToInterfaceDispatchInstruction()
     {
-        var source = "class Counter { value: int; } interface ICounter { fn Increment(self, by: int) -> int; } impl ICounter for Counter { fn Increment(self, by: int) -> int { self.value = self.value + by; self.value; } } let c = new Counter(); let i: ICounter = c; i.Increment(3);";
+        var source = "class Counter { value: int } interface ICounter { fn Increment(self, by: int) -> int } impl ICounter for Counter { fn Increment(self, by: int) -> int { self.value = self.value + by self.value } } let c = new Counter() let i: ICounter = c i.Increment(3)";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -297,7 +297,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersGenericFunctionCall()
     {
-        var source = "fn Id<T>(x: T) -> T { x; } let n: int = Id(42);";
+        var source = "fn Id<T>(x: T) -> T { x } let n: int = Id(42)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(source);
         var lowerer = new IrLowerer();
 
@@ -311,7 +311,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersVarAssignment()
     {
-        var source = "var x: int = 1; x = x + 1; x;";
+        var source = "var x: int = 1 x = x + 1 x";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -326,7 +326,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrOutArgumentCall()
     {
-        var source = "import System; var value: bool = false; Boolean.TryParse(\"true\", out value); 1;";
+        var source = "import System var value: bool = false Boolean.TryParse(\"true\", out value) 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -342,7 +342,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersForInLoop()
     {
-        var source = "let xs: int[] = [1, 2, 3]; for i in xs { i; } 1;";
+        var source = "let xs: int[] = [1, 2, 3] for i in xs { i } 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -359,7 +359,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersIndexAssignmentStatement()
     {
-        var source = "var xs: int[] = [1, 2, 3]; xs[1] = 42; xs[1];";
+        var source = "var xs: int[] = [1, 2, 3] xs[1] = 42 xs[1]";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -374,7 +374,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrDoubleCharAndByteCalls()
     {
-        var source = "let d: double = System.Convert.ToDouble(\"4\"); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); 1;";
+        var source = "let d: double = System.Convert.ToDouble(\"4\") let c: char = System.Char.Parse(\"A\") let b: byte = System.Byte.Parse(\"42\") 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -391,7 +391,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersDoubleCharAndByteLiterals()
     {
-        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; 1;";
+        var source = "let d: double = 1.5 let c: char = 'a' let b: byte = 42b 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -407,7 +407,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersClosureCallWithCapturedVariable()
     {
-        var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);";
+        var input = "let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -426,7 +426,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNestedClosureCalls()
     {
-        var input = "let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y }; g(7); }; f(5);";
+        var input = "let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y } g(7) } f(5)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -440,7 +440,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersEscapingClosureValueAndInvoke()
     {
-        var input = "let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } }; let addTwo: fn(int) -> int = makeAdder(2); addTwo(40);";
+        var input = "let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } } let addTwo: fn(int) -> int = makeAdder(2) addTwo(40)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -457,7 +457,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNamedFunctionDeclarationAndCall()
     {
-        var input = "fn Add(x: int, y: int) -> int { x + y; } Add(1, 2);";
+        var input = "fn Add(x: int, y: int) -> int { x + y } Add(1, 2)";
         var (unit, typeCheck, names) = ParseAndTypeCheckWithNames(input);
         var lowerer = new IrLowerer();
 
@@ -473,7 +473,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowererRejectsNonIntTopLevelExpression()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("true;");
+        var (unit, typeCheck) = ParseAndTypeCheck("true");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);

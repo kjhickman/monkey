@@ -1,4 +1,4 @@
-namespace Demo.Results;
+namespace Demo.Results
 
 enum Result<T, E> {
     Ok(T),

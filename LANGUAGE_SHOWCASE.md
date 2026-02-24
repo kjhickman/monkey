@@ -7,16 +7,16 @@ Super-brief examples of the core language.
 ```text
 fn Main() {
     // type inference
-    let x = 41;
+    let x = 41
 
     // type annotations
-    let y: int = 1;
-    let ok: bool = true;
-    let text: string = "hello";
+    let y: int = 1
+    let ok: bool = true
+    let text: string = "hello"
 
     // operators
-    let sum = x + y;
-    let check = (sum == 42) && ok;
+    let sum = x + y
+    let check = (sum == 42) && ok
 }
 ```
 
@@ -24,14 +24,14 @@ fn Main() {
 
 ```text
 fn Main() {
-    let nums = [1, 2, 3, 4];
-    let total = 0;
+    let nums = [1, 2, 3, 4]
+    let total = 0
 
     for n in nums {
-        total = total + n;
+        total = total + n
     }
 
-    let label = if (total > 5) { "big" } else { "small" };
+    let label = if (total > 5) { "big" } else { "small" }
 }
 ```
 
@@ -39,18 +39,18 @@ fn Main() {
 
 ```text
 fn Add(a: int, b: int) -> int {
-    a + b;
+    a + b
 }
 
 fn MakeAdder(delta: int) -> fn(int) -> int {
     fn(x: int) -> int {
-        x + delta;
-    };
+        x + delta
+    }
 }
 
 fn Main() {
-    let addOne: fn(int) -> int = MakeAdder(1); // first-class function value
-    let n = addOne(Add(40, 1));
+    let addOne: fn(int) -> int = MakeAdder(1) // first-class function value
+    let n = addOne(Add(40, 1))
 }
 ```
 
@@ -58,33 +58,33 @@ fn Main() {
 
 ```text
 interface IGet<T> {
-    fn Get(self) -> T;
+    fn Get(self) -> T
 }
 
 class Box<T> {
-    value: T;
+    value: T
 }
 
 impl Box {
     init(value: T) {
-        self.value = value;
+        self.value = value
     }
 
     fn Get(self) -> T {
-        self.value;
+        self.value
     }
 }
 
 impl IGet for Box {
     fn Get(self) -> T {
-        self.value;
+        self.value
     }
 }
 
 fn Main() {
-    let box: Box<int> = new Box<int>(42);
-    let getter: IGet<int> = box;
-    let value = getter.Get();
+    let box: Box<int> = new Box<int>(42)
+    let getter: IGet<int> = box
+    let value = getter.Get()
 }
 ```
 
@@ -97,26 +97,26 @@ enum Result<T, E> {
 }
 
 fn Main() {
-    let r: Result<int, string> = Ok(42);
+    let r: Result<int, string> = Ok(42)
 
     let text = match (r) {
-        Ok(v) => { "value=" + v.ToString(); },
-        Err(e) => { "error=" + e; },
-    };
+        Ok(v) => { "value=" + v.ToString() },
+        Err(e) => { "error=" + e },
+    }
 }
 ```
 
 ## 6) BCL interop
 
 ```text
-import System;
-import System.IO;
+import System
+import System.IO
 
-namespace Demo.Tour;
+namespace Demo.Tour
 
 fn Main() {
-    let cwd = Environment.CurrentDirectory; // static property
-    let hasReadme = File.Exists(cwd + "/README.md"); // static method
-    Console.WriteLine(hasReadme); // static method
+    let cwd = Environment.CurrentDirectory // static property
+    let hasReadme = File.Exists(cwd + "/README.md") // static method
+    Console.WriteLine(hasReadme) // static method
 }
 ```

@@ -102,9 +102,6 @@ public class Lexer
             case '>':
                 token = NewToken(TokenType.GreaterThan, _ch, start);
                 break;
-            case ';':
-                token = NewToken(TokenType.Semicolon, _ch, start);
-                break;
             case ',':
                 token = NewToken(TokenType.Comma, _ch, start);
                 break;

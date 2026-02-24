@@ -1,34 +1,34 @@
-import System;
+import System
 
-namespace Demo.GenericCore;
+namespace Demo.GenericCore
 
 class Box<T> {
-    value: T;
+    value: T
 }
 
 interface IGet<T> {
-    fn Get(self) -> T;
+    fn Get(self) -> T
 }
 
 impl Box {
     init(value: T) {
-        self.value = value;
+        self.value = value
     }
 }
 
 impl IGet for Box {
     fn Get(self) -> T {
-        self.value;
+        self.value
     }
 }
 
 fn Id<T>(x: T) -> T {
-    x;
+    x
 }
 
 fn Main() {
-    let b: Box<int> = new Box<int>(41);
-    let g: IGet<int> = b;
-    let n: int = Id(g.Get());
-    Console.WriteLine(n + 1);
+    let b: Box<int> = new Box<int>(41)
+    let g: IGet<int> = b
+    let n: int = Id(g.Get())
+    Console.WriteLine(n + 1)
 }

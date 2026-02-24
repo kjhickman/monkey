@@ -41,14 +41,14 @@ public class LexerTests
             (TokenType.Identifier, "int"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "5"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "ten"),
             (TokenType.Colon, ":"),
             (TokenType.Identifier, "int"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "10"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "add"),
             (TokenType.Assign, "="),
@@ -64,9 +64,9 @@ public class LexerTests
             (TokenType.Identifier, "x"),
             (TokenType.Plus, "+"),
             (TokenType.Identifier, "y"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.RightBrace, "}"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "result"),
             (TokenType.Colon, ":"),
@@ -78,19 +78,19 @@ public class LexerTests
             (TokenType.Comma, ","),
             (TokenType.Identifier, "ten"),
             (TokenType.RightParenthesis, ")"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Bang, "!"),
             (TokenType.Minus, "-"),
             (TokenType.Slash, "/"),
             (TokenType.Asterisk, "*"),
             (TokenType.Integer, "5"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Integer, "5"),
             (TokenType.LessThan, "<"),
             (TokenType.Integer, "10"),
             (TokenType.GreaterThan, ">"),
             (TokenType.Integer, "5"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.If, "if"),
             (TokenType.LeftParenthesis, "("),
             (TokenType.Integer, "5"),
@@ -100,28 +100,28 @@ public class LexerTests
             (TokenType.LeftBrace, "{"),
             (TokenType.Return, "return"),
             (TokenType.True, "true"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.RightBrace, "}"),
             (TokenType.Else, "else"),
             (TokenType.LeftBrace, "{"),
             (TokenType.Return, "return"),
             (TokenType.False, "false"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.RightBrace, "}"),
             (TokenType.Integer, "10"),
             (TokenType.Equal, "=="),
             (TokenType.Integer, "10"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Integer, "10"),
             (TokenType.NotEqual, "!="),
             (TokenType.Integer, "9"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.True, "true"),
             (TokenType.And, "&&"),
             (TokenType.False, "false"),
             (TokenType.Or, "||"),
             (TokenType.True, "true"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.String, "foobar"),
             (TokenType.String, "foo bar"),
             (TokenType.LeftBracket, "["),
@@ -129,7 +129,7 @@ public class LexerTests
             (TokenType.Comma, ","),
             (TokenType.Integer, "2"),
             (TokenType.RightBracket, "]"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -159,7 +159,7 @@ public class LexerTests
             (TokenType.Identifier, "x", 1, 5, 1, 6),
             (TokenType.Assign, "=", 1, 7, 1, 8),
             (TokenType.Integer, "5", 1, 9, 1, 10),
-            (TokenType.Semicolon, ";", 1, 10, 1, 11),
+            (TokenType.Illegal, ";", 1, 10, 1, 11),
             (TokenType.EndOfFile, "", 1, 11, 1, 11),
         };
 
@@ -189,13 +189,13 @@ public class LexerTests
             (TokenType.Identifier, "a", 1, 5, 1, 6),
             (TokenType.Assign, "=", 1, 7, 1, 8),
             (TokenType.Integer, "1", 1, 9, 1, 10),
-            (TokenType.Semicolon, ";", 1, 10, 1, 11),
+            (TokenType.Illegal, ";", 1, 10, 1, 11),
             // Line 2: let b = 2;
             (TokenType.Let, "let", 2, 1, 2, 4),
             (TokenType.Identifier, "b", 2, 5, 2, 6),
             (TokenType.Assign, "=", 2, 7, 2, 8),
             (TokenType.Integer, "2", 2, 9, 2, 10),
-            (TokenType.Semicolon, ";", 2, 10, 2, 11),
+            (TokenType.Illegal, ";", 2, 10, 2, 11),
             (TokenType.EndOfFile, "", 2, 11, 2, 11),
         };
 
@@ -288,7 +288,7 @@ public class LexerTests
             (TokenType.LeftBrace, "{", 1, 7, 1, 8),
             (TokenType.Return, "return", 2, 3, 2, 9),
             (TokenType.Identifier, "x", 2, 10, 2, 11),
-            (TokenType.Semicolon, ";", 2, 11, 2, 12),
+            (TokenType.Illegal, ";", 2, 11, 2, 12),
             (TokenType.RightBrace, "}", 3, 1, 3, 2),
             (TokenType.EndOfFile, "", 3, 2, 3, 2),
         };
@@ -341,7 +341,7 @@ public class LexerTests
             (TokenType.Identifier, "System"),
             (TokenType.Dot, "."),
             (TokenType.Identifier, "Console"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -363,7 +363,7 @@ public class LexerTests
         {
             (TokenType.Import, "import"),
             (TokenType.String, "./util.kg"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -387,7 +387,7 @@ public class LexerTests
             (TokenType.Identifier, "Foo"),
             (TokenType.Dot, "."),
             (TokenType.Identifier, "Bar"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -472,7 +472,7 @@ public class LexerTests
             (TokenType.GreaterThan, ">"),
             (TokenType.LeftBrace, "{"),
             (TokenType.Identifier, "v"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.RightBrace, "}"),
             (TokenType.RightBrace, "}"),
             (TokenType.EndOfFile, ""),
@@ -541,11 +541,11 @@ public class LexerTests
         var tests = new (TokenType Type, string Literal)[]
         {
             (TokenType.Double, "1.25"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Char, "a"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Byte, "42"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -591,14 +591,14 @@ public class LexerTests
             (TokenType.Identifier, "x"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "1"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Let, "let"),
             (TokenType.Identifier, "y"),
             (TokenType.Assign, "="),
             (TokenType.Identifier, "x"),
             (TokenType.Plus, "+"),
             (TokenType.Integer, "1"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -626,7 +626,7 @@ public class LexerTests
             (TokenType.Identifier, "StringBuilder"),
             (TokenType.LeftParenthesis, "("),
             (TokenType.RightParenthesis, ")"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -650,13 +650,13 @@ public class LexerTests
             (TokenType.Identifier, "x"),
             (TokenType.Assign, "="),
             (TokenType.Integer, "1"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Identifier, "x"),
             (TokenType.Assign, "="),
             (TokenType.Identifier, "x"),
             (TokenType.Plus, "+"),
             (TokenType.Integer, "1"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -684,7 +684,7 @@ public class LexerTests
             (TokenType.Ref, "ref"),
             (TokenType.Identifier, "y"),
             (TokenType.RightParenthesis, ")"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 
@@ -710,7 +710,7 @@ public class LexerTests
             (TokenType.Identifier, "xs"),
             (TokenType.LeftBrace, "{"),
             (TokenType.Identifier, "i"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.RightBrace, "}"),
             (TokenType.EndOfFile, ""),
         };
@@ -732,9 +732,9 @@ public class LexerTests
         var tests = new (TokenType Type, string Literal)[]
         {
             (TokenType.Break, "break"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.Continue, "continue"),
-            (TokenType.Semicolon, ";"),
+            (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
         };
 

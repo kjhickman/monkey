@@ -7,9 +7,9 @@ namespace Kong.Tests.Parsing;
 public class ParserTests
 {
     [Theory]
-    [InlineData("let x = 5;", "x", 5L)]
-    [InlineData("let y = true;", "y", true)]
-    [InlineData("let foobar = y;", "foobar", "y")]
+    [InlineData("let x = 5", "x", 5L)]
+    [InlineData("let y = true", "y", true)]
+    [InlineData("let foobar = y", "foobar", "y")]
     public void TestLetStatements(string input, string expectedIdentifier, object expectedValue)
     {
         var l = new Lexer(input);
@@ -27,11 +27,11 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("let x: int = 5;", "int")]
-    [InlineData("let pi: double = 1.25;", "double")]
-    [InlineData("let c: char = 'a';", "char")]
-    [InlineData("let b: byte = 42b;", "byte")]
-    [InlineData("let xs: int[] = [1, 2];", "int[]")]
+    [InlineData("let x: int = 5", "int")]
+    [InlineData("let pi: double = 1.25", "double")]
+    [InlineData("let c: char = 'a'", "char")]
+    [InlineData("let b: byte = 42b", "byte")]
+    [InlineData("let xs: int[] = [1, 2]", "int[]")]
     public void TestLetStatementsWithTypeAnnotations(string input, string expectedType)
     {
         var l = new Lexer(input);
@@ -47,9 +47,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("return 5;", 5L)]
-    [InlineData("return true;", true)]
-    [InlineData("return foobar;", "foobar")]
+    [InlineData("return 5", 5L)]
+    [InlineData("return true", true)]
+    [InlineData("return foobar", "foobar")]
     public void TestReturnStatements(string input, object expectedValue)
     {
         var l = new Lexer(input);
@@ -67,7 +67,7 @@ public class ParserTests
     [Fact]
     public void TestIdentifierExpression()
     {
-        var input = "foobar;";
+        var input = "foobar";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -85,7 +85,7 @@ public class ParserTests
     [Fact]
     public void TestIntegerLiteralExpression()
     {
-        var input = "5;";
+        var input = "5";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -103,7 +103,7 @@ public class ParserTests
     [Fact]
     public void TestDoubleLiteralExpression()
     {
-        var input = "1.5;";
+        var input = "1.5";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -121,7 +121,7 @@ public class ParserTests
     [Fact]
     public void TestCharLiteralExpression()
     {
-        var input = "'a';";
+        var input = "'a'";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -139,7 +139,7 @@ public class ParserTests
     [Fact]
     public void TestByteLiteralExpression()
     {
-        var input = "42b;";
+        var input = "42b";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -155,12 +155,12 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("!5;", "!", 5L)]
-    [InlineData("-15;", "-", 15L)]
-    [InlineData("!foobar;", "!", "foobar")]
-    [InlineData("-foobar;", "-", "foobar")]
-    [InlineData("!true;", "!", true)]
-    [InlineData("!false;", "!", false)]
+    [InlineData("!5", "!", 5L)]
+    [InlineData("-15", "-", 15L)]
+    [InlineData("!foobar", "!", "foobar")]
+    [InlineData("-foobar", "-", "foobar")]
+    [InlineData("!true", "!", true)]
+    [InlineData("!false", "!", false)]
     public void TestParsingPrefixExpressions(string input, string op, object value)
     {
         var l = new Lexer(input);
@@ -177,22 +177,22 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("5 + 5;", 5L, "+", 5L)]
-    [InlineData("5 - 5;", 5L, "-", 5L)]
-    [InlineData("5 * 5;", 5L, "*", 5L)]
-    [InlineData("5 / 5;", 5L, "/", 5L)]
-    [InlineData("5 > 5;", 5L, ">", 5L)]
-    [InlineData("5 < 5;", 5L, "<", 5L)]
-    [InlineData("5 == 5;", 5L, "==", 5L)]
-    [InlineData("5 != 5;", 5L, "!=", 5L)]
-    [InlineData("foobar + barfoo;", "foobar", "+", "barfoo")]
-    [InlineData("foobar - barfoo;", "foobar", "-", "barfoo")]
-    [InlineData("foobar * barfoo;", "foobar", "*", "barfoo")]
-    [InlineData("foobar / barfoo;", "foobar", "/", "barfoo")]
-    [InlineData("foobar > barfoo;", "foobar", ">", "barfoo")]
-    [InlineData("foobar < barfoo;", "foobar", "<", "barfoo")]
-    [InlineData("foobar == barfoo;", "foobar", "==", "barfoo")]
-    [InlineData("foobar != barfoo;", "foobar", "!=", "barfoo")]
+    [InlineData("5 + 5", 5L, "+", 5L)]
+    [InlineData("5 - 5", 5L, "-", 5L)]
+    [InlineData("5 * 5", 5L, "*", 5L)]
+    [InlineData("5 / 5", 5L, "/", 5L)]
+    [InlineData("5 > 5", 5L, ">", 5L)]
+    [InlineData("5 < 5", 5L, "<", 5L)]
+    [InlineData("5 == 5", 5L, "==", 5L)]
+    [InlineData("5 != 5", 5L, "!=", 5L)]
+    [InlineData("foobar + barfoo", "foobar", "+", "barfoo")]
+    [InlineData("foobar - barfoo", "foobar", "-", "barfoo")]
+    [InlineData("foobar * barfoo", "foobar", "*", "barfoo")]
+    [InlineData("foobar / barfoo", "foobar", "/", "barfoo")]
+    [InlineData("foobar > barfoo", "foobar", ">", "barfoo")]
+    [InlineData("foobar < barfoo", "foobar", "<", "barfoo")]
+    [InlineData("foobar == barfoo", "foobar", "==", "barfoo")]
+    [InlineData("foobar != barfoo", "foobar", "!=", "barfoo")]
     [InlineData("true == true", true, "==", true)]
     [InlineData("true != false", true, "!=", false)]
     [InlineData("false == false", false, "==", false)]
@@ -220,7 +220,7 @@ public class ParserTests
     [InlineData("a * b / c", "((a * b) / c)")]
     [InlineData("a + b / c", "(a + (b / c))")]
     [InlineData("a + b * c + d / e - f", "(((a + (b * c)) + (d / e)) - f)")]
-    [InlineData("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)")]
+    [InlineData("3 + 4\n-5 * 5", "((3 + 4) - (5 * 5))")]
     [InlineData("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))")]
     [InlineData("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))")]
     [InlineData("3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))")]
@@ -252,8 +252,8 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("true;", true)]
-    [InlineData("false;", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
     public void TestBooleanExpression(string input, bool expectedBoolean)
     {
         var l = new Lexer(input);
@@ -323,7 +323,7 @@ public class ParserTests
     [Fact]
     public void TestParsesProgramWithLineComments()
     {
-        var input = "let x: int = 1; // keep this around\nlet y: int = x + 1;";
+        var input = "let x: int = 1 // keep this around\nlet y: int = x + 1";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -341,7 +341,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralParsing()
     {
-        var input = "fn(x, y) { x + y; }";
+        var input = "fn(x, y) { x + y }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -365,9 +365,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("fn() {};", new string[] { })]
-    [InlineData("fn(x) {};", new[] { "x" })]
-    [InlineData("fn(x, y, z) {};", new[] { "x", "y", "z" })]
+    [InlineData("fn() {}", new string[] { })]
+    [InlineData("fn(x) {}", new[] { "x" })]
+    [InlineData("fn(x, y, z) {}", new[] { "x", "y", "z" })]
     public void TestFunctionParameterParsing(string input, string[] expectedParams)
     {
         var l = new Lexer(input);
@@ -412,7 +412,7 @@ public class ParserTests
     [Fact]
     public void TestNamedFunctionDeclarationParsing()
     {
-        var input = "fn Add(x: int, y: int) -> int { x + y; } Add(1, 2);";
+        var input = "fn Add(x: int, y: int) -> int { x + y } Add(1, 2)";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -448,7 +448,7 @@ public class ParserTests
     [Fact]
     public void TestPublicNamedFunctionDeclarationParsing()
     {
-        var input = "public fn Add(x: int, y: int) -> int { x + y; }";
+        var input = "public fn Add(x: int, y: int) -> int { x + y }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -464,7 +464,7 @@ public class ParserTests
     [Fact]
     public void TestCallExpressionParsing()
     {
-        var input = "add(1, 2 * 3, 4 + 5);";
+        var input = "add(1, 2 * 3, 4 + 5)";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -486,9 +486,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("add();", "add", new string[] { })]
-    [InlineData("add(1);", "add", new[] { "1" })]
-    [InlineData("add(1, 2 * 3, 4 + 5);", "add", new[] { "1", "(2 * 3)", "(4 + 5)" })]
+    [InlineData("add()", "add", new string[] { })]
+    [InlineData("add(1)", "add", new[] { "1" })]
+    [InlineData("add(1, 2 * 3, 4 + 5)", "add", new[] { "1", "(2 * 3)", "(4 + 5)" })]
     public void TestCallExpressionParameterParsing(string input, string expectedIdent, string[] expectedArgs)
     {
         var l = new Lexer(input);
@@ -512,7 +512,7 @@ public class ParserTests
     [Fact]
     public void TestStringLiteralExpression()
     {
-        var input = "\"hello world\";";
+        var input = "\"hello world\"";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -565,7 +565,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralWithName()
     {
-        var input = "let myFunction = fn() { };";
+        var input = "let myFunction = fn() { }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -699,15 +699,14 @@ public class ParserTests
     {
         // Input:  let x = 5;
         // Cols:   1234567890
-        var input = "let x = 5;";
+        var input = "let x = 5";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
         var stmt = Assert.IsType<LetStatement>(unit.Statements[0]);
-        // Span covers the whole statement from 'let' to ';'
-        AssertSpan(stmt.Span, 1, 1, 1, 11);
+        AssertSpan(stmt.Span, 1, 1, 1, 10);
 
         // The identifier 'x'
         AssertSpan(stmt.Name.Span, 1, 5, 1, 6);
@@ -720,20 +719,20 @@ public class ParserTests
     [Fact]
     public void TestReturnStatementSpan()
     {
-        var input = "return 42;";
+        var input = "return 42";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
         var stmt = Assert.IsType<ReturnStatement>(unit.Statements[0]);
-        AssertSpan(stmt.Span, 1, 1, 1, 11);
+        AssertSpan(stmt.Span, 1, 1, 1, 10);
     }
 
     [Fact]
     public void TestIdentifierSpan()
     {
-        var input = "foobar;";
+        var input = "foobar";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -747,7 +746,7 @@ public class ParserTests
     [Fact]
     public void TestIntegerLiteralSpan()
     {
-        var input = "123;";
+        var input = "123";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -761,7 +760,7 @@ public class ParserTests
     [Fact]
     public void TestStringLiteralSpan()
     {
-        var input = "\"hello\";";
+        var input = "\"hello\"";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -775,7 +774,7 @@ public class ParserTests
     [Fact]
     public void TestBooleanLiteralSpan()
     {
-        var input = "true;";
+        var input = "true";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -791,7 +790,7 @@ public class ParserTests
     {
         // Input:  !true;
         // Cols:   123456
-        var input = "!true;";
+        var input = "!true";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -808,7 +807,7 @@ public class ParserTests
     {
         // Input:  1 + 20;
         // Cols:   1234567
-        var input = "1 + 20;";
+        var input = "1 + 20";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -924,7 +923,7 @@ public class ParserTests
     public void TestBlockStatementSpan()
     {
         // Test via function literal body
-        var input = "fn() { 1; 2 }";
+        var input = "fn() { 1 2 }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -933,13 +932,13 @@ public class ParserTests
         var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
         var fnLit = Assert.IsType<FunctionLiteral>(exprStmt.Expression);
         // Block span from '{' to '}'
-        AssertSpan(fnLit.Body.Span, 1, 6, 1, 14);
+        AssertSpan(fnLit.Body.Span, 1, 6, 1, 13);
     }
 
     [Fact]
     public void TestMultiLineSpans()
     {
-        var input = "let x = 1;\nlet y = 2;";
+        var input = "let x = 1\nlet y = 2";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -948,19 +947,19 @@ public class ParserTests
         Assert.Equal(2, unit.Statements.Count);
 
         var stmt1 = Assert.IsType<LetStatement>(unit.Statements[0]);
-        AssertSpan(stmt1.Span, 1, 1, 1, 11);
+        AssertSpan(stmt1.Span, 1, 1, 1, 10);
 
         var stmt2 = Assert.IsType<LetStatement>(unit.Statements[1]);
-        AssertSpan(stmt2.Span, 2, 1, 2, 11);
+        AssertSpan(stmt2.Span, 2, 1, 2, 10);
 
         // Program span covers everything
-        AssertSpan(unit.Span, 1, 1, 2, 11);
+        AssertSpan(unit.Span, 1, 1, 2, 10);
     }
 
     [Fact]
     public void TestMultiLineFunctionSpan()
     {
-        var input = "fn(x) {\n  return x;\n}";
+        var input = "fn(x) {\n  return x\n}";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -974,28 +973,27 @@ public class ParserTests
         AssertSpan(fnLit.Body.Span, 1, 7, 3, 2);
         // Return statement on line 2
         var retStmt = Assert.IsType<ReturnStatement>(fnLit.Body.Statements[0]);
-        AssertSpan(retStmt.Span, 2, 3, 2, 12);
+        AssertSpan(retStmt.Span, 2, 3, 2, 11);
     }
 
     [Fact]
     public void TestExpressionStatementSpan()
     {
-        // Expression statement with semicolon
-        var input = "5;";
+        // Expression statement without semicolon
+        var input = "5";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
         CheckParserErrors(p);
 
         var exprStmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
-        // Includes the semicolon
-        AssertSpan(exprStmt.Span, 1, 1, 1, 3);
+        AssertSpan(exprStmt.Span, 1, 1, 1, 2);
     }
 
     [Fact]
     public void TestParsesMemberAccessExpression()
     {
-        var input = "System.Console.WriteLine;";
+        var input = "System.Console.WriteLine";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1015,7 +1013,7 @@ public class ParserTests
     [Fact]
     public void TestParsesStaticMethodCallExpression()
     {
-        var input = "System.Console.WriteLine(42);";
+        var input = "System.Console.WriteLine(42)";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1032,7 +1030,7 @@ public class ParserTests
     [Fact]
     public void TestParsesNewExpression()
     {
-        var input = "new System.Text.StringBuilder(16);";
+        var input = "new System.Text.StringBuilder(16)";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1048,7 +1046,7 @@ public class ParserTests
     [Fact]
     public void TestParsesVarStatement()
     {
-        var input = "var x: int = 1;";
+        var input = "var x: int = 1";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1062,7 +1060,7 @@ public class ParserTests
     [Fact]
     public void TestParsesAssignmentStatement()
     {
-        var input = "var x = 1; x = x + 1;";
+        var input = "var x = 1 x = x + 1";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1079,7 +1077,7 @@ public class ParserTests
     [Fact]
     public void TestParsesCallArgumentModifiers()
     {
-        var input = "Foo(out x, ref y, z);";
+        var input = "Foo(out x, ref y, z)";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1096,7 +1094,7 @@ public class ParserTests
     [Fact]
     public void TestParsesForInStatement()
     {
-        var input = "for i in xs { i; }";
+        var input = "for i in xs { i }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1112,7 +1110,7 @@ public class ParserTests
     [Fact]
     public void TestParsesIndexAssignmentStatement()
     {
-        var input = "xs[1] = 42;";
+        var input = "xs[1] = 42";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1127,7 +1125,7 @@ public class ParserTests
     [Fact]
     public void TestParsesBreakAndContinueStatements()
     {
-        var input = "for i in xs { break; continue; }";
+        var input = "for i in xs { break continue }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1141,7 +1139,7 @@ public class ParserTests
     [Fact]
     public void TestParsesImportStatement()
     {
-        var input = "import System.Console;";
+        var input = "import System.Console";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1155,7 +1153,7 @@ public class ParserTests
     [Fact]
     public void TestRejectsPathImportStatement()
     {
-        var input = "import \"./util.kg\";";
+        var input = "import \"./util.kg\"";
         var l = new Lexer(input);
         var p = new Parser(l);
         p.ParseCompilationUnit();
@@ -1167,7 +1165,7 @@ public class ParserTests
     [Fact]
     public void TestParsesNamespaceStatement()
     {
-        var input = "namespace Foo.Bar;";
+        var input = "namespace Foo.Bar";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1201,7 +1199,7 @@ public class ParserTests
     [Fact]
     public void TestParsesGenericTypeAnnotation()
     {
-        var input = "enum Result<T, E> { Ok(T), Err(E) } fn Main() { let r: Result<int, string> = Ok(42); }";
+        var input = "enum Result<T, E> { Ok(T), Err(E) } fn Main() { let r: Result<int, string> = Ok(42) }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1217,7 +1215,7 @@ public class ParserTests
     [Fact]
     public void TestParsesMatchExpression()
     {
-        var input = "fn Main() { let x: int = match (Ok(1)) { Ok(v) => { v; }, Err(e) => { 0; } }; }";
+        var input = "fn Main() { let x: int = match (Ok(1)) { Ok(v) => { v }, Err(e) => { 0 } } }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1234,7 +1232,7 @@ public class ParserTests
     [Fact]
     public void TestParsesClassDeclaration()
     {
-        var input = "class User { name: string; age: int; }";
+        var input = "class User { name: string age: int }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1250,7 +1248,7 @@ public class ParserTests
     [Fact]
     public void TestParsesInterfaceDeclaration()
     {
-        var input = "interface IGreeter { fn Greet(self); fn Label(self) -> string; }";
+        var input = "interface IGreeter { fn Greet(self) fn Label(self) -> string }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1266,7 +1264,7 @@ public class ParserTests
     [Fact]
     public void TestParsesInherentImplBlock()
     {
-        var input = "impl User { init(name: string, age: int) { self.name = name; self.age = age; } public fn Greet(self) { } }";
+        var input = "impl User { init(name: string, age: int) { self.name = name self.age = age } public fn Greet(self) { } }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1298,7 +1296,7 @@ public class ParserTests
     [Fact]
     public void TestParsesPublicClassAndInterfaceDeclarations()
     {
-        var input = "public class User { name: string; } public interface IGreeter { fn Greet(self); }";
+        var input = "public class User { name: string } public interface IGreeter { fn Greet(self) }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1313,7 +1311,7 @@ public class ParserTests
     [Fact]
     public void TestParsesGenericClassAndInterfaceDeclarations()
     {
-        var input = "class Box<T> { value: T; } interface Mapper<TIn, TOut> { fn Map(self, value: TIn) -> TOut; }";
+        var input = "class Box<T> { value: T } interface Mapper<TIn, TOut> { fn Map(self, value: TIn) -> TOut }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1334,7 +1332,7 @@ public class ParserTests
     [Fact]
     public void TestParsesGenericFunctionAndMethods()
     {
-        var input = "fn Identity<T>(value: T) -> T { value; } impl Box { fn Map<T>(self, value: T) -> T { value; } } interface Mapper { fn Map<T>(self, value: T) -> T; }";
+        var input = "fn Identity<T>(value: T) -> T { value } impl Box { fn Map<T>(self, value: T) -> T { value } } interface Mapper { fn Map<T>(self, value: T) -> T }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1358,7 +1356,7 @@ public class ParserTests
     [Fact]
     public void TestParsesGenericNewExpressionTypeArguments()
     {
-        var input = "fn Main() { let b = new Box<int>(1); }";
+        var input = "fn Main() { let b = new Box<int>(1) }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1376,7 +1374,7 @@ public class ParserTests
     [Fact]
     public void TestParserErrorIncludesPosition()
     {
-        var input = "let = 5;";
+        var input = "let = 5";
         var l = new Lexer(input);
         var p = new Parser(l);
         p.ParseCompilationUnit();
@@ -1391,7 +1389,7 @@ public class ParserTests
     [Fact]
     public void TestRejectsPublicKeywordOutsideTopLevelFunctionDeclaration()
     {
-        var input = "fn Main() { public let x = 1; }";
+        var input = "fn Main() { public let x = 1 }";
         var l = new Lexer(input);
         var p = new Parser(l);
         p.ParseCompilationUnit();

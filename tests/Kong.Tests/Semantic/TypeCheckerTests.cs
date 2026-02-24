@@ -10,7 +10,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypedLetAndIdentifierUsage()
     {
-        var (unit, names, result) = ParseResolveAndCheck("let x: int = 6; let y: int = x; y;");
+        var (unit, names, result) = ParseResolveAndCheck("let x: int = 6 let y: int = x y");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -24,7 +24,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestAllowsAssigningIntExpressionToLongVariable()
     {
-        var (unit, names, result) = ParseResolveAndCheck("let x: long = 6; x;");
+        var (unit, names, result) = ParseResolveAndCheck("let x: long = 6 x");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -40,7 +40,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypedFunctionCall()
     {
-        var input = "fn(x: int, y: int) -> int { return x + y; }(1, 2);";
+        var input = "fn(x: int, y: int) -> int { return x + y }(1, 2)";
         var (_, names, result) = ParseResolveAndCheck(input);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -50,7 +50,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestInfersLetTypeFromInitializer()
     {
-        var (unit, _, result) = ParseResolveAndCheck("let x = 6; x;");
+        var (unit, _, result) = ParseResolveAndCheck("let x = 6 x");
 
         Assert.False(result.Diagnostics.HasErrors);
 
@@ -67,7 +67,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestCannotInferLetTypeFromNullInitializer()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x = if (true) { 1 }; ");
+        var (_, _, result) = ParseResolveAndCheck("let x = if (true) { 1 } ");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T119");
@@ -76,7 +76,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestCannotInferLetTypeFromEmptyArrayInitializer()
     {
-        var (_, _, result) = ParseResolveAndCheck("let xs = []; ");
+        var (_, _, result) = ParseResolveAndCheck("let xs = [] ");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T120");
@@ -85,7 +85,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestMissingFunctionParameterTypeAnnotationReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("fn(x) -> int { return x; };");
+        var (_, _, result) = ParseResolveAndCheck("fn(x) -> int { return x }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T105");
@@ -94,7 +94,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReturnTypeMismatchReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("fn() -> int { return true; };");
+        var (_, _, result) = ParseResolveAndCheck("fn() -> int { return true }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T104");
@@ -103,7 +103,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestInfixTypeMismatchReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x: int = 1 + true;");
+        var (_, _, result) = ParseResolveAndCheck("let x: int = 1 + true");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T103");
@@ -112,7 +112,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestLogicalOperatorsTypeCheckAsBool()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && false; let y: bool = true || false;");
+        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && false let y: bool = true || false");
 
         Assert.False(result.Diagnostics.HasErrors);
     }
@@ -120,7 +120,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestLogicalOperatorTypeMismatchReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && 1;");
+        var (_, _, result) = ParseResolveAndCheck("let x: bool = true && 1");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T103");
@@ -129,7 +129,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestCallArgumentTypeMismatchReportsDiagnostic()
     {
-        var input = "fn(x: int) -> int { return x; }(true);";
+        var input = "fn(x: int) -> int { return x }(true)";
         var (_, _, result) = ParseResolveAndCheck(input);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -139,7 +139,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestArrayElementMismatchReportsDiagnostic()
     {
-        var (_, _, result) = ParseResolveAndCheck("let xs: int[] = [1, true];");
+        var (_, _, result) = ParseResolveAndCheck("let xs: int[] = [1, true]");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T114");
@@ -148,7 +148,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestIndexExpressionType()
     {
-        var (unit, _, result) = ParseResolveAndCheck("let xs: int[] = [1, 2, 3]; xs[0];");
+        var (unit, _, result) = ParseResolveAndCheck("let xs: int[] = [1, 2, 3] xs[0]");
 
         Assert.False(result.Diagnostics.HasErrors);
 
@@ -161,7 +161,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestIndexExpressionTypeForStringArray()
     {
-        var (unit, _, result) = ParseResolveAndCheck("let xs: string[] = [\"a\", \"b\"]; xs[1];");
+        var (unit, _, result) = ParseResolveAndCheck("let xs: string[] = [\"a\", \"b\"] xs[1]");
 
         Assert.False(result.Diagnostics.HasErrors);
 
@@ -174,7 +174,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestIndexExpressionTypeForNestedIntArray()
     {
-        var source = "let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];";
+        var source = "let xss: int[][] = [[1, 2], [3, 4]] let ys: int[] = xss[1] ys[0]";
         var (unit, _, result) = ParseResolveAndCheck(source);
 
         Assert.False(result.Diagnostics.HasErrors);
@@ -188,7 +188,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestIncludesNameResolutionDiagnostics()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x: int = y;");
+        var (_, _, result) = ParseResolveAndCheck("let x: int = y");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "N001");
@@ -197,7 +197,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestNamedFunctionDeclarationWithImplicitVoidReturnType()
     {
-        var (_, names, result) = ParseResolveAndCheck("fn Main() { } let x: int = 1; x;");
+        var (_, names, result) = ParseResolveAndCheck("fn Main() { } let x: int = 1 x");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.DoesNotContain(result.Diagnostics.All, d => d.Code == "T106");
@@ -206,7 +206,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestForwardReferenceAcrossNamedFunctionDeclarations()
     {
-        var input = "fn A() -> int { B(); } fn B() -> int { 1; } A();";
+        var input = "fn A() -> int { B() } fn B() -> int { 1 } A()";
         var (_, names, result) = ParseResolveAndCheck(input);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -216,7 +216,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCall()
     {
-        var (unit, names, result) = ParseResolveAndCheck("System.Math.Abs(-42);");
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.Abs(-42)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -230,7 +230,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksEnumVariantConstructorCall()
     {
-        var source = "enum Result { Ok(int), Err(string) } let r: Result = Ok(42);";
+        var source = "enum Result { Ok(int), Err(string) } let r: Result = Ok(42)";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -248,7 +248,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsEnumVariantConstructorArgumentMismatch()
     {
-        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok(\"nope\");");
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok(\"nope\")");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
@@ -257,7 +257,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsEnumVariantIdentifierWithoutConstructorCall()
     {
-        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok;");
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } Ok");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T128");
@@ -266,7 +266,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksEnumMatchExpression()
     {
-        var source = "enum Result { Ok(int), Err(string) } let v: Result = Ok(1); let x: int = match (v) { Ok(n) => { n; }, Err(msg) => { 0; } };";
+        var source = "enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match (v) { Ok(n) => { n }, Err(msg) => { 0 } }";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -281,7 +281,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsNonExhaustiveEnumMatchExpression()
     {
-        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } let v: Result = Ok(1); let x: int = match (v) { Ok(n) => { n; } };");
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match (v) { Ok(n) => { n } }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T131");
@@ -290,7 +290,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericEnumVariantConstructorWithContext()
     {
-        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(42);";
+        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(42)";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -300,7 +300,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsGenericEnumVariantConstructorWithoutEnoughContext()
     {
-        var (_, _, result) = ParseResolveAndCheck("enum Result<T, E> { Ok(T), Err(E) } Ok(42);");
+        var (_, _, result) = ParseResolveAndCheck("enum Result<T, E> { Ok(T), Err(E) } Ok(42)");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T130");
@@ -309,7 +309,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericEnumMatchPayloadBindings()
     {
-        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(7); let n: int = match (r) { Ok(v) => { v; }, Err(e) => { 0; } };";
+        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(7) let n: int = match (r) { Ok(v) => { v }, Err(e) => { 0 } }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -319,7 +319,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksClassImplConstructorAndMethodSelfAccess()
     {
-        var source = "class User { name: string; age: int; } impl User { init(name: string, age: int) { self.name = name; self.age = age; } fn Age(self) -> int { self.age; } }";
+        var source = "class User { name: string age: int } impl User { init(name: string, age: int) { self.name = name self.age = age } fn Age(self) -> int { self.age } }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -329,7 +329,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsInterfaceImplMissingMethod()
     {
-        var source = "class User { name: string; } interface IGreeter { fn Greet(self); } impl IGreeter for User { }";
+        var source = "class User { name: string } interface IGreeter { fn Greet(self) } impl IGreeter for User { }";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -339,7 +339,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsMethodWithoutSelfParameter()
     {
-        var source = "class User { name: string; } impl User { fn Greet() { } }";
+        var source = "class User { name: string } impl User { fn Greet() { } }";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -349,7 +349,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsClassFieldAssignmentTypeMismatchInConstructor()
     {
-        var source = "class User { age: int; } impl User { init(age: string) { self.age = age; } }";
+        var source = "class User { age: int } impl User { init(age: string) { self.age = age } }";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -359,7 +359,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksInterfaceTypedVariableRuntimeValue()
     {
-        var source = "class User { age: int; } interface IHasAge { fn Age(self) -> int; } impl IHasAge for User { fn Age(self) -> int { self.age; } } let user = new User(); let v: IHasAge = user;";
+        var source = "class User { age: int } interface IHasAge { fn Age(self) -> int } impl IHasAge for User { fn Age(self) -> int { self.age } } let user = new User() let v: IHasAge = user";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -369,7 +369,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksInterfaceTypedFunctionParameterAndReturn()
     {
-        var source = "interface IGreeter { fn Greet(self); } fn Use(x: IGreeter) -> IGreeter { x; }";
+        var source = "interface IGreeter { fn Greet(self) } fn Use(x: IGreeter) -> IGreeter { x }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -379,7 +379,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksInterfaceTypedClassField()
     {
-        var source = "interface IGreeter { fn Greet(self); } class Holder { inner: IGreeter; }";
+        var source = "interface IGreeter { fn Greet(self) } class Holder { inner: IGreeter }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -389,7 +389,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsPublicModifierInsideInterfaceImplMethod()
     {
-        var source = "class User { } interface IGreeter { fn Greet(self); } impl IGreeter for User { public fn Greet(self) { } }";
+        var source = "class User { } interface IGreeter { fn Greet(self) } impl IGreeter for User { public fn Greet(self) { } }";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -399,7 +399,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericClassConstructorAndMethodCall()
     {
-        var source = "class Box<T> { value: T; } impl Box { init(value: T) { self.value = value; } fn Get(self) -> T { self.value; } } let b: Box<int> = new Box<int>(42); let n: int = b.Get();";
+        var source = "class Box<T> { value: T } impl Box { init(value: T) { self.value = value } fn Get(self) -> T { self.value } } let b: Box<int> = new Box<int>(42) let n: int = b.Get()";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -409,7 +409,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericInterfaceAssignmentAndDispatchTyping()
     {
-        var source = "class Box<T> { value: T; } interface IGet<T> { fn Get(self) -> T; } impl Box { init(value: T) { self.value = value; } } impl IGet for Box { fn Get(self) -> T { self.value; } } let b: Box<int> = new Box<int>(7); let g: IGet<int> = b; let n: int = g.Get();";
+        var source = "class Box<T> { value: T } interface IGet<T> { fn Get(self) -> T } impl Box { init(value: T) { self.value = value } } impl IGet for Box { fn Get(self) -> T { self.value } } let b: Box<int> = new Box<int>(7) let g: IGet<int> = b let n: int = g.Get()";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -419,7 +419,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericFunctionInference()
     {
-        var source = "fn Id<T>(value: T) -> T { value; } let n: int = Id(3);";
+        var source = "fn Id<T>(value: T) -> T { value } let n: int = Id(3)";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -429,7 +429,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsGenericClassMissingTypeArgumentsInAnnotation()
     {
-        var source = "class Box<T> { value: T; } let b: Box = new Box<int>(1);";
+        var source = "class Box<T> { value: T } let b: Box = new Box<int>(1)";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -439,7 +439,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsUnsupportedStaticClrMethodReturnType()
     {
-        var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid();");
+        var (_, _, result) = ParseResolveAndCheck("System.Guid.NewGuid()");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
@@ -448,7 +448,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCallViaImportAlias()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.Math; Math.Abs(-42);");
+        var (unit, names, result) = ParseResolveAndCheck("import System.Math Math.Abs(-42)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -463,7 +463,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCallViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System; Console.WriteLine(42);");
+        var (unit, names, result) = ParseResolveAndCheck("import System Console.WriteLine(42)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -478,7 +478,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCallWithTwoArguments()
     {
-        var (unit, names, result) = ParseResolveAndCheck("System.Math.Max(10, 3);");
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.Max(10, 3)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -493,7 +493,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrFileCallViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.IO; File.Exists(\"/tmp/missing-file\");");
+        var (unit, names, result) = ParseResolveAndCheck("import System.IO File.Exists(\"/tmp/missing-file\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -508,7 +508,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrPathCombineViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.IO; Path.Combine(\"a\", \"b\");");
+        var (unit, names, result) = ParseResolveAndCheck("import System.IO Path.Combine(\"a\", \"b\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -523,7 +523,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrEnvironmentCallsViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System; Environment.SetEnvironmentVariable(\"KONG_TEST\", \"ok\"); Environment.GetEnvironmentVariable(\"KONG_TEST\");");
+        var (unit, names, result) = ParseResolveAndCheck("import System Environment.SetEnvironmentVariable(\"KONG_TEST\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -538,7 +538,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrEnvironmentPropertyAccess()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System; Environment.NewLine;");
+        var (unit, names, result) = ParseResolveAndCheck("import System Environment.NewLine");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -553,7 +553,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrLongReturnType()
     {
-        var (unit, names, result) = ParseResolveAndCheck("System.Math.BigMul(30000, 30000);");
+        var (unit, names, result) = ParseResolveAndCheck("System.Math.BigMul(30000, 30000)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -567,7 +567,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrDoubleReturnType()
     {
-        var (unit, names, result) = ParseResolveAndCheck("System.Convert.ToDouble(\"4\");");
+        var (unit, names, result) = ParseResolveAndCheck("System.Convert.ToDouble(\"4\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -581,7 +581,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrNumericWideningForOverloadResolution()
     {
-        var source = "System.Math.Sqrt(9); System.Math.Max(System.Byte.Parse(\"7\"), 10);";
+        var source = "System.Math.Sqrt(9) System.Math.Max(System.Byte.Parse(\"7\"), 10)";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -601,7 +601,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrParamsOverloadResolution()
     {
-        var source = "System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\");";
+        var source = "System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\")";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -616,7 +616,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksDoubleCharAndByteLiterals()
     {
-        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b;";
+        var source = "let d: double = 1.5 let c: char = 'a' let b: byte = 42b";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -626,7 +626,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrCharAndByteReturnTypes()
     {
-        var source = "System.Char.Parse(\"a\"); System.Byte.Parse(\"42\");";
+        var source = "System.Char.Parse(\"a\") System.Byte.Parse(\"42\")";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -646,7 +646,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestAllowsWideningFromByteAndChar()
     {
-        var source = "let fromByte: int = System.Byte.Parse(\"7\"); let fromChar: long = System.Char.Parse(\"A\");";
+        var source = "let fromByte: int = System.Byte.Parse(\"7\") let fromChar: long = System.Char.Parse(\"A\")";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -656,7 +656,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrStringMethods()
     {
-        var source = "import System; String.IsNullOrEmpty(\"\"); String.Concat(\"a\", \"b\"); String.Equals(\"x\", \"x\");";
+        var source = "import System String.IsNullOrEmpty(\"\") String.Concat(\"a\", \"b\") String.Equals(\"x\", \"x\")";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -681,7 +681,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksAdditionalStaticClrMathMethods()
     {
-        var source = "System.Math.Min(10, 3); System.Math.Max(10, 3);";
+        var source = "System.Math.Min(10, 3) System.Math.Max(10, 3)";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -701,7 +701,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMathClampMethod()
     {
-        var source = "System.Math.Clamp(-4, 0, 10);";
+        var source = "System.Math.Clamp(-4, 0, 10)";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -716,7 +716,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsUnsupportedStaticClrMethodOverloadsWhenNoCompatibleSignatureExists()
     {
-        var (_, _, result) = ParseResolveAndCheck("System.Math.DivRem(10, 3);");
+        var (_, _, result) = ParseResolveAndCheck("System.Math.DivRem(10, 3)");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T122");
@@ -725,7 +725,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksInstanceClrStringMethodsAndProperties()
     {
-        var source = "let s: string = \" hello \"; s.Trim(); s.Contains(\"ell\"); s.Length;";
+        var source = "let s: string = \" hello \" s.Trim() s.Contains(\"ell\") s.Length";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -750,7 +750,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksConstructorInteropForClrTypes()
     {
-        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"x\"); sb.ToString();";
+        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"x\") sb.ToString()";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -765,7 +765,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsUnsupportedConstructorSignaturesClearly()
     {
-        var (_, _, result) = ParseResolveAndCheck("new System.WeakReference(\"x\");");
+        var (_, _, result) = ParseResolveAndCheck("new System.WeakReference(\"x\")");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T113");
@@ -775,7 +775,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestAllowsAssignmentToVar()
     {
-        var (_, names, result) = ParseResolveAndCheck("var x: int = 1; x = x + 1;");
+        var (_, names, result) = ParseResolveAndCheck("var x: int = 1 x = x + 1");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -784,7 +784,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestRejectsAssignmentToLet()
     {
-        var (_, _, result) = ParseResolveAndCheck("let x: int = 1; x = 2;");
+        var (_, _, result) = ParseResolveAndCheck("let x: int = 1 x = 2");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
@@ -793,7 +793,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrOutArgumentCall()
     {
-        var source = "import System; var value: bool = false; let ok: bool = Boolean.TryParse(\"true\", out value);";
+        var source = "import System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value)";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -803,7 +803,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestRejectsOutArgumentOnImmutableLet()
     {
-        var (_, _, result) = ParseResolveAndCheck("import System; let value: bool = false; Boolean.TryParse(\"true\", out value);");
+        var (_, _, result) = ParseResolveAndCheck("import System let value: bool = false Boolean.TryParse(\"true\", out value)");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");
@@ -812,7 +812,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksAdditionalPrimitiveClrTypes()
     {
-        var source = "System.SByte.Parse(\"1\"); System.Int16.Parse(\"2\"); System.UInt16.Parse(\"3\"); System.UInt32.Parse(\"4\"); System.UInt64.Parse(\"5\"); System.IntPtr.Zero; System.UIntPtr.Zero; System.Convert.ToSingle(\"6\"); System.Decimal.Parse(\"7\");";
+        var source = "System.SByte.Parse(\"1\") System.Int16.Parse(\"2\") System.UInt16.Parse(\"3\") System.UInt32.Parse(\"4\") System.UInt64.Parse(\"5\") System.IntPtr.Zero System.UIntPtr.Zero System.Convert.ToSingle(\"6\") System.Decimal.Parse(\"7\")";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -832,7 +832,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksForInLoopOverArray()
     {
-        var source = "let xs: int[] = [1, 2, 3]; for i in xs { let y: int = i; }";
+        var source = "let xs: int[] = [1, 2, 3] for i in xs { let y: int = i }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -842,7 +842,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsForInLoopRequiresArrayIterable()
     {
-        var source = "let x: int = 1; for i in x { i; }";
+        var source = "let x: int = 1 for i in x { i }";
         var (_, _, result) = ParseResolveAndCheck(source);
 
         Assert.True(result.Diagnostics.HasErrors);
@@ -852,7 +852,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksArrayElementAssignment()
     {
-        var source = "var xs: int[] = [1, 2, 3]; xs[1] = 42;";
+        var source = "var xs: int[] = [1, 2, 3] xs[1] = 42";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -862,7 +862,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsBreakContinueOutsideLoop()
     {
-        var (_, _, result) = ParseResolveAndCheck("break; continue;");
+        var (_, _, result) = ParseResolveAndCheck("break continue");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T126");

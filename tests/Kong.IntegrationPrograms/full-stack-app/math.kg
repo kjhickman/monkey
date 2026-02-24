@@ -1,9 +1,9 @@
-namespace Demo.MathKit;
+namespace Demo.MathKit
 
 public fn Add(x: int, y: int) -> int {
-    x + y;
+    x + y
 }
 
 public fn Scale(x: double) -> double {
-    x * 2.0;
+    x * 2.0
 }

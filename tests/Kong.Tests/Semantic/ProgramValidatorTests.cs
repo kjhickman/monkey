@@ -10,7 +10,7 @@ public class ProgramValidatorTests
     [Fact]
     public void TestReportsTopLevelStatementAndMissingMain()
     {
-        var (unit, typeCheck) = ParseResolveAndCheck("let x = 1;");
+        var (unit, typeCheck) = ParseResolveAndCheck("let x = 1");
 
         var diagnostics = ProgramValidator.ValidateEntrypoint(unit, typeCheck);
 
@@ -32,7 +32,7 @@ public class ProgramValidatorTests
     public void TestAllowsMainWithVoidOrIntReturn()
     {
         var (unitVoid, typeCheckVoid) = ParseResolveAndCheck("fn Main() { }");
-        var (unitInt, typeCheckInt) = ParseResolveAndCheck("fn Main() -> int { 0; }");
+        var (unitInt, typeCheckInt) = ParseResolveAndCheck("fn Main() -> int { 0 }");
 
         var diagnosticsVoid = ProgramValidator.ValidateEntrypoint(unitVoid, typeCheckVoid);
         var diagnosticsInt = ProgramValidator.ValidateEntrypoint(unitInt, typeCheckInt);
@@ -54,7 +54,7 @@ public class ProgramValidatorTests
     [Fact]
     public void TestAllowsTopLevelImports()
     {
-        var (unit, typeCheck) = ParseResolveAndCheck("import System.Console; fn Main() { Console.WriteLine(1); }");
+        var (unit, typeCheck) = ParseResolveAndCheck("import System.Console fn Main() { Console.WriteLine(1) }");
 
         var diagnostics = ProgramValidator.ValidateEntrypoint(unit, typeCheck);
 

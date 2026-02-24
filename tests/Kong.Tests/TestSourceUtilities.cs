@@ -12,24 +12,91 @@ public static class TestSourceUtilities
         var insertIndex = 0;
         while (true)
         {
-            var remainder = source[insertIndex..].TrimStart();
-            var skipped = source[insertIndex..].Length - remainder.Length;
-            insertIndex += skipped;
-
-            if (!source[insertIndex..].StartsWith("import ", StringComparison.Ordinal))
+            insertIndex = SkipWhitespace(source, insertIndex);
+            if (!IsImportAt(source, insertIndex))
             {
                 break;
             }
 
-            var semicolonIndex = source.IndexOf(';', insertIndex);
-            if (semicolonIndex < 0)
+            insertIndex += "import".Length;
+            insertIndex = SkipWhitespace(source, insertIndex);
+
+            if (!TryConsumeQualifiedName(source, ref insertIndex))
             {
                 break;
             }
-
-            insertIndex = semicolonIndex + 1;
         }
 
-        return source.Insert(insertIndex, $" namespace {ns}; ");
+        return source.Insert(insertIndex, $" namespace {ns} ");
+    }
+
+    private static int SkipWhitespace(string source, int index)
+    {
+        while (index < source.Length && char.IsWhiteSpace(source[index]))
+        {
+            index++;
+        }
+
+        return index;
+    }
+
+    private static bool IsImportAt(string source, int index)
+    {
+        if (index < 0 || index + "import".Length > source.Length)
+        {
+            return false;
+        }
+
+        if (!source.AsSpan(index, "import".Length).SequenceEqual("import"))
+        {
+            return false;
+        }
+
+        return index + "import".Length < source.Length && char.IsWhiteSpace(source[index + "import".Length]);
+    }
+
+    private static bool TryConsumeQualifiedName(string source, ref int index)
+    {
+        if (!TryConsumeIdentifier(source, ref index))
+        {
+            return false;
+        }
+
+        while (index < source.Length && source[index] == '.')
+        {
+            index++;
+            if (!TryConsumeIdentifier(source, ref index))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryConsumeIdentifier(string source, ref int index)
+    {
+        if (index >= source.Length || !IsIdentifierStart(source[index]))
+        {
+            return false;
+        }
+
+        index++;
+        while (index < source.Length && IsIdentifierPart(source[index]))
+        {
+            index++;
+        }
+
+        return true;
+    }
+
+    private static bool IsIdentifierStart(char ch)
+    {
+        return ch == '_' || char.IsLetter(ch);
+    }
+
+    private static bool IsIdentifierPart(char ch)
+    {
+        return ch == '_' || char.IsLetterOrDigit(ch);
     }
 }

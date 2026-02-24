@@ -1,57 +1,57 @@
-import Demo.MathKit;
-import Demo.TextKit;
-import Demo.Arrays;
-import System;
-import System.Text;
+import Demo.MathKit
+import Demo.TextKit
+import Demo.Arrays
+import System
+import System.Text
 
-namespace Demo.App;
+namespace Demo.App
 
 fn Main() {
     // Core feature smoke checks in one multi-file app.
-    var checks: int = 0;
-    let total: int = Add(40, 2);
-    let scaled: double = Scale(1.5);
-    let matrix: int[][] = [[1, 2], [42, 99]];
-    matrix[0][1] = 3;
-    let picked: int = Pick(matrix);
-    let words: string[] = ["hi", "kong"];
-    let word: string = Word(words);
-    let bytes: byte[] = [1b, 2b, 3b];
-    let b: byte = bytes[2];
-    let c: char = 'A';
-    let fromClr: double = System.Math.Sqrt(9);
-    let msg: string = Label(total);
-    let cleaned: string = "  kong  ".Trim();
-    let builder = new StringBuilder();
-    builder.Append("n=");
-    builder.Append(System.Convert.ToString(total));
-    let built: string = builder.ToString();
-    var parsed: bool = false;
-    let parseOk: bool = Boolean.TryParse("true", out parsed);
-    let sv: sbyte = System.SByte.Parse("1");
-    let sh: short = System.Int16.Parse("2");
-    let ush: ushort = System.UInt16.Parse("3");
-    let uv: uint = System.UInt32.Parse("4");
-    let ulv: ulong = System.UInt64.Parse("5");
-    let iv: nint = System.IntPtr.Zero;
-    let uiv: nuint = System.UIntPtr.Zero;
-    let fv: float = System.Convert.ToSingle("6");
-    let dv: decimal = System.Decimal.Parse("7");
-    var loopTotal: int = 0;
+    var checks: int = 0
+    let total: int = Add(40, 2)
+    let scaled: double = Scale(1.5)
+    let matrix: int[][] = [[1, 2], [42, 99]]
+    matrix[0][1] = 3
+    let picked: int = Pick(matrix)
+    let words: string[] = ["hi", "kong"]
+    let word: string = Word(words)
+    let bytes: byte[] = [1b, 2b, 3b]
+    let b: byte = bytes[2]
+    let c: char = 'A'
+    let fromClr: double = System.Math.Sqrt(9)
+    let msg: string = Label(total)
+    let cleaned: string = "  kong  ".Trim()
+    let builder = new StringBuilder()
+    builder.Append("n=")
+    builder.Append(System.Convert.ToString(total))
+    let built: string = builder.ToString()
+    var parsed: bool = false
+    let parseOk: bool = Boolean.TryParse("true", out parsed)
+    let sv: sbyte = System.SByte.Parse("1")
+    let sh: short = System.Int16.Parse("2")
+    let ush: ushort = System.UInt16.Parse("3")
+    let uv: uint = System.UInt32.Parse("4")
+    let ulv: ulong = System.UInt64.Parse("5")
+    let iv: nint = System.IntPtr.Zero
+    let uiv: nuint = System.UIntPtr.Zero
+    let fv: float = System.Convert.ToSingle("6")
+    let dv: decimal = System.Decimal.Parse("7")
+    var loopTotal: int = 0
     for i in matrix[0] {
-        loopTotal = loopTotal + i;
+        loopTotal = loopTotal + i
     }
-    var control: int = 0;
+    var control: int = 0
     for x in matrix[0] {
-        continue;
-        control = control + x;
+        continue
+        control = control + x
     }
     for y in matrix[0] {
-        control = control + y;
-        break;
-        control = control + 100;
+        control = control + y
+        break
+        control = control + 100
     }
-    checks = checks + 1;
+    checks = checks + 1
 
     // Exercise logical operators with short-circuit-friendly shape.
     let ok: bool = picked == 42 &&
@@ -65,11 +65,11 @@ fn Main() {
         parseOk && parsed &&
         loopTotal == 4 &&
         control == 1 &&
-        checks == 1;
+        checks == 1
 
     if (ok || false) {
-        System.Console.WriteLine(System.String.Concat(msg, ":", built, ":ok"));
+        System.Console.WriteLine(System.String.Concat(msg, ":", built, ":ok"))
     } else {
-        System.Console.WriteLine("bad-pick");
+        System.Console.WriteLine("bad-pick")
     }
 }

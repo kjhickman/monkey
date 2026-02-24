@@ -14,7 +14,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesSimpleAdditionExpression()
     {
-        var result = Execute("1 + 1;");
+        var result = Execute("1 + 1");
 
         Assert.True(result.Executed);
         Assert.Equal(2, result.Value);
@@ -24,7 +24,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesNestedArithmeticExpression()
     {
-        var result = Execute("(1 + 2) * 3;");
+        var result = Execute("(1 + 2) * 3");
 
         Assert.True(result.Executed);
         Assert.Equal(9, result.Value);
@@ -34,7 +34,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesProgramWithLetBinding()
     {
-        var result = Execute("let x = 2; x + 3;");
+        var result = Execute("let x = 2 x + 3");
 
         Assert.True(result.Executed);
         Assert.Equal(5, result.Value);
@@ -44,7 +44,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestReturnsSemanticDiagnosticsWhenTypeCheckFails()
     {
-        var result = Execute("x;");
+        var result = Execute("x");
 
         Assert.False(result.Executed);
         Assert.False(result.IsUnsupported);
@@ -54,7 +54,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestReturnsUnsupportedForNonIntTopLevelResult()
     {
-        var result = Execute("true;");
+        var result = Execute("true");
 
         Assert.False(result.Executed);
         Assert.True(result.IsUnsupported);
@@ -64,7 +64,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesIfElseExpression()
     {
-        var result = Execute("if (true) { 10 } else { 20 };");
+        var result = Execute("if (true) { 10 } else { 20 }");
 
         Assert.True(result.Executed);
         Assert.Equal(10, result.Value);
@@ -73,7 +73,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesFunctionLiteralCallWithReturn()
     {
-        var result = Execute("fn(x: int) -> int { return x + 1; }(41);");
+        var result = Execute("fn(x: int) -> int { return x + 1 }(41)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -82,7 +82,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesArrayIndexExpression()
     {
-        var result = Execute("let xs: int[] = [4, 5, 6]; xs[1];");
+        var result = Execute("let xs: int[] = [4, 5, 6] xs[1]");
 
         Assert.True(result.Executed);
         Assert.Equal(5, result.Value);
@@ -91,7 +91,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStringArrayIndexExpression()
     {
-        var result = Execute("let xs: string[] = [\"a\", \"b\"]; if (xs[1] == \"b\") { 1; } else { 0; }");
+        var result = Execute("let xs: string[] = [\"a\", \"b\"] if (xs[1] == \"b\") { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -100,7 +100,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesByteArrayIndexExpression()
     {
-        var result = Execute("let xs: byte[] = [1b, 2b, 3b]; let value: byte = xs[2]; if (value == 3b) { 1; } else { 0; }");
+        var result = Execute("let xs: byte[] = [1b, 2b, 3b] let value: byte = xs[2] if (value == 3b) { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -109,7 +109,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesNestedIntArrayIndexExpression()
     {
-        var result = Execute("let xss: int[][] = [[1, 2], [3, 4]]; let ys: int[] = xss[1]; ys[0];");
+        var result = Execute("let xss: int[][] = [[1, 2], [3, 4]] let ys: int[] = xss[1] ys[0]");
 
         Assert.True(result.Executed);
         Assert.Equal(3, result.Value);
@@ -118,7 +118,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrConsoleWriteLine()
     {
-        var result = Execute("System.Console.WriteLine(42); 1;");
+        var result = Execute("System.Console.WriteLine(42) 1");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -127,7 +127,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrMathAbs()
     {
-        var result = Execute("System.Math.Abs(-42);");
+        var result = Execute("System.Math.Abs(-42)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -136,7 +136,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesImportedStaticClrMathAbs()
     {
-        var result = Execute("import System.Math; Math.Abs(-42);");
+        var result = Execute("import System.Math Math.Abs(-42)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -145,7 +145,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrMathMax()
     {
-        var result = Execute("System.Math.Max(10, 3);");
+        var result = Execute("System.Math.Max(10, 3)");
 
         Assert.True(result.Executed);
         Assert.Equal(10, result.Value);
@@ -154,7 +154,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrFileExistsViaNamespaceImport()
     {
-        var result = Execute("import System.IO; if (File.Exists(\"/tmp/kong-test-never-exists\")) { 1; } else { 0; }");
+        var result = Execute("import System.IO if (File.Exists(\"/tmp/kong-test-never-exists\")) { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(0, result.Value);
@@ -163,7 +163,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrPathHelpersViaNamespaceImport()
     {
-        var result = Execute("import System.IO; if (File.Exists(Path.Combine(\"/tmp\", \"kong-path-never-exists\"))) { 1; } else { 0; }");
+        var result = Execute("import System.IO if (File.Exists(Path.Combine(\"/tmp\", \"kong-path-never-exists\"))) { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(0, result.Value);
@@ -172,7 +172,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrEnvironmentCallsViaNamespaceImport()
     {
-        var result = Execute("import System; Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\"); Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\"); 1;");
+        var result = Execute("import System Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") 1");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -181,7 +181,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrPropertyAccessAndStringInequality()
     {
-        var result = Execute("import System; if (Environment.NewLine != \"\") { 1; } else { 0; }");
+        var result = Execute("import System if (Environment.NewLine != \"\") { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -190,7 +190,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrMethodCall()
     {
-        var result = Execute("System.Math.Abs(-42);");
+        var result = Execute("System.Math.Abs(-42)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -199,7 +199,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrDoubleCharAndByteProgram()
     {
-        var source = "let d: double = System.Convert.ToDouble(\"4\"); let root: double = System.Math.Sqrt(d); let c: char = System.Char.Parse(\"A\"); let b: byte = System.Byte.Parse(\"42\"); if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { 1; } else { 0; } } else { 0; } } else { 0; }";
+        var source = "let d: double = System.Convert.ToDouble(\"4\") let root: double = System.Math.Sqrt(d) let c: char = System.Char.Parse(\"A\") let b: byte = System.Byte.Parse(\"42\") if (root == System.Convert.ToDouble(\"2\")) { if (c == System.Char.Parse(\"A\")) { if (b == System.Byte.Parse(\"42\")) { 1 } else { 0 } } else { 0 } } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -210,7 +210,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesDoubleCharAndByteLiterals()
     {
-        var source = "let d: double = 1.5; let c: char = 'a'; let b: byte = 42b; if (d > 1.0) { if (c == 'a') { if (b == 42b) { 1; } else { 0; } } else { 0; } } else { 0; }";
+        var source = "let d: double = 1.5 let c: char = 'a' let b: byte = 42b if (d > 1.0) { if (c == 'a') { if (b == 42b) { 1 } else { 0 } } else { 0 } } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -221,7 +221,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrParamsAndWideningCalls()
     {
-        var source = "let root: double = System.Math.Sqrt(9); let s: string = System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\"); if (root == 3.0) { if (s == \"abcde\") { 1; } else { 0; } } else { 0; }";
+        var source = "let root: double = System.Math.Sqrt(9) let s: string = System.String.Concat(\"a\", \"b\", \"c\", \"d\", \"e\") if (root == 3.0) { if (s == \"abcde\") { 1 } else { 0 } } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -232,7 +232,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesInstanceClrStringMethodsAndProperty()
     {
-        var source = "let s: string = \" hello \"; let trimmed: string = s.Trim(); let hasEll: bool = trimmed.Contains(\"ell\"); let len: int = trimmed.Length; if (hasEll) { if (len == 5) { 1; } else { 0; } } else { 0; }";
+        var source = "let s: string = \" hello \" let trimmed: string = s.Trim() let hasEll: bool = trimmed.Contains(\"ell\") let len: int = trimmed.Length if (hasEll) { if (len == 5) { 1 } else { 0 } } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -243,7 +243,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesConstructorInteropWithInstanceMethods()
     {
-        var source = "import System.Text; let sb = new StringBuilder(); sb.Append(\"ab\"); sb.Append(\"c\"); let s: string = sb.ToString(); if (s == \"abc\") { 1; } else { 0; }";
+        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"ab\") sb.Append(\"c\") let s: string = sb.ToString() if (s == \"abc\") { 1 } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -254,7 +254,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesVarReassignment()
     {
-        var source = "var x: int = 1; x = x + 41; x;";
+        var source = "var x: int = 1 x = x + 41 x";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -265,7 +265,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrOutArgumentCall()
     {
-        var source = "import System; var value: bool = false; let ok: bool = Boolean.TryParse(\"true\", out value); if (ok && value) { 1; } else { 0; }";
+        var source = "import System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value) if (ok && value) { 1 } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -276,7 +276,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesForInLoopOverArray()
     {
-        var source = "let xs: int[] = [1, 2, 3]; var total: int = 0; for i in xs { total = total + i; } total;";
+        var source = "let xs: int[] = [1, 2, 3] var total: int = 0 for i in xs { total = total + i } total";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -287,7 +287,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesArrayElementAssignment()
     {
-        var source = "var xs: int[] = [1, 2, 3]; xs[1] = 42; xs[1];";
+        var source = "var xs: int[] = [1, 2, 3] xs[1] = 42 xs[1]";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -298,7 +298,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesForInBreakAndContinue()
     {
-        var source = "let xs: int[] = [1, 2, 3, 4]; var total: int = 0; for i in xs { continue; total = total + i; } for j in xs { total = total + j; break; total = total + 100; } total;";
+        var source = "let xs: int[] = [1, 2, 3, 4] var total: int = 0 for i in xs { continue total = total + i } for j in xs { total = total + j break total = total + 100 } total";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -309,7 +309,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesClosureWithSingleCapture()
     {
-        var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer }; g(5); }; f(10);");
+        var result = Execute("let f = fn(outer: int) -> int { let g = fn(x: int) -> int { x + outer } g(5) } f(10)");
 
         Assert.True(result.Executed);
         Assert.Equal(15, result.Value);
@@ -318,7 +318,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesNestedClosureCall()
     {
-        var result = Execute("let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y }; g(7); }; f(5);");
+        var result = Execute("let f = fn(x: int) -> int { let g = fn(y: int) -> int { x + y } g(7) } f(5)");
 
         Assert.True(result.Executed);
         Assert.Equal(12, result.Value);
@@ -327,7 +327,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesEscapingClosureValue()
     {
-        var result = Execute("let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } }; let addTwo: fn(int) -> int = makeAdder(2); addTwo(40);");
+        var result = Execute("let makeAdder: fn(int) -> fn(int) -> int = fn(x: int) -> fn(int) -> int { fn(y: int) -> int { x + y } } let addTwo: fn(int) -> int = makeAdder(2) addTwo(40)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -336,7 +336,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesNamedFunctionDeclarationCall()
     {
-        var result = Execute("fn Add(x: int, y: int) -> int { x + y; } Add(20, 22);");
+        var result = Execute("fn Add(x: int, y: int) -> int { x + y } Add(20, 22)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -345,7 +345,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesLogicalOperators()
     {
-        var result = Execute("let a: bool = false && true; let b: bool = true || false; if (!a) { if (b) { 1; } else { 0; } } else { 0; }");
+        var result = Execute("let a: bool = false && true let b: bool = true || false if (!a) { if (b) { 1 } else { 0 } } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -354,7 +354,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesReturnInsideIfBranches()
     {
-        var result = Execute("fn Pick(flag: bool) -> int { if (flag) { return 1; } else { return 2; } } fn Main() { System.Console.WriteLine(Pick(false)); }");
+        var result = Execute("fn Pick(flag: bool) -> int { if (flag) { return 1 } else { return 2 } } fn Main() { System.Console.WriteLine(Pick(false)) }");
 
         Assert.True(result.Executed);
     }
@@ -362,7 +362,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesProgramWithImplicitVoidNamedFunctionDeclaration()
     {
-        var result = Execute("fn Main() { } 1;");
+        var result = Execute("fn Main() { } 1");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);

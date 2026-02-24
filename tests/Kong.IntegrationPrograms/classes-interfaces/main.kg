@@ -1,40 +1,40 @@
-import System;
+import System
 
-namespace Demo.Classes;
+namespace Demo.Classes
 
 class Counter {
-    value: int;
+    value: int
 }
 
 interface ICounter {
-    fn Increment(self, by: int) -> int;
+    fn Increment(self, by: int) -> int
 }
 
 impl Counter {
     init(start: int) {
-        self.value = start;
+        self.value = start
     }
 
     fn Value(self) -> int {
-        self.value;
+        self.value
     }
 }
 
 impl ICounter for Counter {
     fn Increment(self, by: int) -> int {
-        self.value = self.value + by;
-        self.value;
+        self.value = self.value + by
+        self.value
     }
 }
 
 fn Main() {
-    let counter = new Counter(10);
-    let updated: int = counter.Increment(5);
-    let current: int = counter.Value();
+    let counter = new Counter(10)
+    let updated: int = counter.Increment(5)
+    let current: int = counter.Value()
 
     if (updated == 15 && current == 15) {
-        Console.WriteLine("class-ok");
+        Console.WriteLine("class-ok")
     } else {
-        Console.WriteLine("class-bad");
+        Console.WriteLine("class-bad")
     }
 }

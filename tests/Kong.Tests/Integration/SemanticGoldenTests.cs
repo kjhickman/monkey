@@ -8,12 +8,12 @@ namespace Kong.Tests.Integration;
 public class SemanticGoldenTests
 {
     [Theory]
-    [InlineData("let y: int = z;", "N001")]
-    [InlineData("fn(x) -> int { return x; };", "T105")]
-    [InlineData("fn() -> int { if (true) { return 1; } };", "T117")]
-    [InlineData("fn() -> int { return 1; 2; };", "T118")]
-    [InlineData("let x = if (true) { 1 };", "T119")]
-    [InlineData("let xs = [];", "T120")]
+    [InlineData("let y: int = z", "N001")]
+    [InlineData("fn(x) -> int { return x }", "T105")]
+    [InlineData("fn() -> int { if (true) { return 1 } }", "T117")]
+    [InlineData("fn() -> int { return 1 2 }", "T118")]
+    [InlineData("let x = if (true) { 1 }", "T119")]
+    [InlineData("let xs = []", "T120")]
     public void TestSemanticDiagnosticsGoldenCodes(string input, string expectedCode)
     {
         var result = ParseResolveAndCheck(input);
@@ -24,7 +24,7 @@ public class SemanticGoldenTests
     [Fact]
     public void TestValidTypedProgramHasNoSemanticErrors()
     {
-        var result = ParseResolveAndCheck("let x = 1; let y: int = x + 2; y;");
+        var result = ParseResolveAndCheck("let x = 1 let y: int = x + 2 y");
 
         Assert.False(result.Diagnostics.HasErrors);
     }

@@ -51,7 +51,6 @@ public class LetStatement : IStatement
         {
             sb.Append(Value.String());
         }
-        sb.Append(';');
         return sb.ToString();
     }
 }
@@ -67,7 +66,7 @@ public class AssignmentStatement : IStatement
 
     public string String()
     {
-        return $"{Name.String()} = {Value.String()};";
+        return $"{Name.String()} = {Value.String()}";
     }
 }
 
@@ -82,7 +81,7 @@ public class IndexAssignmentStatement : IStatement
 
     public string String()
     {
-        return $"{Target.String()} = {Value.String()};";
+        return $"{Target.String()} = {Value.String()}";
     }
 }
 
@@ -97,7 +96,7 @@ public class MemberAssignmentStatement : IStatement
 
     public string String()
     {
-        return $"{Target.String()} = {Value.String()};";
+        return $"{Target.String()} = {Value.String()}";
     }
 }
 
@@ -108,7 +107,7 @@ public class BreakStatement : IStatement
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => "break;";
+    public string String() => "break";
 }
 
 public class ContinueStatement : IStatement
@@ -118,7 +117,7 @@ public class ContinueStatement : IStatement
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => "continue;";
+    public string String() => "continue";
 }
 
 public class Identifier : IExpression
@@ -167,7 +166,6 @@ public class ReturnStatement : IStatement
         {
             sb.Append(ReturnValue.String());
         }
-        sb.Append(';');
         return sb.ToString();
     }
 }
@@ -259,7 +257,7 @@ public class ImportStatement : IStatement
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => $"import {QualifiedName};";
+    public string String() => $"import {QualifiedName}";
 }
 
 public class NamespaceStatement : IStatement
@@ -270,7 +268,7 @@ public class NamespaceStatement : IStatement
 
     public string TokenLiteral() => Token.Literal;
 
-    public string String() => $"namespace {QualifiedName};";
+    public string String() => $"namespace {QualifiedName}";
 }
 
 public class EnumDeclaration : IStatement
@@ -351,7 +349,7 @@ public class FieldDeclaration : INode
     public ITypeNode TypeAnnotation { get; set; } = null!;
 
     public string TokenLiteral() => Token.Literal;
-    public string String() => $"{Name.String()}: {TypeAnnotation.String()};";
+    public string String() => $"{Name.String()}: {TypeAnnotation.String()}";
 }
 
 public class InterfaceDeclaration : IStatement
@@ -392,7 +390,7 @@ public class InterfaceMethodSignature : INode
         var typeParameters = TypeParameters.Count == 0
             ? string.Empty
             : $"<{string.Join(", ", TypeParameters.Select(p => p.String()))}>";
-        return $"fn {Name.String()}{typeParameters}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType};";
+        return $"fn {Name.String()}{typeParameters}({string.Join(", ", Parameters.Select(p => p.String()))}){returnType}";
     }
 }
 

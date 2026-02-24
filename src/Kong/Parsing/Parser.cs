@@ -244,11 +244,6 @@ public class Parser
                 return null;
             }
 
-            if (PeekTokenIs(TokenType.Semicolon))
-            {
-                NextToken();
-            }
-
             return left switch
             {
                 Identifier identifier => new AssignmentStatement
@@ -283,12 +278,6 @@ public class Parser
             Span = new Span(startSpan.Start, _curToken.Span.End),
         };
 
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-            expressionStatement.Span = new Span(startSpan.Start, _curToken.Span.End);
-        }
-
         return expressionStatement;
     }
 
@@ -301,24 +290,12 @@ public class Parser
     private BreakStatement ParseBreakStatement()
     {
         var statement = new BreakStatement { Token = _curToken, Span = _curToken.Span };
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-            statement.Span = new Span(statement.Span.Start, _curToken.Span.End);
-        }
-
         return statement;
     }
 
     private ContinueStatement ParseContinueStatement()
     {
         var statement = new ContinueStatement { Token = _curToken, Span = _curToken.Span };
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-            statement.Span = new Span(statement.Span.Start, _curToken.Span.End);
-        }
-
         return statement;
     }
 
@@ -395,11 +372,6 @@ public class Parser
 
         statement.QualifiedName = string.Join('.', segments);
 
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
-
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
@@ -430,11 +402,6 @@ public class Parser
         }
 
         statement.QualifiedName = string.Join('.', segments);
-
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
 
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
@@ -648,11 +615,6 @@ public class Parser
                 return [];
             }
 
-            if (!ExpectPeek(TokenType.Semicolon))
-            {
-                return [];
-            }
-
             field.Span = new Span(startSpan.Start, _curToken.Span.End);
             fields.Add(field);
 
@@ -798,11 +760,6 @@ public class Parser
         else
         {
             signature.ReturnTypeAnnotation = CreateImplicitVoidType(signature.Name.Span);
-        }
-
-        if (!ExpectPeek(TokenType.Semicolon))
-        {
-            return null;
         }
 
         signature.Span = new Span(startSpan.Start, _curToken.Span.End);
@@ -1249,11 +1206,6 @@ public class Parser
             fl.Name = statement.Name.Value;
         }
 
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
-
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
@@ -1279,11 +1231,6 @@ public class Parser
 
         NextToken();
         statement.Value = ParseExpression(Precedence.Lowest)!;
-
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
 
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
@@ -1465,11 +1412,6 @@ public class Parser
 
         statement.ReturnValue = ParseExpression(Precedence.Lowest);
 
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
-
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
     }
@@ -1482,11 +1424,6 @@ public class Parser
             Token = _curToken,
             Expression = ParseExpression(Precedence.Lowest),
         };
-
-        if (PeekTokenIs(TokenType.Semicolon))
-        {
-            NextToken();
-        }
 
         statement.Span = new Span(startSpan.Start, _curToken.Span.End);
         return statement;
@@ -1526,7 +1463,7 @@ public class Parser
 
         var leftExpression = prefix();
 
-        while (!PeekTokenIs(TokenType.Semicolon) && precedence < PeekPrecedence())
+        while (precedence < PeekPrecedence())
         {
             if (!_infixParseFns.TryGetValue(_peekToken.Type, out var infix))
             {

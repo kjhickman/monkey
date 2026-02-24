@@ -10,7 +10,7 @@ public class BuildCommandIntegrationTests
     [Fact]
     public void TestBuildCommandCreatesRunnableArtifact()
     {
-        var sourcePath = CreateTempProgram("fn Main() { let x = 40; x + 2; }");
+        var sourcePath = CreateTempProgram("fn Main() { let x = 40 x + 2 }");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
 
         try
@@ -66,7 +66,7 @@ public class BuildCommandIntegrationTests
     [Fact]
     public void TestBuiltArtifactUsesMainIntAsExitCode()
     {
-        var sourcePath = CreateTempProgram("fn Main() -> int { 5; }");
+        var sourcePath = CreateTempProgram("fn Main() -> int { 5 }");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
 
         try
@@ -109,7 +109,7 @@ public class BuildCommandIntegrationTests
     public void TestBuildCommandRejectsPathImportSyntax()
     {
         var missingName = $"missing-{Guid.NewGuid():N}.kg";
-        var sourcePath = CreateTempProgram($"import \"./{missingName}\"; fn Main() {{ 1; }}");
+        var sourcePath = CreateTempProgram($"import \"./{missingName}\" fn Main() {{ 1 }}");
         var workingDir = Path.Combine(Path.GetTempPath(), $"kong-build-test-{Guid.NewGuid():N}");
 
         try
@@ -142,8 +142,8 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Shared; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace Shared; fn Add(x: int, y: int) -> int { x - y; } fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Shared fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace Shared fn Add(x: int, y: int) -> int { x - y } fn Main() { Add(1, 2) }");
 
             var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
             Assert.Contains("[CLI016]", stdErr);
@@ -175,8 +175,8 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Helpers fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "namespace App fn Main() { Add(1, 2) }");
 
             var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
             Assert.Contains("[N001]", stdErr);
@@ -208,8 +208,8 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Helpers; fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import Helpers; namespace App; fn Main() { Add(1, 2); }");
+            File.WriteAllText(utilPath, "namespace Helpers fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "import Helpers namespace App fn Main() { Add(1, 2) }");
 
             var (_, stdErr) = ExecuteBuildCommand(mainPath, workingDir);
             Assert.Contains("[CLI019]", stdErr);
@@ -241,8 +241,8 @@ public class BuildCommandIntegrationTests
 
             var utilPath = Path.Combine(tempDirectory, "util.kg");
             var mainPath = Path.Combine(tempDirectory, "main.kg");
-            File.WriteAllText(utilPath, "namespace Util; public fn Add(x: int, y: int) -> int { x + y; }");
-            File.WriteAllText(mainPath, "import Util; namespace App; fn Main() { Add(20, 22); }");
+            File.WriteAllText(utilPath, "namespace Util public fn Add(x: int, y: int) -> int { x + y }");
+            File.WriteAllText(mainPath, "import Util namespace App fn Main() { Add(20, 22) }");
 
             var command = new BuildFile { File = mainPath };
             var originalDirectory = Directory.GetCurrentDirectory();
