@@ -169,7 +169,7 @@ public static class Compilation
             if (fileNamespace == null)
             {
                 diagnostics = new DiagnosticBag();
-                diagnostics.Report(Span.Empty, $"missing required file-scoped namespace declaration in '{discoveredPath}'", "CLI010");
+                diagnostics.Report(Span.Empty, $"missing required file-scoped module declaration in '{discoveredPath}'", "CLI010");
                 return false;
             }
 
@@ -228,7 +228,7 @@ public static class Compilation
                     {
                         diagnostics.Report(
                             statement.Span,
-                            $"import statements must appear before namespace and other top-level declarations in '{filePath}'",
+                            $"use statements must appear before module and other top-level declarations in '{filePath}'",
                             "CLI011");
                     }
 
@@ -238,13 +238,13 @@ public static class Compilation
                     {
                         diagnostics.Report(
                             statement.Span,
-                            $"namespace declaration must appear before top-level declarations in '{filePath}'",
+                            $"module declaration must appear before top-level declarations in '{filePath}'",
                             "CLI012");
                     }
 
                     if (seenNamespace)
                     {
-                        diagnostics.Report(statement.Span, $"duplicate namespace declaration in '{filePath}'", "CLI013");
+                        diagnostics.Report(statement.Span, $"duplicate module declaration in '{filePath}'", "CLI013");
                     }
 
                     seenNamespace = true;
@@ -278,7 +278,7 @@ public static class Compilation
 
         if (!seenNamespace)
         {
-            diagnostics.Report(Span.Empty, $"missing required file-scoped namespace declaration in '{filePath}'", "CLI010");
+            diagnostics.Report(Span.Empty, $"missing required file-scoped module declaration in '{filePath}'", "CLI010");
         }
     }
 
@@ -290,12 +290,12 @@ public static class Compilation
     {
         if (!isTopLevel && statement is ImportStatement)
         {
-            diagnostics.Report(statement.Span, $"import statements are only allowed at the top level in '{filePath}'", "CLI014");
+            diagnostics.Report(statement.Span, $"use statements are only allowed at the top level in '{filePath}'", "CLI014");
         }
 
         if (!isTopLevel && statement is NamespaceStatement)
         {
-            diagnostics.Report(statement.Span, $"namespace declarations are only allowed at the top level in '{filePath}'", "CLI015");
+            diagnostics.Report(statement.Span, $"module declarations are only allowed at the top level in '{filePath}'", "CLI015");
         }
 
         switch (statement)

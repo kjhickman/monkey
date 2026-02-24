@@ -1,6 +1,6 @@
-import System
+use System
 
-namespace Demo.TextKit
+module Demo.TextKit
 
 public fn Label(n: int) -> string {
     System.String.Concat("n=", System.Convert.ToString(n))

@@ -1139,7 +1139,7 @@ public class ParserTests
     [Fact]
     public void TestParsesImportStatement()
     {
-        var input = "import System.Console";
+        var input = "use System.Console";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1153,7 +1153,7 @@ public class ParserTests
     [Fact]
     public void TestRejectsPathImportStatement()
     {
-        var input = "import \"./util.kg\"";
+        var input = "use \"./util.kg\"";
         var l = new Lexer(input);
         var p = new Parser(l);
         p.ParseCompilationUnit();
@@ -1165,7 +1165,7 @@ public class ParserTests
     [Fact]
     public void TestParsesNamespaceStatement()
     {
-        var input = "namespace Foo.Bar";
+        var input = "module Foo.Bar";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();

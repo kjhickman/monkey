@@ -176,7 +176,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersImportedStaticClrMethodCallToQualifiedPath()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System.Math Math.Abs(-42)");
+        var (unit, typeCheck) = ParseAndTypeCheck("use System.Math Math.Abs(-42)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -190,7 +190,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersNamespaceImportedStaticClrCallToQualifiedPath()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System Console.WriteLine(1)");
+        var (unit, typeCheck) = ParseAndTypeCheck("use System Console.WriteLine(1)");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -221,7 +221,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrPropertyAccess()
     {
-        var (unit, typeCheck) = ParseAndTypeCheck("import System if (Environment.NewLine != \"\") { 1 } else { 0 }");
+        var (unit, typeCheck) = ParseAndTypeCheck("use System if (Environment.NewLine != \"\") { 1 } else { 0 }");
         var lowerer = new IrLowerer();
 
         var lowering = lowerer.Lower(unit, typeCheck);
@@ -265,7 +265,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersConstructorInterop()
     {
-        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"a\") 1";
+        var source = "use System.Text let sb = new StringBuilder() sb.Append(\"a\") 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 
@@ -326,7 +326,7 @@ public class IrLowererTests
     [Fact]
     public void TestLowersStaticClrOutArgumentCall()
     {
-        var source = "import System var value: bool = false Boolean.TryParse(\"true\", out value) 1";
+        var source = "use System var value: bool = false Boolean.TryParse(\"true\", out value) 1";
         var (unit, typeCheck) = ParseAndTypeCheck(source);
         var lowerer = new IrLowerer();
 

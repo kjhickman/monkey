@@ -1,6 +1,6 @@
-import System
+use System
 
-namespace Demo.Classes
+module Demo.Classes
 
 class Counter {
     value: int

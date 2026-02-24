@@ -4,7 +4,7 @@ public static class TestSourceUtilities
 {
     public static string EnsureFileScopedNamespace(string source, string ns = "Test")
     {
-        if (source.Contains("namespace ", StringComparison.Ordinal))
+        if (source.Contains("module ", StringComparison.Ordinal))
         {
             return source;
         }
@@ -13,12 +13,12 @@ public static class TestSourceUtilities
         while (true)
         {
             insertIndex = SkipWhitespace(source, insertIndex);
-            if (!IsImportAt(source, insertIndex))
+            if (!IsUseAt(source, insertIndex))
             {
                 break;
             }
 
-            insertIndex += "import".Length;
+            insertIndex += "use".Length;
             insertIndex = SkipWhitespace(source, insertIndex);
 
             if (!TryConsumeQualifiedName(source, ref insertIndex))
@@ -27,7 +27,7 @@ public static class TestSourceUtilities
             }
         }
 
-        return source.Insert(insertIndex, $" namespace {ns} ");
+        return source.Insert(insertIndex, $" module {ns} ");
     }
 
     private static int SkipWhitespace(string source, int index)
@@ -40,19 +40,19 @@ public static class TestSourceUtilities
         return index;
     }
 
-    private static bool IsImportAt(string source, int index)
+    private static bool IsUseAt(string source, int index)
     {
-        if (index < 0 || index + "import".Length > source.Length)
+        if (index < 0 || index + "use".Length > source.Length)
         {
             return false;
         }
 
-        if (!source.AsSpan(index, "import".Length).SequenceEqual("import"))
+        if (!source.AsSpan(index, "use".Length).SequenceEqual("use"))
         {
             return false;
         }
 
-        return index + "import".Length < source.Length && char.IsWhiteSpace(source[index + "import".Length]);
+        return index + "use".Length < source.Length && char.IsWhiteSpace(source[index + "use".Length]);
     }
 
     private static bool TryConsumeQualifiedName(string source, ref int index)

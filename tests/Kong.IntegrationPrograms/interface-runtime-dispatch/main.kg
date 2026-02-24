@@ -1,6 +1,6 @@
-import System
+use System
 
-namespace Demo.InterfaceDispatch
+module Demo.InterfaceDispatch
 
 class Counter {
     value: int

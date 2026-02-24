@@ -9,7 +9,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesIdentifiersAndStaticClrCall()
     {
-        var unit = Parse("namespace Test let x = 1 let y = x y System.Math.Abs(x)");
+        var unit = Parse("module Test let x = 1 let y = x y System.Math.Abs(x)");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -39,7 +39,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsDuplicateLetDeclaration()
     {
-        var unit = Parse("namespace Test let x = 1 let x = 2");
+        var unit = Parse("module Test let x = 1 let x = 2");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -53,7 +53,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsDuplicateParameterDeclaration()
     {
-        var unit = Parse("namespace Test fn(x, x) { x }");
+        var unit = Parse("module Test fn(x, x) { x }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -67,7 +67,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsUndefinedVariable()
     {
-        var unit = Parse("namespace Test let x = y");
+        var unit = Parse("module Test let x = y");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -81,7 +81,7 @@ public class NameResolverTests
     [Fact]
     public void TestUsesBlockScopeForDeclarations()
     {
-        var unit = Parse("namespace Test let x = 1 if (true) { let x = 2 x } x");
+        var unit = Parse("module Test let x = 1 if (true) { let x = 2 x } x");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -106,7 +106,7 @@ public class NameResolverTests
     [Fact]
     public void TestCapturesOuterFunctionVariable()
     {
-        var unit = Parse("namespace Test let f = fn(x) { let g = fn() { x } g }");
+        var unit = Parse("module Test let f = fn(x) { let g = fn() { x } g }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -127,7 +127,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesIdentifiersWithTypeAnnotations()
     {
-        var unit = Parse("namespace Test let x: int = 1 let y: int = x y");
+        var unit = Parse("module Test let x: int = 1 let y: int = x y");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -150,7 +150,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesTypedFunctionParameter()
     {
-        var unit = Parse("namespace Test let f = fn(x: int) -> int { x } f(1)");
+        var unit = Parse("module Test let f = fn(x: int) -> int { x } f(1)");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -170,7 +170,7 @@ public class NameResolverTests
     [Fact]
     public void TestPredeclaresTopLevelNamedFunctionsForForwardReferences()
     {
-        var unit = Parse("namespace Test fn A() -> int { B() } fn B() -> int { 1 } A()");
+        var unit = Parse("module Test fn A() -> int { B() } fn B() -> int { 1 } A()");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -190,7 +190,7 @@ public class NameResolverTests
     [Fact]
     public void TestCapturesOuterTypedFunctionParameter()
     {
-        var unit = Parse("namespace Test let f = fn(x: int) -> int { let g = fn() -> int { x } g() }");
+        var unit = Parse("module Test let f = fn(x: int) -> int { let g = fn() -> int { x } g() }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -211,7 +211,7 @@ public class NameResolverTests
     [Fact]
     public void TestUsesBlockScopeWithTypeAnnotations()
     {
-        var unit = Parse("namespace Test let x: int = 1 if (true) { let x: int = 2 x } x");
+        var unit = Parse("module Test let x: int = 1 if (true) { let x: int = 2 x } x");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -236,7 +236,7 @@ public class NameResolverTests
     [Fact]
     public void TestDoesNotReportUndefinedVariableForStaticMethodPath()
     {
-        var unit = Parse("namespace Test System.Console.WriteLine(1)");
+        var unit = Parse("module Test System.Console.WriteLine(1)");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -247,7 +247,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesTopLevelImportAlias()
     {
-        var unit = Parse("import System import System.Console import System.Math namespace Test");
+        var unit = Parse("use System use System.Console use System.Math module Test");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -264,7 +264,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsImportAliasConflict()
     {
-        var unit = Parse("import System.Console import Foo.Console namespace Test");
+        var unit = Parse("use System.Console use Foo.Console module Test");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -276,7 +276,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsImportInsideFunctionBody()
     {
-        var unit = Parse("namespace Test fn Main() { import System.Console }");
+        var unit = Parse("module Test fn Main() { use System.Console }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -288,7 +288,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsImportAfterTopLevelFunctionDeclaration()
     {
-        var unit = Parse("namespace Test fn Main() { } import System");
+        var unit = Parse("module Test fn Main() { } use System");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -314,7 +314,7 @@ public class NameResolverTests
     [Fact]
     public void TestResolvesClassInterfaceAndImplBodies()
     {
-        var unit = Parse("namespace Test class User { name: string } interface IGreeter { fn Greet(self) } impl User { init(name: string) { self.name = name } fn Greet(self) { self.name } } impl IGreeter for User { fn Greet(self) { self.name } }");
+        var unit = Parse("module Test class User { name: string } interface IGreeter { fn Greet(self) } impl User { init(name: string) { self.name = name } fn Greet(self) { self.name } } impl IGreeter for User { fn Greet(self) { self.name } }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);
@@ -327,7 +327,7 @@ public class NameResolverTests
     [Fact]
     public void TestReportsImplTargetTypeNotDeclared()
     {
-        var unit = Parse("namespace Test impl Missing { fn A(self) { } }");
+        var unit = Parse("module Test impl Missing { fn A(self) { } }");
 
         var resolver = new NameResolver();
         var result = resolver.Resolve(unit);

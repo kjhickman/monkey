@@ -1,4 +1,4 @@
-namespace Demo.MathKit
+module Demo.MathKit
 
 public fn Add(x: int, y: int) -> int {
     x + y

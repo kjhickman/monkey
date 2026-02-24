@@ -1,10 +1,10 @@
-import Demo.MathKit
-import Demo.TextKit
-import Demo.Arrays
-import System
-import System.Text
+use Demo.MathKit
+use Demo.TextKit
+use Demo.Arrays
+use System
+use System.Text
 
-namespace Demo.App
+module Demo.App
 
 fn Main() {
     // Core feature smoke checks in one multi-file app.

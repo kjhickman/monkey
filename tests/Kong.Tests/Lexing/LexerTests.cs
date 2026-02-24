@@ -332,12 +332,12 @@ public class LexerTests
     [Fact]
     public void TestLexesImportKeyword()
     {
-        var input = "import System.Console;";
+        var input = "use System.Console;";
         var lexer = new Lexer(input);
 
         var tests = new (TokenType Type, string Literal)[]
         {
-            (TokenType.Import, "import"),
+            (TokenType.Import, "use"),
             (TokenType.Identifier, "System"),
             (TokenType.Dot, "."),
             (TokenType.Identifier, "Console"),
@@ -356,12 +356,12 @@ public class LexerTests
     [Fact]
     public void TestLexesPathImportStatement()
     {
-        var input = "import \"./util.kg\";";
+        var input = "use \"./util.kg\";";
         var lexer = new Lexer(input);
 
         var tests = new (TokenType Type, string Literal)[]
         {
-            (TokenType.Import, "import"),
+            (TokenType.Import, "use"),
             (TokenType.String, "./util.kg"),
             (TokenType.Illegal, ";"),
             (TokenType.EndOfFile, ""),
@@ -378,12 +378,12 @@ public class LexerTests
     [Fact]
     public void TestLexesNamespaceKeyword()
     {
-        var input = "namespace Foo.Bar;";
+        var input = "module Foo.Bar;";
         var lexer = new Lexer(input);
 
         var tests = new (TokenType Type, string Literal)[]
         {
-            (TokenType.Namespace, "namespace"),
+            (TokenType.Namespace, "module"),
             (TokenType.Identifier, "Foo"),
             (TokenType.Dot, "."),
             (TokenType.Identifier, "Bar"),

@@ -1,4 +1,4 @@
-namespace Demo.Arrays
+module Demo.Arrays
 
 public fn Pick(matrix: int[][]) -> int {
     let row: int[] = matrix[1]

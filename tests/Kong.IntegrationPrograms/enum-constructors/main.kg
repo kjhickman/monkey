@@ -1,7 +1,7 @@
-import Demo.Results
-import System
+use Demo.Results
+use System
 
-namespace Demo.App
+module Demo.App
 
 fn Main() {
     let a: Result<int, string> = Ok(42)

@@ -1,4 +1,4 @@
-namespace Demo.Results
+module Demo.Results
 
 enum Result<T, E> {
     Ok(T),

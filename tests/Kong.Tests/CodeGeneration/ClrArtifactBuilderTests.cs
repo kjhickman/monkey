@@ -136,7 +136,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesImportedStaticClrMathAbs()
     {
-        var result = Execute("import System.Math Math.Abs(-42)");
+        var result = Execute("use System.Math Math.Abs(-42)");
 
         Assert.True(result.Executed);
         Assert.Equal(42, result.Value);
@@ -154,7 +154,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrFileExistsViaNamespaceImport()
     {
-        var result = Execute("import System.IO if (File.Exists(\"/tmp/kong-test-never-exists\")) { 1 } else { 0 }");
+        var result = Execute("use System.IO if (File.Exists(\"/tmp/kong-test-never-exists\")) { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(0, result.Value);
@@ -163,7 +163,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrPathHelpersViaNamespaceImport()
     {
-        var result = Execute("import System.IO if (File.Exists(Path.Combine(\"/tmp\", \"kong-path-never-exists\"))) { 1 } else { 0 }");
+        var result = Execute("use System.IO if (File.Exists(Path.Combine(\"/tmp\", \"kong-path-never-exists\"))) { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(0, result.Value);
@@ -172,7 +172,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrEnvironmentCallsViaNamespaceImport()
     {
-        var result = Execute("import System Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") 1");
+        var result = Execute("use System Environment.SetEnvironmentVariable(\"KONG_TEST_ENV\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST_ENV\") 1");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -181,7 +181,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrPropertyAccessAndStringInequality()
     {
-        var result = Execute("import System if (Environment.NewLine != \"\") { 1 } else { 0 }");
+        var result = Execute("use System if (Environment.NewLine != \"\") { 1 } else { 0 }");
 
         Assert.True(result.Executed);
         Assert.Equal(1, result.Value);
@@ -243,7 +243,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesConstructorInteropWithInstanceMethods()
     {
-        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"ab\") sb.Append(\"c\") let s: string = sb.ToString() if (s == \"abc\") { 1 } else { 0 }";
+        var source = "use System.Text let sb = new StringBuilder() sb.Append(\"ab\") sb.Append(\"c\") let s: string = sb.ToString() if (s == \"abc\") { 1 } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);
@@ -265,7 +265,7 @@ public class ClrArtifactBuilderTests
     [Fact]
     public void TestExecutesStaticClrOutArgumentCall()
     {
-        var source = "import System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value) if (ok && value) { 1 } else { 0 }";
+        var source = "use System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value) if (ok && value) { 1 } else { 0 }";
         var result = Execute(source);
 
         Assert.True(result.Executed);

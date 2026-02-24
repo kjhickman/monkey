@@ -25,7 +25,7 @@ public static class ProgramValidator
 
             diagnostics.Report(
                 statement.Span,
-                "top-level statements are not allowed; declare functions and imports only",
+                "top-level statements are not allowed; declare functions, use statements, and modules only",
                 "CLI002");
         }
 

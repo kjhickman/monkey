@@ -1,6 +1,6 @@
-import System
+use System
 
-namespace Demo.GenericCore
+module Demo.GenericCore
 
 class Box<T> {
     value: T

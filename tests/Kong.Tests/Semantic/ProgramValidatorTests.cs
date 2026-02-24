@@ -54,7 +54,7 @@ public class ProgramValidatorTests
     [Fact]
     public void TestAllowsTopLevelImports()
     {
-        var (unit, typeCheck) = ParseResolveAndCheck("import System.Console fn Main() { Console.WriteLine(1) }");
+        var (unit, typeCheck) = ParseResolveAndCheck("use System.Console fn Main() { Console.WriteLine(1) }");
 
         var diagnostics = ProgramValidator.ValidateEntrypoint(unit, typeCheck);
 

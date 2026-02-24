@@ -93,7 +93,7 @@ public class NameResolver
                     if (seenNamespace || seenDeclaration)
                     {
                         _result.Diagnostics.Report(statement.Span,
-                            "import statements must appear before namespace and other top-level declarations",
+                            "use statements must appear before module and other top-level declarations",
                             "N005");
                     }
                     break;
@@ -101,14 +101,14 @@ public class NameResolver
                     if (seenDeclaration)
                     {
                         _result.Diagnostics.Report(namespaceStatement.Span,
-                            "namespace declaration must appear before top-level declarations",
+                            "module declaration must appear before top-level declarations",
                             "N007");
                     }
 
                     if (seenNamespace)
                     {
                         _result.Diagnostics.Report(namespaceStatement.Span,
-                            "duplicate namespace declaration",
+                            "duplicate module declaration",
                             "N008");
                     }
 
@@ -125,7 +125,7 @@ public class NameResolver
         if (!seenNamespace)
         {
             _result.Diagnostics.Report(unit.Span,
-                "missing required file-scoped namespace declaration",
+                "missing required file-scoped module declaration",
                 "N006");
         }
 
@@ -306,7 +306,7 @@ public class NameResolver
         if (!_scope.IsGlobalRoot)
         {
             _result.Diagnostics.Report(statement.Span,
-                "import statements are only allowed at the top level",
+                "use statements are only allowed at the top level",
                 "N003");
             return;
         }
@@ -314,7 +314,7 @@ public class NameResolver
         if (string.IsNullOrWhiteSpace(statement.QualifiedName))
         {
             _result.Diagnostics.Report(statement.Span,
-                "import statements must specify a qualified namespace",
+                "use statements must specify a qualified path",
                 "N010");
             return;
         }
@@ -327,7 +327,7 @@ public class NameResolver
             if (existingQualifiedName != statement.QualifiedName)
             {
                 _result.Diagnostics.Report(statement.Span,
-                    $"import alias '{alias}' conflicts with existing import '{existingQualifiedName}'",
+                    $"use alias '{alias}' conflicts with existing use '{existingQualifiedName}'",
                     "N004");
             }
 
@@ -342,7 +342,7 @@ public class NameResolver
         if (!_scope.IsGlobalRoot)
         {
             _result.Diagnostics.Report(statement.Span,
-                "namespace declarations are only allowed at the top level",
+                "module declarations are only allowed at the top level",
                 "N009");
             return;
         }

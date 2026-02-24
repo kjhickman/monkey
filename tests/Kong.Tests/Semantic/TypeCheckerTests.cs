@@ -448,7 +448,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCallViaImportAlias()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.Math Math.Abs(-42)");
+        var (unit, names, result) = ParseResolveAndCheck("use System.Math Math.Abs(-42)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -463,7 +463,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrMethodCallViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System Console.WriteLine(42)");
+        var (unit, names, result) = ParseResolveAndCheck("use System Console.WriteLine(42)");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -493,7 +493,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrFileCallViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.IO File.Exists(\"/tmp/missing-file\")");
+        var (unit, names, result) = ParseResolveAndCheck("use System.IO File.Exists(\"/tmp/missing-file\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -508,7 +508,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrPathCombineViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System.IO Path.Combine(\"a\", \"b\")");
+        var (unit, names, result) = ParseResolveAndCheck("use System.IO Path.Combine(\"a\", \"b\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -523,7 +523,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrEnvironmentCallsViaNamespaceImport()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System Environment.SetEnvironmentVariable(\"KONG_TEST\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST\")");
+        var (unit, names, result) = ParseResolveAndCheck("use System Environment.SetEnvironmentVariable(\"KONG_TEST\", \"ok\") Environment.GetEnvironmentVariable(\"KONG_TEST\")");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -538,7 +538,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrEnvironmentPropertyAccess()
     {
-        var (unit, names, result) = ParseResolveAndCheck("import System Environment.NewLine");
+        var (unit, names, result) = ParseResolveAndCheck("use System Environment.NewLine");
 
         Assert.False(names.Diagnostics.HasErrors);
         Assert.False(result.Diagnostics.HasErrors);
@@ -656,7 +656,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrStringMethods()
     {
-        var source = "import System String.IsNullOrEmpty(\"\") String.Concat(\"a\", \"b\") String.Equals(\"x\", \"x\")";
+        var source = "use System String.IsNullOrEmpty(\"\") String.Concat(\"a\", \"b\") String.Equals(\"x\", \"x\")";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -750,7 +750,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksConstructorInteropForClrTypes()
     {
-        var source = "import System.Text let sb = new StringBuilder() sb.Append(\"x\") sb.ToString()";
+        var source = "use System.Text let sb = new StringBuilder() sb.Append(\"x\") sb.ToString()";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -793,7 +793,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksStaticClrOutArgumentCall()
     {
-        var source = "import System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value)";
+        var source = "use System var value: bool = false let ok: bool = Boolean.TryParse(\"true\", out value)";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -803,7 +803,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestRejectsOutArgumentOnImmutableLet()
     {
-        var (_, _, result) = ParseResolveAndCheck("import System let value: bool = false Boolean.TryParse(\"true\", out value)");
+        var (_, _, result) = ParseResolveAndCheck("use System let value: bool = false Boolean.TryParse(\"true\", out value)");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T123");

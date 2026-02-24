@@ -25,7 +25,7 @@ fn Main() {
 ```text
 fn Main() {
     let nums = [1, 2, 3, 4]
-    let total = 0
+    var total: int = 0
 
     for n in nums {
         total = total + n
@@ -109,10 +109,10 @@ fn Main() {
 ## 6) BCL interop
 
 ```text
-import System
-import System.IO
+use System
+use System.IO
 
-namespace Demo.Tour
+module KongDemo
 
 fn Main() {
     let cwd = Environment.CurrentDirectory // static property
