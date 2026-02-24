@@ -454,15 +454,13 @@ public class LexerTests
     [Fact]
     public void TestLexesMatchKeyword()
     {
-        var input = "match (x) { Ok(v) => { v; } }";
+        var input = "match x { Ok(v) => v }";
         var lexer = new Lexer(input);
 
         var tests = new (TokenType Type, string Literal)[]
         {
             (TokenType.Match, "match"),
-            (TokenType.LeftParenthesis, "("),
             (TokenType.Identifier, "x"),
-            (TokenType.RightParenthesis, ")"),
             (TokenType.LeftBrace, "{"),
             (TokenType.Identifier, "Ok"),
             (TokenType.LeftParenthesis, "("),
@@ -470,10 +468,7 @@ public class LexerTests
             (TokenType.RightParenthesis, ")"),
             (TokenType.Assign, "="),
             (TokenType.GreaterThan, ">"),
-            (TokenType.LeftBrace, "{"),
             (TokenType.Identifier, "v"),
-            (TokenType.Illegal, ";"),
-            (TokenType.RightBrace, "}"),
             (TokenType.RightBrace, "}"),
             (TokenType.EndOfFile, ""),
         };

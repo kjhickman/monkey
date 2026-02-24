@@ -99,9 +99,9 @@ enum Result<T, E> {
 fn Main() {
     let r: Result<int, string> = Ok(42)
 
-    let text = match (r) {
-        Ok(v) => { "value=" + v.ToString() },
-        Err(e) => { "error=" + e },
+    let text = match r {
+        Ok(v) => "value=" + v.ToString(),
+        Err(e) => "error=" + e,
     }
 }
 ```

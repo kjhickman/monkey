@@ -1715,15 +1715,41 @@ public class Parser
             Token = _curToken,
         };
 
-        if (!ExpectPeek(TokenType.LeftParenthesis))
+        if (PeekTokenIs(TokenType.LeftParenthesis))
         {
-            return null!;
+            _diagnostics.Report(
+                _peekToken.Span,
+                "match target must not be parenthesized; use 'match <expr> { ... }'",
+                "P001");
+
+            NextToken();
+            NextToken();
+            var parenthesizedTarget = ParseExpression(Precedence.Lowest);
+            if (parenthesizedTarget == null)
+            {
+                return null!;
+            }
+
+            expression.Target = parenthesizedTarget;
+
+            if (!ExpectPeek(TokenType.RightParenthesis))
+            {
+                return null!;
+            }
+        }
+        else
+        {
+            NextToken();
+            var target = ParseExpression(Precedence.Lowest);
+            if (target == null)
+            {
+                return null!;
+            }
+
+            expression.Target = target;
         }
 
-        NextToken();
-        expression.Target = ParseExpression(Precedence.Lowest)!;
-
-        if (!ExpectPeek(TokenType.RightParenthesis) || !ExpectPeek(TokenType.LeftBrace))
+        if (!ExpectPeek(TokenType.LeftBrace))
         {
             return null!;
         }
@@ -1782,13 +1808,33 @@ public class Parser
             }
         }
 
-        if (!ExpectPeek(TokenType.Assign) || !ExpectPeek(TokenType.GreaterThan) || !ExpectPeek(TokenType.LeftBrace))
+        if (!ExpectPeek(TokenType.Assign) || !ExpectPeek(TokenType.GreaterThan))
         {
             return null;
         }
 
-        arm.Body = ParseBlockStatement();
-        arm.Span = new Span(variantToken.Span.Start, arm.Body.Span.End);
+        NextToken();
+        var bodyToken = _curToken;
+        var bodyExpression = ParseExpression(Precedence.Lowest);
+        if (bodyExpression == null)
+        {
+            return null;
+        }
+
+        var bodyStatement = new ExpressionStatement
+        {
+            Token = bodyToken,
+            Expression = bodyExpression,
+            Span = bodyExpression.Span,
+        };
+
+        arm.Body = new BlockStatement
+        {
+            Token = bodyToken,
+            Statements = [bodyStatement],
+            Span = bodyExpression.Span,
+        };
+        arm.Span = new Span(variantToken.Span.Start, bodyExpression.Span.End);
         return arm;
     }
 

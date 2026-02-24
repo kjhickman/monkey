@@ -18,15 +18,15 @@ fn Main() {
 }
 
 fn Unwrap(value: Result<int, string>) -> int {
-    match (value) {
-        Ok(n) => { n },
-        Err(msg) => { -1 },
+    match value {
+        Ok(n) => n,
+        Err(msg) => -1,
     }
 }
 
 fn ScoreStatus(value: Status) -> int {
-    match (value) {
-        Todo() => { 0 },
-        Done() => { 1 },
+    match value {
+        Todo() => 0,
+        Done() => 1,
     }
 }

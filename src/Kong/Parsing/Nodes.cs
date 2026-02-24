@@ -622,7 +622,7 @@ public class MatchExpression : IExpression
 
     public string String()
     {
-        return $"match ({Target.String()}) {{ {string.Join(", ", Arms.Select(a => a.String()))} }}";
+        return $"match {Target.String()} {{ {string.Join(", ", Arms.Select(a => a.String()))} }}";
     }
 }
 

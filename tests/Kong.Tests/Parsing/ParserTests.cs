@@ -1215,7 +1215,7 @@ public class ParserTests
     [Fact]
     public void TestParsesMatchExpression()
     {
-        var input = "fn Main() { let x: int = match (Ok(1)) { Ok(v) => { v }, Err(e) => { 0 } } }";
+        var input = "fn Main() { let x: int = match Ok(1) { Ok(v) => v, Err(e) => 0 } }";
         var l = new Lexer(input);
         var p = new Parser(l);
         var unit = p.ParseCompilationUnit();
@@ -1227,6 +1227,18 @@ public class ParserTests
         Assert.Equal(2, matchExpression.Arms.Count);
         Assert.Equal("Ok", matchExpression.Arms[0].VariantName.Value);
         Assert.Equal("Err", matchExpression.Arms[1].VariantName.Value);
+    }
+
+    [Fact]
+    public void TestRejectsParenthesizedMatchTarget()
+    {
+        var input = "fn Main() { let x: int = match (Ok(1)) { Ok(v) => v, Err(e) => 0 } }";
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        p.ParseCompilationUnit();
+
+        Assert.True(p.Diagnostics.HasErrors);
+        Assert.Contains(p.Diagnostics.All, d => d.Code == "P001" && d.Message.Contains("must not be parenthesized", StringComparison.Ordinal));
     }
 
     [Fact]

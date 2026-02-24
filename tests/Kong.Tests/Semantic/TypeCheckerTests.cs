@@ -266,7 +266,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksEnumMatchExpression()
     {
-        var source = "enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match (v) { Ok(n) => { n }, Err(msg) => { 0 } }";
+        var source = "enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match v { Ok(n) => n, Err(msg) => 0 }";
         var (unit, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
@@ -281,7 +281,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestReportsNonExhaustiveEnumMatchExpression()
     {
-        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match (v) { Ok(n) => { n } }");
+        var (_, _, result) = ParseResolveAndCheck("enum Result { Ok(int), Err(string) } let v: Result = Ok(1) let x: int = match v { Ok(n) => n }");
 
         Assert.True(result.Diagnostics.HasErrors);
         Assert.Contains(result.Diagnostics.All, d => d.Code == "T131");
@@ -309,7 +309,7 @@ public class TypeCheckerTests
     [Fact]
     public void TestTypeChecksGenericEnumMatchPayloadBindings()
     {
-        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(7) let n: int = match (r) { Ok(v) => { v }, Err(e) => { 0 } }";
+        var source = "enum Result<T, E> { Ok(T), Err(E) } let r: Result<int, string> = Ok(7) let n: int = match r { Ok(v) => v, Err(e) => 0 }";
         var (_, names, result) = ParseResolveAndCheck(source);
 
         Assert.False(names.Diagnostics.HasErrors);
