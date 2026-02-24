@@ -1157,6 +1157,20 @@ public class TypeChecker
         return type;
     }
 
+    private TypeSymbol CheckExpressionWithExpectedType(IExpression expression, TypeSymbol? expectedType)
+    {
+        if (expression is FunctionLiteral functionLiteral &&
+            functionLiteral.IsLambda &&
+            expectedType is FunctionTypeSymbol expectedFunctionType)
+        {
+            var type = CheckFunctionLiteral(functionLiteral, expectedFunctionType: expectedFunctionType);
+            _result.ExpressionTypes[expression] = type;
+            return type;
+        }
+
+        return CheckExpression(expression);
+    }
+
     private TypeSymbol CheckIdentifier(Identifier identifier)
     {
         if (!_names.IdentifierSymbols.TryGetValue(identifier, out var symbol))
@@ -1413,12 +1427,26 @@ public class TypeChecker
         return lastType ?? TypeSymbols.Void;
     }
 
-    private FunctionTypeSymbol CheckFunctionLiteral(FunctionLiteral functionLiteral, NameSymbol? declaredSymbol = null)
+    private FunctionTypeSymbol CheckFunctionLiteral(
+        FunctionLiteral functionLiteral,
+        NameSymbol? declaredSymbol = null,
+        FunctionTypeSymbol? expectedFunctionType = null)
     {
-        var parameterTypes = new List<TypeSymbol>(functionLiteral.Parameters.Count);
-        foreach (var parameter in functionLiteral.Parameters)
+        if (expectedFunctionType != null && functionLiteral.Parameters.Count != expectedFunctionType.ParameterTypes.Count)
         {
-            var parameterType = CheckFunctionParameter(parameter);
+            _result.Diagnostics.Report(functionLiteral.Span,
+                $"wrong number of lambda parameters: expected {expectedFunctionType.ParameterTypes.Count}, got {functionLiteral.Parameters.Count}",
+                "T112");
+        }
+
+        var parameterTypes = new List<TypeSymbol>(functionLiteral.Parameters.Count);
+        for (var i = 0; i < functionLiteral.Parameters.Count; i++)
+        {
+            var parameter = functionLiteral.Parameters[i];
+            var expectedParameterType = expectedFunctionType != null && i < expectedFunctionType.ParameterTypes.Count
+                ? expectedFunctionType.ParameterTypes[i]
+                : null;
+            var parameterType = CheckFunctionParameter(parameter, expectedParameterType);
             parameterTypes.Add(parameterType);
         }
 
@@ -1486,10 +1514,15 @@ public class TypeChecker
             _result.Diagnostics);
     }
 
-    private TypeSymbol CheckFunctionParameter(FunctionParameter parameter)
+    private TypeSymbol CheckFunctionParameter(FunctionParameter parameter, TypeSymbol? expectedParameterType = null)
     {
         if (parameter.TypeAnnotation == null)
         {
+            if (expectedParameterType != null)
+            {
+                return expectedParameterType;
+            }
+
             _result.Diagnostics.Report(parameter.Span,
                 $"missing type annotation for parameter '{parameter.Name}'",
                 "T105");
@@ -1501,32 +1534,32 @@ public class TypeChecker
 
     private TypeSymbol CheckCallExpression(CallExpression expression)
     {
-        var clrArguments = BuildClrCallArguments(expression);
-        var argumentTypes = clrArguments.Select(a => a.Type).ToList();
-
         if (expression.Function is MemberAccessExpression userMemberAccessExpression &&
-            TryCheckUserInstanceMethodCall(userMemberAccessExpression, argumentTypes, out var userInstanceReturnType))
+            (!ContainsUntypedLambdaArgument(expression) &&
+             TryCheckUserInstanceMethodCall(userMemberAccessExpression, expression.Arguments.Select(a => CheckExpression(a.Expression)).ToList(), out var userInstanceReturnType)))
         {
             return userInstanceReturnType;
         }
 
         if (expression.Function is MemberAccessExpression memberAccessExpression &&
-            TryCheckInstanceMethodCall(expression, memberAccessExpression, clrArguments, out var instanceReturnType))
+            TryCheckInstanceMethodCall(expression, memberAccessExpression, out var instanceReturnType))
         {
             return instanceReturnType;
         }
 
         if (expression.Function is MemberAccessExpression memberAccessExpression3 &&
-            TryCheckExtensionMethodCall(expression, memberAccessExpression3, clrArguments, out var extensionReturnType))
+            TryCheckExtensionMethodCall(expression, memberAccessExpression3, out var extensionReturnType))
         {
             return extensionReturnType;
         }
 
         if (expression.Function is MemberAccessExpression memberAccessExpression2 &&
-            TryCheckStaticMethodCall(expression, memberAccessExpression2, clrArguments, out var staticReturnType))
+            TryCheckStaticMethodCall(expression, memberAccessExpression2, out var staticReturnType))
         {
             return staticReturnType;
         }
+
+        var argumentTypes = expression.Arguments.Select(a => CheckExpression(a.Expression)).ToList();
 
         if (expression.Arguments.Any(a => a.Modifier != CallArgumentModifier.None))
         {
@@ -1592,6 +1625,14 @@ public class TypeChecker
         }
 
         return callReturnType;
+    }
+
+    private static bool ContainsUntypedLambdaArgument(CallExpression expression)
+    {
+        return expression.Arguments.Any(argument =>
+            argument.Expression is FunctionLiteral functionLiteral &&
+            functionLiteral.IsLambda &&
+            functionLiteral.Parameters.Any(parameter => parameter.TypeAnnotation == null));
     }
 
     private TypeSymbol CheckEnumVariantConstructorCall(
@@ -2277,7 +2318,6 @@ public class TypeChecker
     private bool TryCheckInstanceMethodCall(
         CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
-        IReadOnlyList<ClrCallArgument> arguments,
         out TypeSymbol returnType)
     {
         returnType = TypeSymbols.Error;
@@ -2292,6 +2332,9 @@ public class TypeChecker
         {
             return true;
         }
+
+        var deferredLambdaArgumentIndexes = new List<int>();
+        var arguments = BuildClrCallArguments(callExpression, expectedArgumentTypes: null, deferredLambdaArgumentIndexes);
 
         if (!InstanceClrMemberResolver.TryResolveMethod(
                 receiverType,
@@ -2311,6 +2354,27 @@ public class TypeChecker
             return true;
         }
 
+        if (deferredLambdaArgumentIndexes.Count > 0)
+        {
+            if (!TryRebindDeferredLambdaArguments(callExpression, deferredLambdaArgumentIndexes, binding.ParameterTypes, arguments, out var reboundArguments))
+            {
+                return true;
+            }
+
+            if (!InstanceClrMemberResolver.TryResolveMethod(
+                    receiverType,
+                    memberAccessExpression.Member,
+                    reboundArguments,
+                    out binding,
+                    out var reboundError,
+                    out var reboundMessage))
+            {
+                var code = reboundError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+                _result.Diagnostics.Report(memberAccessExpression.Span, reboundMessage, code);
+                return true;
+            }
+        }
+
         _result.ResolvedInstanceMethodMembers[callExpression] = memberAccessExpression.Member;
         returnType = binding.ReturnType;
         return true;
@@ -2319,7 +2383,6 @@ public class TypeChecker
     private bool TryCheckStaticMethodCall(
         CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
-        IReadOnlyList<ClrCallArgument> arguments,
         out TypeSymbol returnType)
     {
         returnType = TypeSymbols.Error;
@@ -2339,6 +2402,9 @@ public class TypeChecker
             return true;
         }
 
+        var deferredLambdaArgumentIndexes = new List<int>();
+        var arguments = BuildClrCallArguments(callExpression, expectedArgumentTypes: null, deferredLambdaArgumentIndexes);
+
         if (!StaticClrMethodResolver.TryResolve(
                 resolvedMethodPath,
                 arguments,
@@ -2351,6 +2417,26 @@ public class TypeChecker
             return true;
         }
 
+        if (deferredLambdaArgumentIndexes.Count > 0)
+        {
+            if (!TryRebindDeferredLambdaArguments(callExpression, deferredLambdaArgumentIndexes, binding.ParameterTypes, arguments, out var reboundArguments))
+            {
+                return true;
+            }
+
+            if (!StaticClrMethodResolver.TryResolve(
+                    resolvedMethodPath,
+                    reboundArguments,
+                    out binding,
+                    out var reboundError,
+                    out var reboundMessage))
+            {
+                var code = reboundError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+                _result.Diagnostics.Report(memberAccessExpression.Span, reboundMessage, code);
+                return true;
+            }
+        }
+
         _result.ResolvedStaticMethodPaths[callExpression] = resolvedMethodPath;
         returnType = binding.ReturnType;
 
@@ -2360,7 +2446,6 @@ public class TypeChecker
     private bool TryCheckExtensionMethodCall(
         CallExpression callExpression,
         MemberAccessExpression memberAccessExpression,
-        IReadOnlyList<ClrCallArgument> arguments,
         out TypeSymbol returnType)
     {
         returnType = TypeSymbols.Error;
@@ -2374,6 +2459,9 @@ public class TypeChecker
         {
             return true;
         }
+
+        var deferredLambdaArgumentIndexes = new List<int>();
+        var arguments = BuildClrCallArguments(callExpression, expectedArgumentTypes: null, deferredLambdaArgumentIndexes);
 
         if (!StaticClrMethodResolver.TryResolveExtensionMethod(
                 _names.ImportedNamespaces,
@@ -2394,17 +2482,60 @@ public class TypeChecker
             return false;
         }
 
+        if (deferredLambdaArgumentIndexes.Count > 0)
+        {
+            var expectedArgumentTypes = binding.ParameterTypes.Skip(1).ToList();
+            if (!TryRebindDeferredLambdaArguments(callExpression, deferredLambdaArgumentIndexes, expectedArgumentTypes, arguments, out var reboundArguments))
+            {
+                return true;
+            }
+
+            if (!StaticClrMethodResolver.TryResolveExtensionMethod(
+                    _names.ImportedNamespaces,
+                    memberAccessExpression.Member,
+                    receiverType,
+                    reboundArguments,
+                    out binding,
+                    out var reboundError,
+                    out var reboundMessage))
+            {
+                var code = reboundError == StaticClrMethodResolutionError.NoMatchingOverload ? "T113" : "T122";
+                _result.Diagnostics.Report(memberAccessExpression.Span, reboundMessage, code);
+                return true;
+            }
+        }
+
         _result.ResolvedExtensionMethodPaths[callExpression] = binding.MethodPath;
         returnType = binding.ReturnType;
         return true;
     }
 
-    private List<ClrCallArgument> BuildClrCallArguments(CallExpression expression)
+    private List<ClrCallArgument> BuildClrCallArguments(
+        CallExpression expression,
+        IReadOnlyList<TypeSymbol>? expectedArgumentTypes,
+        List<int> deferredLambdaArgumentIndexes)
     {
         var arguments = new List<ClrCallArgument>(expression.Arguments.Count);
-        foreach (var argument in expression.Arguments)
+        for (var i = 0; i < expression.Arguments.Count; i++)
         {
-            var type = CheckExpression(argument.Expression);
+            var argument = expression.Arguments[i];
+            var expectedType = expectedArgumentTypes != null && i < expectedArgumentTypes.Count
+                ? expectedArgumentTypes[i]
+                : null;
+
+            TypeSymbol type;
+            if (argument.Expression is FunctionLiteral functionLiteral &&
+                functionLiteral.IsLambda &&
+                functionLiteral.Parameters.Any(p => p.TypeAnnotation == null) &&
+                expectedType is not FunctionTypeSymbol)
+            {
+                deferredLambdaArgumentIndexes.Add(i);
+                type = new InferredLambdaPlaceholderTypeSymbol(functionLiteral.Parameters.Count);
+            }
+            else
+            {
+                type = CheckExpressionWithExpectedType(argument.Expression, expectedType);
+            }
 
             if (argument.Modifier is CallArgumentModifier.Out or CallArgumentModifier.Ref)
             {
@@ -2415,6 +2546,38 @@ public class TypeChecker
         }
 
         return arguments;
+    }
+
+    private bool TryRebindDeferredLambdaArguments(
+        CallExpression callExpression,
+        IReadOnlyList<int> deferredLambdaArgumentIndexes,
+        IReadOnlyList<TypeSymbol> expectedArgumentTypes,
+        IReadOnlyList<ClrCallArgument> provisionalArguments,
+        out List<ClrCallArgument> reboundArguments)
+    {
+        reboundArguments = provisionalArguments.ToList();
+        foreach (var argumentIndex in deferredLambdaArgumentIndexes)
+        {
+            if (argumentIndex < 0 || argumentIndex >= callExpression.Arguments.Count)
+            {
+                continue;
+            }
+
+            if (argumentIndex >= expectedArgumentTypes.Count)
+            {
+                _result.Diagnostics.Report(callExpression.Arguments[argumentIndex].Span,
+                    $"cannot infer lambda parameter types for argument {argumentIndex + 1}",
+                    "T113");
+                return false;
+            }
+
+            var expectedType = expectedArgumentTypes[argumentIndex];
+            var argument = callExpression.Arguments[argumentIndex];
+            var type = CheckExpressionWithExpectedType(argument.Expression, expectedType);
+            reboundArguments[argumentIndex] = new ClrCallArgument(type, argument.Modifier);
+        }
+
+        return true;
     }
 
     private void ValidateByRefArgument(CallArgument argument)

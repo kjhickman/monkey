@@ -373,6 +373,17 @@ public class ClrArtifactBuilderTests
     }
 
     [Fact]
+    public void TestExecutesLinqChainWithUntypedLambdaParameters()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let processed = numbers.Where(n => n > 1).Select((n) => n * n).ToList() Enumerable.Count(processed)";
+        var result = Execute(source);
+
+        Assert.True(result.Executed);
+        Assert.Equal(3, result.Value);
+        Assert.False(result.Diagnostics.HasErrors);
+    }
+
+    [Fact]
     public void TestExecutesForInLoopOverArray()
     {
         var source = "let xs: int[] = [1, 2, 3] var total: int = 0 for i in xs { total = total + i } total";

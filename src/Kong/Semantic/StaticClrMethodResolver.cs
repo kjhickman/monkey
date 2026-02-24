@@ -93,6 +93,11 @@ public static class StaticClrMethodResolver
 
         foreach (var argument in arguments)
         {
+            if (argument.Type is InferredLambdaPlaceholderTypeSymbol)
+            {
+                continue;
+            }
+
             if (!TryMapKongTypeToClrFullName(argument.Type, out _))
             {
                 error = StaticClrMethodResolutionError.UnsupportedParameterType;
@@ -101,12 +106,12 @@ public static class StaticClrMethodResolver
             }
         }
 
-        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments)>(candidates.Count);
+        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments, IReadOnlyList<TypeSymbol> ExpectedArgumentTypes)>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (TryGetCandidateMatch(candidate, arguments, out var score, out var returnType, out var methodTypeArguments))
+            if (TryGetCandidateMatch(candidate, arguments, out var score, out var returnType, out var methodTypeArguments, out var expectedArgumentTypes))
             {
-                scoredMatches.Add((candidate, score, returnType, methodTypeArguments));
+                scoredMatches.Add((candidate, score, returnType, methodTypeArguments, expectedArgumentTypes));
             }
         }
 
@@ -148,7 +153,7 @@ public static class StaticClrMethodResolver
 
         var selected = compatibleMatches[0];
 
-        binding = new StaticClrMethodBinding(methodPath, arguments.Select(a => a.Type).ToArray(), selected.ReturnType, selected.Method, selected.MethodTypeArguments);
+        binding = new StaticClrMethodBinding(methodPath, selected.ExpectedArgumentTypes, selected.ReturnType, selected.Method, selected.MethodTypeArguments);
         return true;
     }
 
@@ -187,12 +192,12 @@ public static class StaticClrMethodResolver
         }
 
         var candidates = GetExtensionMethodCandidates(importedNamespaces, memberName);
-        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments)>(candidates.Count);
+        var scoredMatches = new List<(MethodDefinition Method, int Score, TypeSymbol ReturnType, IReadOnlyList<TypeSymbol> MethodTypeArguments, IReadOnlyList<TypeSymbol> ExpectedArgumentTypes)>(candidates.Count);
         foreach (var candidate in candidates)
         {
-            if (TryGetCandidateMatch(candidate, callArguments, out var score, out var returnType, out var methodTypeArguments))
+            if (TryGetCandidateMatch(candidate, callArguments, out var score, out var returnType, out var methodTypeArguments, out var expectedArgumentTypes))
             {
-                scoredMatches.Add((candidate, score, returnType, methodTypeArguments));
+                scoredMatches.Add((candidate, score, returnType, methodTypeArguments, expectedArgumentTypes));
             }
         }
 
@@ -235,7 +240,7 @@ public static class StaticClrMethodResolver
         var selected = compatibleMatches[0];
         var declaringType = NormalizeTypeName(selected.Method.DeclaringType.FullName);
         var methodPath = declaringType + "." + selected.Method.Name;
-        binding = new StaticClrMethodBinding(methodPath, callArguments.Select(a => a.Type).ToArray(), selected.ReturnType, selected.Method, selected.MethodTypeArguments);
+        binding = new StaticClrMethodBinding(methodPath, selected.ExpectedArgumentTypes, selected.ReturnType, selected.Method, selected.MethodTypeArguments);
         return true;
     }
 
@@ -445,19 +450,27 @@ public static class StaticClrMethodResolver
         IReadOnlyList<ClrCallArgument> arguments,
         out int score,
         out TypeSymbol returnType,
-        out IReadOnlyList<TypeSymbol> methodTypeArguments)
+        out IReadOnlyList<TypeSymbol> methodTypeArguments,
+        out IReadOnlyList<TypeSymbol> expectedArgumentTypes)
     {
         score = int.MaxValue;
         returnType = TypeSymbols.Error;
         methodTypeArguments = [];
+        expectedArgumentTypes = [];
+        var hasLambdaPlaceholders = arguments.Any(a => a.Type is InferredLambdaPlaceholderTypeSymbol);
 
         var inference = new Dictionary<string, TypeSymbol>(StringComparer.Ordinal);
-        if (!TryInferGenericArguments(method, arguments, inference))
+        if (!TryInferGenericArguments(method, arguments, inference, hasLambdaPlaceholders))
         {
             return false;
         }
 
         if (!TryGetParameterMatchScore(method, arguments, inference, out score))
+        {
+            return false;
+        }
+
+        if (!TryGetExpectedArgumentTypes(method, arguments, inference, out expectedArgumentTypes))
         {
             return false;
         }
@@ -474,7 +487,12 @@ public static class StaticClrMethodResolver
             {
                 if (!inference.TryGetValue(genericParameter.Name, out var argumentType))
                 {
-                    return false;
+                    if (!hasLambdaPlaceholders)
+                    {
+                        return false;
+                    }
+
+                    argumentType = new GenericParameterTypeSymbol(genericParameter.Name);
                 }
 
                 resolvedArguments.Add(argumentType);
@@ -486,10 +504,48 @@ public static class StaticClrMethodResolver
         return true;
     }
 
+    private static bool TryGetExpectedArgumentTypes(
+        MethodDefinition method,
+        IReadOnlyList<ClrCallArgument> arguments,
+        IReadOnlyDictionary<string, TypeSymbol> inference,
+        out IReadOnlyList<TypeSymbol> expectedArgumentTypes)
+    {
+        expectedArgumentTypes = [];
+        var resolved = new List<TypeSymbol>(arguments.Count);
+        var parameters = method.Parameters;
+        var hasParamsArray = HasParamsArray(method, inference, out var paramsElementType);
+        var fixedParameterCount = hasParamsArray ? parameters.Count - 1 : parameters.Count;
+
+        for (var i = 0; i < arguments.Count; i++)
+        {
+            if (i < fixedParameterCount)
+            {
+                if (!TryGetParameterTypeAndModifier(parameters[i], inference, out var parameterType, out _) || parameterType == TypeSymbols.Void)
+                {
+                    return false;
+                }
+
+                resolved.Add(parameterType);
+                continue;
+            }
+
+            if (!hasParamsArray || paramsElementType == TypeSymbols.Error)
+            {
+                return false;
+            }
+
+            resolved.Add(paramsElementType);
+        }
+
+        expectedArgumentTypes = resolved;
+        return true;
+    }
+
     private static bool TryInferGenericArguments(
         MethodDefinition method,
         IReadOnlyList<ClrCallArgument> arguments,
-        Dictionary<string, TypeSymbol> inference)
+        Dictionary<string, TypeSymbol> inference,
+        bool allowPartialInference)
     {
         if (!method.HasGenericParameters)
         {
@@ -525,7 +581,7 @@ public static class StaticClrMethodResolver
 
         foreach (var genericParameter in method.GenericParameters)
         {
-            if (!inference.ContainsKey(genericParameter.Name))
+            if (!inference.ContainsKey(genericParameter.Name) && !allowPartialInference)
             {
                 return false;
             }
@@ -819,6 +875,14 @@ public static class StaticClrMethodResolver
         if (TypeEquals(source, target))
         {
             score = 0;
+            return true;
+        }
+
+        if (source is InferredLambdaPlaceholderTypeSymbol placeholder &&
+            target is FunctionTypeSymbol placeholderTargetFunction &&
+            placeholder.ParameterCount == placeholderTargetFunction.ParameterTypes.Count)
+        {
+            score = 40;
             return true;
         }
 

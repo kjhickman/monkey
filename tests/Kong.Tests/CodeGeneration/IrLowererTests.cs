@@ -703,6 +703,28 @@ public class IrLowererTests
         Assert.Contains("System.Linq.Enumerable.Average", staticCalls);
     }
 
+    [Fact]
+    public void TestLowersLinqChainWithUntypedLambdaParameters()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let processed = numbers.Where(n => n > 1).Select((n) => n * n).ToList() let count: int = Enumerable.Count(processed) count";
+        var (unit, typeCheck) = ParseAndTypeCheck(source);
+        var lowerer = new IrLowerer();
+
+        var lowering = lowerer.Lower(unit, typeCheck);
+
+        Assert.NotNull(lowering.Program);
+        Assert.False(lowering.Diagnostics.HasErrors);
+        var staticCalls = lowering.Program!.EntryPoint.Blocks
+            .SelectMany(b => b.Instructions)
+            .OfType<IrStaticCall>()
+            .Select(c => c.MethodPath)
+            .ToList();
+
+        Assert.Contains("System.Linq.Enumerable.Where", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.Select", staticCalls);
+        Assert.Contains("System.Linq.Enumerable.ToList", staticCalls);
+    }
+
     private static (CompilationUnit Unit, TypeCheckResult TypeCheck) ParseAndTypeCheck(string input)
     {
         var (unit, typeCheck, _) = ParseAndTypeCheckWithNames(input);

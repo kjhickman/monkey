@@ -1,0 +1,11 @@
+use System
+use System.Linq
+
+module Demo.LinqLambdaInference
+
+fn Main() {
+    let numbers: int[] = [1, 2, 3, 4]
+    let processed = numbers.Where(n => n > 1).Select((n) => n * n).ToList()
+    let count: int = Enumerable.Count(processed)
+    Console.WriteLine(count)
+}

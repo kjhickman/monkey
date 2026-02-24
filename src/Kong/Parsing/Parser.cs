@@ -1561,12 +1561,59 @@ public class Parser
 
     private IExpression ParseIdentifier()
     {
+        if (PeekTokenIs(TokenType.DoubleArrow))
+        {
+            return ParseSingleParameterLambda();
+        }
+
         return new Identifier
         {
             Token = _curToken,
             Value = _curToken.Literal,
             Span = _curToken.Span,
         };
+    }
+
+    private IExpression ParseSingleParameterLambda()
+    {
+        var startSpan = _curToken.Span.Start;
+        var parameter = new FunctionParameter
+        {
+            Token = _curToken,
+            Name = _curToken.Literal,
+            Span = _curToken.Span,
+        };
+
+        NextToken();
+        NextToken();
+        var bodyExpression = ParseExpression(Precedence.Lowest);
+        if (bodyExpression == null)
+        {
+            return null!;
+        }
+
+        var bodyStatement = new ExpressionStatement
+        {
+            Token = _curToken,
+            Expression = bodyExpression,
+            Span = bodyExpression.Span,
+        };
+
+        var literal = new FunctionLiteral
+        {
+            Token = parameter.Token,
+            IsLambda = true,
+            Parameters = [parameter],
+            Body = new BlockStatement
+            {
+                Token = _curToken,
+                Statements = [bodyStatement],
+                Span = bodyExpression.Span,
+            },
+            Span = new Span(startSpan, bodyExpression.Span.End),
+        };
+
+        return literal;
     }
 
     private IExpression ParseIntegerLiteral()
@@ -1673,12 +1720,6 @@ public class Parser
         var (parameters, endSpan, isLambda) = TryParseLambdaParameters();
         if (!isLambda)
         {
-            if (endSpan != default)
-            {
-                _diagnostics.Report(new Span(startSpan, endSpan),
-                    "lambda parameters require type annotations; use '(x: T) => expr'",
-                    "P006");
-            }
             return ParseGroupedExpression();
         }
 
@@ -1781,23 +1822,19 @@ public class Parser
             Span = _curToken.Span,
         };
 
-        if (!PeekTokenIs(TokenType.Colon))
+        if (PeekTokenIs(TokenType.Colon))
         {
-            _diagnostics.Report(_curToken.Span,
-                $"missing type annotation for parameter '{parameter.Name}'",
-                "P006");
-            return null;
+            NextToken();
+            NextToken();
+            parameter.TypeAnnotation = ParseTypeNode();
+            if (parameter.TypeAnnotation == null)
+            {
+                return null;
+            }
+
+            parameter.Span = new Span(parameter.Span.Start, parameter.TypeAnnotation.Span.End);
         }
 
-        NextToken();
-        NextToken();
-        parameter.TypeAnnotation = ParseTypeNode();
-        if (parameter.TypeAnnotation == null)
-        {
-            return null;
-        }
-
-        parameter.Span = new Span(parameter.Span.Start, parameter.TypeAnnotation.Span.End);
         return parameter;
     }
 

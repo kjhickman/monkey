@@ -229,6 +229,11 @@ public sealed record FunctionTypeSymbol(IReadOnlyList<TypeSymbol> ParameterTypes
     public override string Name => $"({string.Join(", ", ParameterTypes)}) -> {ReturnType}";
 }
 
+public sealed record InferredLambdaPlaceholderTypeSymbol(int ParameterCount) : TypeSymbol
+{
+    public override string Name => $"<lambda:{ParameterCount}>";
+}
+
 public sealed record EnumTypeSymbol(string EnumName, IReadOnlyList<TypeSymbol> TypeArguments) : TypeSymbol
 {
     public override string Name => TypeArguments.Count == 0

@@ -1057,6 +1057,28 @@ public class TypeCheckerTests
     }
 
     [Fact]
+    public void TestTypeChecksLinqChainWithUntypedLambdaParameters()
+    {
+        var source = "use System.Linq let numbers: int[] = [1, 2, 3, 4] let processed = numbers.Where(n => n > 1).Select((n) => n * n).ToList() let count: int = Enumerable.Count(processed) count";
+        var (_, names, result) = ParseResolveAndCheck(source);
+
+        Assert.False(names.Diagnostics.HasErrors);
+        Assert.False(result.Diagnostics.HasErrors);
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Where");
+        Assert.Contains(result.ResolvedExtensionMethodPaths.Values, path => path == "System.Linq.Enumerable.Select");
+    }
+
+    [Fact]
+    public void TestReportsMissingLambdaParameterTypeWithoutInferenceContext()
+    {
+        var source = "let f = n => n + 1 f(2)";
+        var (_, _, result) = ParseResolveAndCheck(source);
+
+        Assert.True(result.Diagnostics.HasErrors);
+        Assert.Contains(result.Diagnostics.All, d => d.Code == "T105");
+    }
+
+    [Fact]
     public void TestReportsNoMatchingLinqAggregateOverloadsForInvalidArguments()
     {
         var source = "use System.Linq let left: int[] = [1, 2] let right: int[] = [2, 3] left.Union(right, 1)";

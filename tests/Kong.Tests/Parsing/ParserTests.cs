@@ -369,6 +369,8 @@ public class ParserTests
     [Theory]
     [InlineData("() => 1", new string[] { })]
     [InlineData("(x: int) => x", new[] { "x" })]
+    [InlineData("(x) => x", new[] { "x" })]
+    [InlineData("x => x", new[] { "x" })]
     [InlineData("(x: int, y: int, z: int) => x", new[] { "x", "y", "z" })]
     public void TestFunctionParameterParsing(string input, string[] expectedParams)
     {
@@ -407,6 +409,26 @@ public class ParserTests
         Assert.Equal("y", function.Parameters[1].Name);
         Assert.Equal("string[]", function.Parameters[1].TypeAnnotation?.String());
         Assert.Null(function.ReturnTypeAnnotation);
+    }
+
+    [Fact]
+    public void TestLambdaParameterTypeCanBeInferredFromSyntax()
+    {
+        var input = "(x, y: int) => x";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        var unit = p.ParseCompilationUnit();
+        CheckParserErrors(p);
+
+        var stmt = Assert.IsType<ExpressionStatement>(unit.Statements[0]);
+        var function = Assert.IsType<FunctionLiteral>(stmt.Expression);
+
+        Assert.Equal(2, function.Parameters.Count);
+        Assert.Equal("x", function.Parameters[0].Name);
+        Assert.Null(function.Parameters[0].TypeAnnotation);
+        Assert.Equal("y", function.Parameters[1].Name);
+        Assert.Equal("int", function.Parameters[1].TypeAnnotation?.String());
     }
 
     [Fact]
