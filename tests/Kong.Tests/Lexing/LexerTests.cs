@@ -795,4 +795,30 @@ public class LexerTests
             Assert.Equal(literal, token.Literal);
         }
     }
+
+    [Fact]
+    public void TestRejectsNonAsciiIdentifiersAndDigits()
+    {
+        var input = "let π = ١٢٣;";
+        var lexer = new Lexer(input);
+
+        var tests = new (TokenType Type, string Literal)[]
+        {
+            (TokenType.Let, "let"),
+            (TokenType.Illegal, "π"),
+            (TokenType.Assign, "="),
+            (TokenType.Illegal, "١"),
+            (TokenType.Illegal, "٢"),
+            (TokenType.Illegal, "٣"),
+            (TokenType.Illegal, ";"),
+            (TokenType.EndOfFile, ""),
+        };
+
+        foreach (var (type, literal) in tests)
+        {
+            var token = lexer.NextToken();
+            Assert.Equal(type, token.Type);
+            Assert.Equal(literal, token.Literal);
+        }
+    }
 }
