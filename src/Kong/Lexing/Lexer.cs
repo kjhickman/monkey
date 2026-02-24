@@ -158,7 +158,7 @@ public class Lexer
                 token = new Token(TokenType.EndOfFile, "", new Span(start, start));
                 break;
             default:
-                if (IsLetter(_ch))
+                if (char.IsAsciiLetter(_ch) || _ch == '_')
                 {
                     var literal = ReadIdentifier();
                     var type = Token.LookupIdentifier(literal);
@@ -166,7 +166,7 @@ public class Lexer
                     return new Token(type, literal, new Span(start, end));
                 }
 
-                if (IsDigit(_ch))
+                if (char.IsAsciiDigit(_ch))
                 {
                     var literal = ReadNumber(out var tokenType);
                     var end = new Position(_line, _column);
@@ -236,7 +236,7 @@ public class Lexer
     private string ReadIdentifier()
     {
         var position = _position;
-        while (IsLetter(_ch) || IsDigit(_ch))
+        while (char.IsAsciiLetterOrDigit(_ch) || _ch == '_')
         {
             ReadChar();
         }
@@ -247,16 +247,16 @@ public class Lexer
     {
         tokenType = TokenType.Integer;
         var position = _position;
-        while (IsDigit(_ch))
+        while (char.IsAsciiDigit(_ch))
         {
             ReadChar();
         }
 
-        if (_ch == '.' && IsDigit(PeekChar()))
+        if (_ch == '.' && char.IsAsciiDigit(PeekChar()))
         {
             tokenType = TokenType.Double;
             ReadChar();
-            while (IsDigit(_ch))
+            while (char.IsAsciiDigit(_ch))
             {
                 ReadChar();
             }
@@ -329,17 +329,7 @@ public class Lexer
 
     private static Token NewToken(TokenType type, char ch, Position start)
     {
-        return new Token(type, ch.ToString(),
-            new Span(start, new Position(start.Line, start.Column + 1)));
-    }
-
-    private static bool IsLetter(char ch)
-    {
-        return ch is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or '_';
-    }
-
-    private static bool IsDigit(char ch)
-    {
-        return ch is >= '0' and <= '9';
+        // todo: avoid ToString allocations
+        return new Token(type, ch.ToString(), new Span(start, new Position(start.Line, start.Column + 1)));
     }
 }
