@@ -9,21 +9,32 @@ public class IlCompiler
 {
     public string? CompileProgramToMain(Program program, TypeInferenceResult types, ModuleDefinition module, MethodDefinition mainMethod)
     {
-        if (program.Statements.Count != 1)
-        {
-            return "Only a single expression statement is supported for now.";
-        }
-        var statement = program.Statements[0];
-        if (statement is not ExpressionStatement es || es.Expression is null)
-        {
-            return "Only a single expression statement is supported for now.";
-        }
         var il = mainMethod.Body.GetILProcessor();
-        var emitErr = EmitExpression(es.Expression, types, il, module);
-        if (emitErr is not null)
+        for (int i = 0; i < program.Statements.Count; i++)
         {
-            return emitErr;
+            IStatement? statement = program.Statements[i];
+            if (statement is not ExpressionStatement es)
+            {
+                return $"Unsupported statement type: {statement.GetType().Name}";
+            }
+
+            if (es.Expression is null)
+            {
+                return "Expression statement has null expression";
+            }
+
+            var emitErr = EmitExpression(es.Expression, types, il, module);
+            if (emitErr is not null)
+            {
+                return emitErr;
+            }
+
+            if (i < program.Statements.Count - 1)
+            {
+                il.Emit(OpCodes.Pop);
+            }
         }
+        
         var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
         il.Emit(OpCodes.Call, writeLineLong);
         il.Emit(OpCodes.Ret);

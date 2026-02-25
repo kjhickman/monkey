@@ -15,6 +15,7 @@ public class IlCompilerIntegrationTests
         "1 - 2",
         "1 * 2",
         "4 / 2",
+        "1 + 1; 5 - 1;"
     ];
 
     [Theory]
