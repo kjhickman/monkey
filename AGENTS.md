@@ -27,6 +27,5 @@ Always run `dotnet build` and `dotnet test` after making changes. All tests must
 
 ## Architecture Notes
 
-- `src/Kong/` is a standalone library with no CLI dependencies. Keep it that way.
 - Nullable reference types are enabled project-wide. Do not suppress nullable warnings without justification.
-- The library is marked `IsAotCompatible`. Avoid reflection or patterns that break Native AOT.
+- The library is marked `IsAotCompatible`. Avoid emitting IL or any pattern that breaks Native AOT.
