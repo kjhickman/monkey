@@ -4,12 +4,12 @@ using Kong.CodeGeneration;
 namespace Kong.Cli.Commands;
 
 [CliCommand(Name = "run", Description = "Run a file", Parent = typeof(Root))]
-public class RunFile
+public class Run
 {
     [CliArgument(Description = "File to run", Required = true)]
     public string File { get; set; } = null!;
 
-    public void Run(CliContext context)
+    public async Task RunAsync()
     {
         if (!System.IO.File.Exists(File))
         {
@@ -17,7 +17,7 @@ public class RunFile
             return;
         }
 
-        var source = System.IO.File.ReadAllText(File);
+        var source = await System.IO.File.ReadAllTextAsync(File);
         var lexer = new Lexing.Lexer(source);
         var parser = new Parsing.Parser(lexer);
 
@@ -35,11 +35,11 @@ public class RunFile
             symbolTable.DefineBuiltin(i, Builtins.All[i].Name);
         }
 
-        var compiler = CodeGeneration.Compiler.NewWithState(symbolTable, new List<IObject>());
+        var compiler = Compiler.NewWithState(symbolTable, []);
         var compileError = compiler.Compile(program);
         if (compileError != null)
         {
-            Console.Error.WriteLine($"Woops! Compilation failed:\n {compileError}");
+            Console.Error.WriteLine($"Compilation failed:\n {compileError}");
             return;
         }
 
@@ -48,7 +48,7 @@ public class RunFile
         var runtimeError = vm.Run();
         if (runtimeError != null)
         {
-            Console.Error.WriteLine($"Woops! Executing bytecode failed:\n {runtimeError}");
+            Console.Error.WriteLine($"Executing bytecode failed:\n {runtimeError}");
             return;
         }
 
@@ -57,7 +57,6 @@ public class RunFile
 
     private static void PrintParserErrors(List<string> errors)
     {
-        Console.Error.WriteLine("Whoops! We ran into some monkey business here!");
         Console.Error.WriteLine(" parser errors:");
         foreach (var msg in errors)
         {

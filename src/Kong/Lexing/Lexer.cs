@@ -1,5 +1,3 @@
-using Kong.Lexing;
-
 namespace Kong.Lexing;
 
 public class Lexer

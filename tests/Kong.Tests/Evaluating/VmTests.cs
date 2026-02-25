@@ -1,5 +1,4 @@
 using Kong.CodeGeneration;
-using Xunit;
 
 namespace Kong.Tests;
 
