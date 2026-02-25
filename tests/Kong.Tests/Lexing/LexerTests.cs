@@ -1,6 +1,6 @@
 using Kong.Lexing;
 
-namespace Kong.Tests;
+namespace Kong.Tests.Lexing;
 
 public class LexerTests
 {
@@ -124,7 +124,7 @@ public class LexerTests
             (TokenType.Eof, ""),
         };
 
-        var l = new Lexing.Lexer(input);
+        var l = new global::Kong.Lexing.Lexer(input);
 
         for (var i = 0; i < tests.Length; i++)
         {

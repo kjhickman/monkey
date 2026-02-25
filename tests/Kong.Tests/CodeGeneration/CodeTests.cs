@@ -1,6 +1,6 @@
 using Kong.CodeGeneration;
 
-namespace Kong.Tests;
+namespace Kong.Tests.CodeGeneration;
 
 public class CodeTests
 {

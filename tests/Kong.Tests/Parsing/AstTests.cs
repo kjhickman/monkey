@@ -1,7 +1,7 @@
 using Kong.Parsing;
 using Kong.Lexing;
 
-namespace Kong.Tests;
+namespace Kong.Tests.Parsing;
 
 public class AstTests
 {
