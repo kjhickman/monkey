@@ -1,5 +1,5 @@
+using System.Diagnostics;
 using DotMake.CommandLine;
-using Kong.CodeGeneration;
 
 namespace Kong.Cli.Commands;
 
@@ -11,56 +11,42 @@ public class Run
 
     public async Task RunAsync()
     {
-        if (!System.IO.File.Exists(File))
+        var assemblyPath = await Build.BuildAsync(File);
+        if (assemblyPath == null) return;
+        
+        var (exitCode, stdOut, stdErr) = await RunArtifact(assemblyPath);
+        if (!string.IsNullOrEmpty(stdOut))
         {
-            Console.Error.WriteLine($"File not found: {File}");
+            Console.Out.Write(stdOut);
+        }
+
+        if (!string.IsNullOrEmpty(stdErr))
+        {
+            Console.Error.Write(stdErr);
+        }
+
+        if (exitCode != 0)
+        {
+            Environment.ExitCode = exitCode;
             return;
         }
-
-        var source = await System.IO.File.ReadAllTextAsync(File);
-        var lexer = new Lexing.Lexer(source);
-        var parser = new Parsing.Parser(lexer);
-
-        var program = parser.ParseProgram();
-        var parserErrors = parser.Errors();
-        if (parserErrors.Count != 0)
-        {
-            PrintParserErrors(parserErrors);
-            return;
-        }
-
-        var symbolTable = SymbolTable.NewSymbolTable();
-        for (var i = 0; i < Builtins.All.Length; i++)
-        {
-            symbolTable.DefineBuiltin(i, Builtins.All[i].Name);
-        }
-
-        var compiler = Compiler.NewWithState(symbolTable, []);
-        var compileError = compiler.Compile(program);
-        if (compileError != null)
-        {
-            Console.Error.WriteLine($"Compilation failed:\n {compileError}");
-            return;
-        }
-
-        var bytecode = compiler.GetBytecode();
-        var vm = new Evaluating.Vm(bytecode);
-        var runtimeError = vm.Run();
-        if (runtimeError != null)
-        {
-            Console.Error.WriteLine($"Executing bytecode failed:\n {runtimeError}");
-            return;
-        }
-
-        Console.WriteLine(vm.LastPoppedStackElem().Inspect());
     }
 
-    private static void PrintParserErrors(List<string> errors)
+    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunArtifact(string assemblyPath)
     {
-        Console.Error.WriteLine(" parser errors:");
-        foreach (var msg in errors)
+        var startInfo = new ProcessStartInfo
         {
-            Console.Error.WriteLine($"\t{msg}");
-        }
+            FileName = "dotnet",
+            Arguments = $"\"{assemblyPath}\"",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        using var process = Process.Start(startInfo)!;
+        var stdOut = await process.StandardOutput.ReadToEndAsync();
+        var stdErr = await process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return (process.ExitCode, stdOut, stdErr);
     }
 }

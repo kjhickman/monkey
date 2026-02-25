@@ -40,3 +40,6 @@ project.fragment.lock.json
 
 # Local git worktrees
 .worktrees/
+
+# Kong build artifacts
+target/
