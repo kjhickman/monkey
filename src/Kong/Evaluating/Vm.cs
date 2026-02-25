@@ -1,8 +1,6 @@
-using Kong.Code;
-using Kong.Compiler;
-using Kong.Object;
+using Kong.CodeGeneration;
 
-namespace Kong.Vm;
+namespace Kong.Evaluating;
 
 public class Vm
 {
@@ -81,7 +79,7 @@ public class Vm
             {
                 case Opcode.OpConstant:
                 {
-                    var constIndex = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var constIndex = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
 
                     var err = Push(_constants[constIndex]);
@@ -149,14 +147,14 @@ public class Vm
 
                 case Opcode.OpJump:
                 {
-                    var pos = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var pos = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip = pos - 1;
                     break;
                 }
 
                 case Opcode.OpJumpNotTruthy:
                 {
-                    var pos = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var pos = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
 
                     var condition = Pop();
@@ -169,7 +167,7 @@ public class Vm
 
                 case Opcode.OpSetGlobal:
                 {
-                    var globalIndex = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var globalIndex = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
                     Globals[globalIndex] = Pop();
                     break;
@@ -177,7 +175,7 @@ public class Vm
 
                 case Opcode.OpGetGlobal:
                 {
-                    var globalIndex = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var globalIndex = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
 
                     var err = Push(Globals[globalIndex]);
@@ -187,7 +185,7 @@ public class Vm
 
                 case Opcode.OpGetBuiltin:
                 {
-                    var builtinIndex = Code.Code.ReadUint8(ins.Bytes, ip + 1);
+                    var builtinIndex = Code.ReadUint8(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 1;
 
                     var definition = Builtins.All[builtinIndex];
@@ -198,8 +196,8 @@ public class Vm
 
                 case Opcode.OpClosure:
                 {
-                    var constIndex = Code.Code.ReadUint16(ins.Bytes, ip + 1);
-                    var numFree = Code.Code.ReadUint8(ins.Bytes, ip + 3);
+                    var constIndex = Code.ReadUint16(ins.Bytes, ip + 1);
+                    var numFree = Code.ReadUint8(ins.Bytes, ip + 3);
                     CurrentFrame().Ip += 3;
 
                     var err = PushClosure(constIndex, numFree);
@@ -209,7 +207,7 @@ public class Vm
 
                 case Opcode.OpGetFree:
                 {
-                    var freeIndex = Code.Code.ReadUint8(ins.Bytes, ip + 1);
+                    var freeIndex = Code.ReadUint8(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 1;
 
                     var currentClosure = CurrentFrame().Cl;
@@ -228,7 +226,7 @@ public class Vm
 
                 case Opcode.OpSetLocal:
                 {
-                    var localIndex = Code.Code.ReadUint8(ins.Bytes, ip + 1);
+                    var localIndex = Code.ReadUint8(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 1;
 
                     var frame = CurrentFrame();
@@ -238,7 +236,7 @@ public class Vm
 
                 case Opcode.OpGetLocal:
                 {
-                    var localIndex = Code.Code.ReadUint8(ins.Bytes, ip + 1);
+                    var localIndex = Code.ReadUint8(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 1;
 
                     var frame = CurrentFrame();
@@ -249,7 +247,7 @@ public class Vm
 
                 case Opcode.OpArray:
                 {
-                    var numElements = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var numElements = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
 
                     var array = BuildArray(_sp - numElements, _sp);
@@ -262,7 +260,7 @@ public class Vm
 
                 case Opcode.OpHash:
                 {
-                    var numElements = Code.Code.ReadUint16(ins.Bytes, ip + 1);
+                    var numElements = Code.ReadUint16(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 2;
 
                     var (hash, hashErr) = BuildHash(_sp - numElements, _sp);
@@ -286,7 +284,7 @@ public class Vm
 
                 case Opcode.OpCall:
                 {
-                    var numArgs = Code.Code.ReadUint8(ins.Bytes, ip + 1);
+                    var numArgs = Code.ReadUint8(ins.Bytes, ip + 1);
                     CurrentFrame().Ip += 1;
 
                     var err = ExecuteCall(numArgs);

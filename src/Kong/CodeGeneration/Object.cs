@@ -1,7 +1,7 @@
 using System.Text;
-using Kong.Code;
+using Kong.CodeGeneration;
 
-namespace Kong.Object;
+namespace Kong.CodeGeneration;
 
 public enum ObjectType
 {

@@ -1,7 +1,7 @@
-using Kong.Ast;
-using Kong.Token;
+using Kong.Parsing;
+using Kong.Lexing;
 
-namespace Kong.Parser;
+namespace Kong.Parsing;
 
 public enum Precedence
 {
@@ -17,11 +17,11 @@ public enum Precedence
 
 public class Parser
 {
-    private readonly Lexer.Lexer _lexer;
+    private readonly Lexing.Lexer _lexer;
     private readonly List<string> _errors;
 
-    private Token.Token _curToken;
-    private Token.Token _peekToken;
+    private Token _curToken;
+    private Token _peekToken;
 
     private readonly Dictionary<TokenType, Func<IExpression>> _prefixParseFns;
     private readonly Dictionary<TokenType, Func<IExpression, IExpression>> _infixParseFns;
@@ -40,7 +40,7 @@ public class Parser
         { TokenType.LBracket, Precedence.Index },
     };
 
-    public Parser(Lexer.Lexer lexer)
+    public Parser(Lexing.Lexer lexer)
     {
         _lexer = lexer;
         _errors = [];
@@ -82,9 +82,9 @@ public class Parser
 
     public List<string> Errors() => _errors;
 
-    public Ast.Program ParseProgram()
+    public Parsing.Program ParseProgram()
     {
-        var program = new Ast.Program();
+        var program = new Parsing.Program();
 
         while (!CurTokenIs(TokenType.Eof))
         {

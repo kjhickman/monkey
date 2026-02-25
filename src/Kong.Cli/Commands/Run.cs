@@ -1,6 +1,5 @@
 using DotMake.CommandLine;
-using Kong.Compiler;
-using Kong.Object;
+using Kong.CodeGeneration;
 
 namespace Kong.Cli.Commands;
 
@@ -19,8 +18,8 @@ public class RunFile
         }
 
         var source = System.IO.File.ReadAllText(File);
-        var lexer = new Lexer.Lexer(source);
-        var parser = new Parser.Parser(lexer);
+        var lexer = new Lexing.Lexer(source);
+        var parser = new Parsing.Parser(lexer);
 
         var program = parser.ParseProgram();
         var parserErrors = parser.Errors();
@@ -36,7 +35,7 @@ public class RunFile
             symbolTable.DefineBuiltin(i, Builtins.All[i].Name);
         }
 
-        var compiler = Compiler.Compiler.NewWithState(symbolTable, new List<IObject>());
+        var compiler = CodeGeneration.Compiler.NewWithState(symbolTable, new List<IObject>());
         var compileError = compiler.Compile(program);
         if (compileError != null)
         {
@@ -45,7 +44,7 @@ public class RunFile
         }
 
         var bytecode = compiler.GetBytecode();
-        var vm = new Vm.Vm(bytecode);
+        var vm = new Evaluating.Vm(bytecode);
         var runtimeError = vm.Run();
         if (runtimeError != null)
         {

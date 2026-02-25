@@ -1,7 +1,6 @@
-using Kong.Code;
-using Kong.Object;
+using Kong.CodeGeneration;
 
-namespace Kong.Vm;
+namespace Kong.Evaluating;
 
 public class Frame
 {

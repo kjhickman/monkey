@@ -1,4 +1,4 @@
-namespace Kong.Ast;
+namespace Kong.Parsing;
 
 public interface INode
 {

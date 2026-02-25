@@ -1,4 +1,4 @@
-namespace Kong.Compiler;
+namespace Kong.CodeGeneration;
 
 public enum SymbolScope
 {

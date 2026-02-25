@@ -1,8 +1,7 @@
-using Kong.Ast;
-using Kong.Code;
-using Kong.Object;
+using Kong.Parsing;
+using Kong.CodeGeneration;
 
-namespace Kong.Compiler;
+namespace Kong.CodeGeneration;
 
 public class EmittedInstruction
 {
@@ -73,7 +72,7 @@ public class Compiler
     {
         switch (node)
         {
-            case Ast.Program program:
+            case Parsing.Program program:
                 foreach (var s in program.Statements)
                 {
                     var err = Compile(s);
@@ -328,7 +327,7 @@ public class Compiler
 
     public int Emit(Opcode op, params int[] operands)
     {
-        var ins = Code.Code.Make(op, operands);
+        var ins = Code.Make(op, operands);
         var pos = AddInstruction(ins);
         SetLastInstruction(op, pos);
         return pos;
@@ -381,14 +380,14 @@ public class Compiler
     private void ReplaceLastPopWithReturn()
     {
         var lastPos = _scopes[_scopeIndex].LastInstruction.Position;
-        ReplaceInstruction(lastPos, Code.Code.Make(Opcode.OpReturnValue));
+        ReplaceInstruction(lastPos, Code.Make(Opcode.OpReturnValue));
         _scopes[_scopeIndex].LastInstruction.Opcode = Opcode.OpReturnValue;
     }
 
     private void ChangeOperand(int opPos, int operand)
     {
         var op = (Opcode)CurrentInstructions()[opPos];
-        var newInstruction = Code.Code.Make(op, operand);
+        var newInstruction = Code.Make(op, operand);
         ReplaceInstruction(opPos, newInstruction);
     }
 

@@ -1,4 +1,4 @@
-using Kong.Code;
+using Kong.CodeGeneration;
 
 namespace Kong.Tests;
 
@@ -17,7 +17,7 @@ public class CodeTests
 
         foreach (var tt in tests)
         {
-            var instruction = Code.Code.Make(tt.op, tt.operands);
+            var instruction = Code.Make(tt.op, tt.operands);
 
             Assert.Equal(tt.expected.Length, instruction.Length);
 
@@ -40,12 +40,12 @@ public class CodeTests
 
         foreach (var tt in tests)
         {
-            var instruction = Code.Code.Make(tt.op, tt.operands);
+            var instruction = Code.Make(tt.op, tt.operands);
 
-            var def = Code.Code.Lookup(instruction[0]);
+            var def = Code.Lookup(instruction[0]);
             Assert.NotNull(def);
 
-            var (operandsRead, n) = Code.Code.ReadOperands(def, [.. instruction], 1);
+            var (operandsRead, n) = Code.ReadOperands(def, [.. instruction], 1);
             Assert.Equal(tt.bytesRead, n);
 
             for (var i = 0; i < tt.operands.Length; i++)
@@ -60,11 +60,11 @@ public class CodeTests
     {
         var instructions = new byte[][]
         {
-            Code.Code.Make(Opcode.OpAdd),
-            Code.Code.Make(Opcode.OpGetLocal, 1),
-            Code.Code.Make(Opcode.OpConstant, 2),
-            Code.Code.Make(Opcode.OpConstant, 65535),
-            Code.Code.Make(Opcode.OpClosure, 65535, 255),
+            Code.Make(Opcode.OpAdd),
+            Code.Make(Opcode.OpGetLocal, 1),
+            Code.Make(Opcode.OpConstant, 2),
+            Code.Make(Opcode.OpConstant, 65535),
+            Code.Make(Opcode.OpClosure, 65535, 255),
         };
 
         var expected = """

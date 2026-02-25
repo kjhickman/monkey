@@ -1,5 +1,4 @@
-using Kong.Lexer;
-using Kong.Token;
+using Kong.Lexing;
 
 namespace Kong.Tests;
 
@@ -125,7 +124,7 @@ public class LexerTests
             (TokenType.Eof, ""),
         };
 
-        var l = new Lexer.Lexer(input);
+        var l = new Lexing.Lexer(input);
 
         for (var i = 0; i < tests.Length; i++)
         {

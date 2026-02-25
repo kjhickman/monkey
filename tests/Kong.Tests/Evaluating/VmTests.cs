@@ -1,4 +1,4 @@
-using Kong.Object;
+using Kong.CodeGeneration;
 using Xunit;
 
 namespace Kong.Tests;
@@ -359,11 +359,11 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new Compiler.Compiler();
+            var compiler = new CodeGeneration.Compiler();
             var compErr = compiler.Compile(program);
             Assert.Null(compErr);
 
-            var vm = new Vm.Vm(compiler.GetBytecode());
+            var vm = new Evaluating.Vm(compiler.GetBytecode());
             var err = vm.Run();
             Assert.NotNull(err);
             Assert.Equal(tt.ExpectedError, err);
@@ -547,11 +547,11 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new Compiler.Compiler();
+            var compiler = new CodeGeneration.Compiler();
             var compErr = compiler.Compile(program);
             Assert.Null(compErr);
 
-            var vm = new Vm.Vm(compiler.GetBytecode());
+            var vm = new Evaluating.Vm(compiler.GetBytecode());
             var err = vm.Run();
             Assert.Null(err);
 
@@ -560,10 +560,10 @@ public class VmTests
         }
     }
 
-    private static Ast.Program Parse(string input)
+    private static Parsing.Program Parse(string input)
     {
-        var l = new Lexer.Lexer(input);
-        var p = new Parser.Parser(l);
+        var l = new Lexing.Lexer(input);
+        var p = new Parsing.Parser(l);
         return p.ParseProgram();
     }
 

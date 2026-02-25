@@ -1,6 +1,6 @@
-using Kong.Token;
+using Kong.Lexing;
 
-namespace Kong.Lexer;
+namespace Kong.Lexing;
 
 public class Lexer
 {
@@ -15,9 +15,9 @@ public class Lexer
         ReadChar();
     }
 
-    public Token.Token NextToken()
+    public Token NextToken()
     {
-        Token.Token tok;
+        Token tok;
 
         SkipWhitespace();
 
@@ -29,7 +29,7 @@ public class Lexer
                     var ch = _ch;
                     ReadChar();
                     var literal = $"{ch}{_ch}";
-                    tok = new Token.Token(TokenType.Eq, literal);
+                    tok = new Token(TokenType.Eq, literal);
                 }
                 else
                 {
@@ -48,7 +48,7 @@ public class Lexer
                     var ch = _ch;
                     ReadChar();
                     var literal = $"{ch}{_ch}";
-                    tok = new Token.Token(TokenType.NotEq, literal);
+                    tok = new Token(TokenType.NotEq, literal);
                 }
                 else
                 {
@@ -95,23 +95,23 @@ public class Lexer
                 tok = NewToken(TokenType.RBracket, _ch);
                 break;
             case '"':
-                tok = new Token.Token(TokenType.String, ReadString());
+                tok = new Token(TokenType.String, ReadString());
                 break;
             case '\0':
-                tok = new Token.Token(TokenType.Eof, "");
+                tok = new Token(TokenType.Eof, "");
                 break;
             default:
                 if (IsLetter(_ch))
                 {
                     var literal = ReadIdentifier();
-                    var type = Token.Token.LookupIdent(literal);
-                    return new Token.Token(type, literal);
+                    var type = Token.LookupIdent(literal);
+                    return new Token(type, literal);
                 }
 
                 if (IsDigit(_ch))
                 {
                     var literal = ReadNumber();
-                    return new Token.Token(TokenType.Int, literal);
+                    return new Token(TokenType.Int, literal);
                 }
 
                 tok = NewToken(TokenType.Illegal, _ch);
@@ -176,9 +176,9 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private static Token.Token NewToken(TokenType type, char ch)
+    private static Token NewToken(TokenType type, char ch)
     {
-        return new Token.Token(type, ch.ToString());
+        return new Token(type, ch.ToString());
     }
 
     private static bool IsLetter(char ch)

@@ -1,4 +1,4 @@
-using Kong.Object;
+using Kong.CodeGeneration;
 
 namespace Kong.Tests;
 
