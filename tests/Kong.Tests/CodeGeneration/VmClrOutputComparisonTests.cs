@@ -6,7 +6,7 @@ using Kong.Evaluating;
 
 namespace Kong.Tests.CodeGeneration;
 
-public class IlCompilerIntegrationTests
+public class VmClrOutputComparisonTests
 {
     public static TheoryData<string> ArithmeticPrograms =>
     [
