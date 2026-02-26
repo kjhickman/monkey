@@ -15,7 +15,11 @@ public class IlCompilerIntegrationTests
         "1 - 2",
         "1 * 2",
         "4 / 2",
-        "1 + 1; 5 - 1;"
+        "1 + 1; 5 - 1;",
+        "let a = 5; a;",
+        "let a = 5; a + 1;",
+        "let a = 5; let b = 10; a + b;",
+        "let a = 5; let b = a + 2; b + a;"
     ];
 
     [Theory]

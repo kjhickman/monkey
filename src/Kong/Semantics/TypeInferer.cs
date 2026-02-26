@@ -7,41 +7,49 @@ public class TypeInferer
     public TypeInferenceResult InferTypes(Program root)
     {
         var result = new TypeInferenceResult();
-        InferNode(root, result);
+        var env = new Dictionary<string, KongType>();
+        InferNode(root, result, env);
         return result;
     }
 
-    private KongType InferNode(INode node, TypeInferenceResult result)
+    private KongType InferNode(INode node, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         return node switch
         {
-            Program p => InferProgram(p, result),
-            IStatement s => InferStatement(s, result),
-            IExpression e => InferExpression(e, result),
+            Program p => InferProgram(p, result, env),
+            IStatement s => InferStatement(s, result, env),
+            IExpression e => InferExpression(e, result, env),
             _ => InferUnsupported(node, result),
         };
     }
 
-    private KongType InferProgram(Program program, TypeInferenceResult result)
+    private KongType InferProgram(Program program, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         var lastType = KongType.Unknown;
         foreach (var statement in program.Statements)
         {
-            lastType = InferNode(statement, result);
+            lastType = InferNode(statement, result, env);
         }
 
         result.AddNodeType(program, lastType);
         return lastType;
     }
 
-    private KongType InferStatement(IStatement statement, TypeInferenceResult result)
+    private KongType InferStatement(IStatement statement, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         switch (statement)
         {
             case ExpressionStatement es when es.Expression is not null:
-                var expressionType = InferExpression(es.Expression, result);
+                var expressionType = InferExpression(es.Expression, result, env);
                 result.AddNodeType(statement, expressionType);
                 return expressionType;
+
+            case LetStatement ls when ls.Value is not null:
+                var valueType = InferExpression(ls.Value, result, env);
+                env[ls.Name.Value] = valueType;
+                result.AddNodeType(ls.Name, valueType);
+                result.AddNodeType(statement, valueType);
+                return valueType;
             
             default:
                 result.AddError($"Unsupported statement type: {statement.GetType().Name}");
@@ -50,7 +58,7 @@ public class TypeInferer
         }
     }
 
-    private KongType InferExpression(IExpression expression, TypeInferenceResult result)
+    private KongType InferExpression(IExpression expression, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         switch (expression)
         {
@@ -59,7 +67,17 @@ public class TypeInferer
                 return KongType.Int64;
 
             case InfixExpression infix:
-                return InferInfix(infix, result);
+                return InferInfix(infix, result, env);
+
+            case Identifier identifier:
+                if (env.TryGetValue(identifier.Value, out var identType))
+                {
+                    result.AddNodeType(expression, identType);
+                    return identType;
+                }
+                result.AddError($"Undefined variable: {identifier.Value}");
+                result.AddNodeType(expression, KongType.Unknown);
+                return KongType.Unknown;
 
             default:
                 result.AddError($"Unsupported expression: {expression.GetType().Name}");
@@ -68,10 +86,10 @@ public class TypeInferer
         }
     }
 
-    private KongType InferInfix(InfixExpression infix, TypeInferenceResult result)
+    private KongType InferInfix(InfixExpression infix, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
-        var leftType = InferExpression(infix.Left, result);
-        var rightType = InferExpression(infix.Right, result);
+        var leftType = InferExpression(infix.Left, result, env);
+        var rightType = InferExpression(infix.Right, result, env);
         
         var isArithmetic = infix.Operator is "+" or "-" or "*" or "/";
         if (!isArithmetic)
