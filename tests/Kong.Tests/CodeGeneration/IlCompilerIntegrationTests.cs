@@ -19,7 +19,9 @@ public class IlCompilerIntegrationTests
         "let a = 5; a;",
         "let a = 5; a + 1;",
         "let a = 5; let b = 10; a + b;",
-        "let a = 5; let b = a + 2; b + a;"
+        "let a = 5; let b = a + 2; b + a;",
+        "-1",
+        "let a = 5; -a + 2;",
     ];
 
     [Theory]

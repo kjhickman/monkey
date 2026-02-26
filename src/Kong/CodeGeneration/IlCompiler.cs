@@ -85,6 +85,12 @@ public class IlCompiler
                 il.Emit(OpCodes.Ldloc, local);
                 return null;
 
+            case PrefixExpression prefix when prefix.Operator == "-":
+                var operandErr = EmitExpression(prefix.Right, types, il, module, locals);
+                if (operandErr is not null) return operandErr;
+                il.Emit(OpCodes.Neg);
+                return null;
+
             default:
                 return $"Unsupported expression type: {expression.GetType().Name}";
         }

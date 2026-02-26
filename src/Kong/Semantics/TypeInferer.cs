@@ -78,6 +78,17 @@ public class TypeInferer
                 result.AddError($"Undefined variable: {identifier.Value}");
                 result.AddNodeType(expression, KongType.Unknown);
                 return KongType.Unknown;
+            
+            case PrefixExpression prefix when prefix.Operator == "-":
+                var rightType = InferExpression(prefix.Right, result, env);
+                if (rightType != KongType.Int64)
+                {
+                    result.AddError($"Type error: cannot apply operator '-' to type {rightType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+                result.AddNodeType(expression, KongType.Int64);
+                return KongType.Int64;
 
             default:
                 result.AddError($"Unsupported expression: {expression.GetType().Name}");
