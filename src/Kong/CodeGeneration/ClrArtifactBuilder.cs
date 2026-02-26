@@ -1,11 +1,13 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Kong.Parsing;
+using Kong.Semantics;
 
 namespace Kong.CodeGeneration;
 
 public class ClrArtifactBuilder
 {
-    public void Build(string assemblyName, string outputAssembly)
+    public string? Build(Program program, string assemblyName, string outputAssembly)
     {
         var assembly = AssemblyDefinition.CreateAssembly(
             new AssemblyNameDefinition(assemblyName, new Version(1, 0, 0, 0)),
@@ -32,11 +34,20 @@ public class ClrArtifactBuilder
         programType.Methods.Add(mainMethod);
         module.EntryPoint = mainMethod;
 
-        var writeLine = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
-        var il = mainMethod.Body.GetILProcessor();
-        il.Emit(OpCodes.Ldstr, "Hello world");
-        il.Emit(OpCodes.Call, writeLine);
-        il.Emit(OpCodes.Ret);
+        var inferer = new TypeInferer();
+        var types = inferer.InferTypes(program);
+        var typeErrors = types.GetErrors().ToList();
+        if (typeErrors.Count > 0)
+        {
+            return string.Join(Environment.NewLine, typeErrors);
+        }
+
+        var ilCompiler = new IlCompiler();
+        var compileErr = ilCompiler.CompileProgramToMain(program, types, module, mainMethod);
+        if (compileErr is not null)
+        {
+            return compileErr;
+        }
 
         var outputDirectory = Path.GetDirectoryName(outputAssembly);
         if (!string.IsNullOrEmpty(outputDirectory))
@@ -46,6 +57,8 @@ public class ClrArtifactBuilder
 
         assembly.Write(outputAssembly);
         WriteRuntimeConfig(outputAssembly);
+
+        return null;
     }
 
     private static void WriteRuntimeConfig(string outputAssembly)

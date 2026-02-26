@@ -1,5 +1,4 @@
 using DotMake.CommandLine;
-using Kong.CodeGeneration;
 
 namespace Kong.Cli.Commands;
 
@@ -23,10 +22,17 @@ public class Build
             return null;
         }
 
+        var source = await System.IO.File.ReadAllTextAsync(filePath);
         var assemblyName = Path.GetFileNameWithoutExtension(filePath);
         var assemblyPath = GetOutputAssemblyPath(filePath);
-        var builder = new ClrArtifactBuilder();
-        builder.Build(assemblyName, assemblyPath);
+        var compiler = new KongCompiler();
+        var compilerError = compiler.CompileToAssembly(source, assemblyName, assemblyPath);
+        if (compilerError is not null)
+        {
+            Console.Error.WriteLine(compilerError);
+            return null;
+        }
+
         return assemblyPath;
     }
 
