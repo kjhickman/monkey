@@ -143,6 +143,13 @@ public class IlCompiler
                 il.Emit(OpCodes.Neg);
                 return null;
 
+            case PrefixExpression prefix when prefix.Operator == "!":
+                var operandErr2 = EmitExpression(prefix.Right, types, il, module, locals);
+                if (operandErr2 is not null) return operandErr2;
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Ceq);
+                return null;
+
             default:
                 return $"Unsupported expression type: {expression.GetType().Name}";
         }

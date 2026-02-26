@@ -94,6 +94,17 @@ public class TypeInferer
                 result.AddNodeType(expression, KongType.Int64);
                 return KongType.Int64;
 
+            case PrefixExpression prefix when prefix.Operator == "!":
+                var operandType = InferExpression(prefix.Right, result, env);
+                if (operandType != KongType.Boolean)
+                {
+                    result.AddError($"Type error: cannot apply operator '!' to type {operandType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+                result.AddNodeType(expression, KongType.Boolean);
+                return KongType.Boolean;
+
             default:
                 result.AddError($"Unsupported expression: {expression.GetType().Name}");
                 result.AddNodeType(expression, KongType.Unknown);

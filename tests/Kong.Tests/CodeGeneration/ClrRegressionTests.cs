@@ -55,13 +55,11 @@ public class ClrRegressionTests
     [InlineData("(1 < 2) == false", false)]
     [InlineData("(1 > 2) == true", false)]
     [InlineData("(1 > 2) == false", true)]
-    // [InlineData("!true", false)] // Unsupported expression: PrefixExpression
-    // [InlineData("!false", true)] // Unsupported expression: PrefixExpression
-    // [InlineData("!5", false)] // Unsupported expression: PrefixExpression
-    // [InlineData("!!true", true)] // Unsupported expression: PrefixExpression
-    // [InlineData("!!false", false)] // Unsupported expression: PrefixExpression
-    // [InlineData("!!5", true)] // Unsupported expression: PrefixExpression
-    // [InlineData("!(if (false) { 5; })", true)] // Unsupported expression: PrefixExpression
+    [InlineData("!true", false)]
+    [InlineData("!false", true)]
+    [InlineData("!!true", true)]
+    [InlineData("!!false", false)]
+    // [InlineData("!(if (false) { 5; })", true)] // Unsupported expression: IfExpression
     public async Task TestBooleanExpressions(string source, bool expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
