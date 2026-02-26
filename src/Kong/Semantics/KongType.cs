@@ -3,5 +3,6 @@ namespace Kong.Semantics;
 public enum KongType
 {
     Unknown,
-    Int64
+    Int64,
+    Boolean,
 }

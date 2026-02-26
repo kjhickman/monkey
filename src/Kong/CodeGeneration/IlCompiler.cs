@@ -31,8 +31,22 @@ public class IlCompiler
             return "Program must end with an expression that evaluates to Int64";
         }
         
-        var writeLineLong = module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
-        il.Emit(OpCodes.Call, writeLineLong);
+        var resultType = types.GetNodeType(program);
+        MethodReference writeLine;
+        switch (resultType)
+        {
+            case KongType.Boolean:
+                writeLine = module.ImportReference(
+                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])!);
+                break;
+            case KongType.Int64:
+                writeLine = module.ImportReference(
+                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
+                break;
+            default:
+                return $"Unsupported program result type: {resultType}";
+        }
+        il.Emit(OpCodes.Call, writeLine);
         il.Emit(OpCodes.Ret);
         return null;
     }
@@ -43,6 +57,10 @@ public class IlCompiler
         {
             case IntegerLiteral intLit:
                 il.Emit(OpCodes.Ldc_I8, intLit.Value);
+                return null;
+
+            case BooleanLiteral boolLit:
+                il.Emit(boolLit.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                 return null;
 
             case InfixExpression plus when plus.Operator == "+":
@@ -75,6 +93,40 @@ public class IlCompiler
                 var rightErr4 = EmitExpression(div.Right, types, il, module, locals);
                 if (rightErr4 is not null) return rightErr4;
                 il.Emit(OpCodes.Div);
+                return null;
+
+            case InfixExpression eq when eq.Operator == "==":
+                var leftErr5 = EmitExpression(eq.Left, types, il, module, locals);
+                if (leftErr5 is not null) return leftErr5;
+                var rightErr5 = EmitExpression(eq.Right, types, il, module, locals);
+                if (rightErr5 is not null) return rightErr5;
+                il.Emit(OpCodes.Ceq);
+                return null;
+
+            case InfixExpression neq when neq.Operator == "!=":
+                var leftErr6 = EmitExpression(neq.Left, types, il, module, locals);
+                if (leftErr6 is not null) return leftErr6;
+                var rightErr6 = EmitExpression(neq.Right, types, il, module, locals);
+                if (rightErr6 is not null) return rightErr6;
+                il.Emit(OpCodes.Ceq);
+                il.Emit(OpCodes.Ldc_I4_0);
+                il.Emit(OpCodes.Ceq);
+                return null;
+
+            case InfixExpression lt when lt.Operator == "<":
+                var leftErr7 = EmitExpression(lt.Left, types, il, module, locals);
+                if (leftErr7 is not null) return leftErr7;
+                var rightErr7 = EmitExpression(lt.Right, types, il, module, locals);
+                if (rightErr7 is not null) return rightErr7;
+                il.Emit(OpCodes.Clt);
+                return null;
+
+            case InfixExpression gt when gt.Operator == ">":
+                var leftErr8 = EmitExpression(gt.Left, types, il, module, locals);
+                if (leftErr8 is not null) return leftErr8;
+                var rightErr8 = EmitExpression(gt.Right, types, il, module, locals);
+                if (rightErr8 is not null) return rightErr8;
+                il.Emit(OpCodes.Cgt);
                 return null;
             
             case Identifier id:

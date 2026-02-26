@@ -21,7 +21,7 @@ public class ClrRegressionTests
     [InlineData("-10", -10L)]
     [InlineData("-50 + 100 + -50", 0L)]
     [InlineData("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50L)]
-    public async Task ClrBackend_Evaluates_IntegerArithmeticMatrix(string source, long expected)
+    public async Task TestIntegerArithmetic(string source, long expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
         Assert.Equal(expected.ToString(), clrOutput);
@@ -31,7 +31,38 @@ public class ClrRegressionTests
     [InlineData("let one = 1; one", 1L)]
     [InlineData("let one = 1; let two = 2; one + two", 3L)]
     [InlineData("let one = 1; let two = one + one; one + two", 3L)]
-    public async Task ClrBackend_Evaluates_GlobalLetBindingMatrix(string source, long expected)
+    public async Task TestLetBindings(string source, long expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected.ToString(), clrOutput);
+    }
+
+    [Theory]
+    [InlineData("1 < 2", true)]
+    [InlineData("1 > 2", false)]
+    [InlineData("1 < 1", false)]
+    [InlineData("1 > 1", false)]
+    [InlineData("1 == 1", true)]
+    [InlineData("1 != 1", false)]
+    [InlineData("1 == 2", false)]
+    [InlineData("1 != 2", true)]
+    [InlineData("true == true", true)]
+    [InlineData("false == false", true)]
+    [InlineData("true == false", false)]
+    [InlineData("true != false", true)]
+    [InlineData("false != true", true)]
+    [InlineData("(1 < 2) == true", true)]
+    [InlineData("(1 < 2) == false", false)]
+    [InlineData("(1 > 2) == true", false)]
+    [InlineData("(1 > 2) == false", true)]
+    // [InlineData("!true", false)] // Unsupported expression: PrefixExpression
+    // [InlineData("!false", true)] // Unsupported expression: PrefixExpression
+    // [InlineData("!5", false)] // Unsupported expression: PrefixExpression
+    // [InlineData("!!true", true)] // Unsupported expression: PrefixExpression
+    // [InlineData("!!false", false)] // Unsupported expression: PrefixExpression
+    // [InlineData("!!5", true)] // Unsupported expression: PrefixExpression
+    // [InlineData("!(if (false) { 5; })", true)] // Unsupported expression: PrefixExpression
+    public async Task TestBooleanExpressions(string source, bool expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
         Assert.Equal(expected.ToString(), clrOutput);

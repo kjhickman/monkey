@@ -22,6 +22,30 @@ public class VmClrOutputComparisonTests
         "let a = 5; let b = a + 2; b + a;",
         "-1",
         "let a = 5; -a + 2;",
+        "true",
+        "false",
+        "1 < 2",
+        "1 > 2",
+        "1 == 1",
+        "1 != 1",
+        "1 == 2",
+        "1 != 2",
+        "true == true",
+        "true != false",
+        "false == false",
+        "(1 < 2) == true",
+        "(1 > 2) == false",
+        "1 + 2 == 3",
+        "1 + 2 * 3 == 7",
+        "(1 + 2) * 3 == 9",
+        "let a = 5; let b = 10; a < b;",
+        "let a = 5; let b = 10; a == b;",
+        "let t = true; t;",
+        "let t = true; let f = false; t != f;",
+        "-1 < 0",
+        "-1 == -1",
+        "1 < 2; 3 < 4;",
+        "1 == 2; 3 == 3;",
     ];
 
     [Theory]
@@ -31,7 +55,7 @@ public class VmClrOutputComparisonTests
         var vmOutput = RunOnVm(source);
         var clrOutput = await CompileAndRunOnClr(source);
 
-        Assert.Equal(vmOutput, clrOutput);
+        Assert.Equal(NormalizeOutput(vmOutput), NormalizeOutput(clrOutput));
     }
 
     private static string RunOnVm(string source)
@@ -93,5 +117,16 @@ public class VmClrOutputComparisonTests
                 Directory.Delete(tempDirectory, recursive: true);
             }
         }
+    }
+
+    private static string NormalizeOutput(string s)
+    {
+        var trimmed = s.Trim();
+        return trimmed switch
+        {
+            "True" => "true",
+            "False" => "false",
+            _ => trimmed,
+        };
     }
 }

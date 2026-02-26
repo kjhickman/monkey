@@ -66,6 +66,10 @@ public class TypeInferer
                 result.AddNodeType(expression, KongType.Int64);
                 return KongType.Int64;
 
+            case BooleanLiteral:
+                result.AddNodeType(expression, KongType.Boolean);
+                return KongType.Boolean;
+
             case InfixExpression infix:
                 return InferInfix(infix, result, env);
 
@@ -102,23 +106,35 @@ public class TypeInferer
         var leftType = InferExpression(infix.Left, result, env);
         var rightType = InferExpression(infix.Right, result, env);
         
-        var isArithmetic = infix.Operator is "+" or "-" or "*" or "/";
-        if (!isArithmetic)
+        if (infix.Operator is "+" or "-" or "*" or "/")
         {
-            result.AddError($"Unsupported infix operator: {infix.Operator}");
-            result.AddNodeType(infix, KongType.Unknown);
-            return KongType.Unknown;
+            if (leftType != KongType.Int64 || rightType != KongType.Int64)
+            {
+                result.AddError($"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}");
+                result.AddNodeType(infix, KongType.Unknown);
+                return KongType.Unknown;
+            }
+
+            result.AddNodeType(infix, KongType.Int64);
+            return KongType.Int64;
         }
 
-        if (leftType != KongType.Int64 || rightType != KongType.Int64)
+        if (infix.Operator is "==" or "!=" or "<" or ">")
         {
-            result.AddError($"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}");
-            result.AddNodeType(infix, KongType.Unknown);
-            return KongType.Unknown;
-        }
+            if (leftType != rightType)
+            {
+                result.AddError($"Type error: cannot compare types {leftType} and {rightType} with operator '{infix.Operator}'");
+                result.AddNodeType(infix, KongType.Unknown);
+                return KongType.Unknown;
+            }
 
-        result.AddNodeType(infix, KongType.Int64);
-        return KongType.Int64;
+            result.AddNodeType(infix, KongType.Boolean);
+            return KongType.Boolean;
+        }
+        
+        result.AddError($"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}");
+        result.AddNodeType(infix, KongType.Unknown);
+        return KongType.Unknown;
     }
 
     private KongType InferUnsupported(INode node, TypeInferenceResult result)
