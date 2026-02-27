@@ -50,6 +50,15 @@ public class TypeInferer
                 result.AddNodeType(ls.Name, valueType);
                 result.AddNodeType(statement, valueType);
                 return valueType;
+
+            case BlockStatement bs:
+                var lastType = KongType.Unknown;
+                foreach (var stmt in bs.Statements)
+                {
+                    lastType = InferNode(stmt, result, env);
+                }
+                result.AddNodeType(statement, lastType);
+                return lastType;
             
             default:
                 result.AddError($"Unsupported statement type: {statement.GetType().Name}");
@@ -104,6 +113,25 @@ public class TypeInferer
                 }
                 result.AddNodeType(expression, KongType.Boolean);
                 return KongType.Boolean;
+
+            case IfExpression ifExpr:
+                var conditionType = InferExpression(ifExpr.Condition, result, env);
+                if (conditionType != KongType.Boolean)
+                {
+                    result.AddError($"Type error: if condition must be of type Boolean, but got {conditionType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+                var thenType = InferStatement(ifExpr.Consequence, result, env);
+                var elseType = ifExpr.Alternative != null ? InferStatement(ifExpr.Alternative, result, env) : KongType.Unknown;
+                if (thenType != elseType)
+                {
+                    result.AddError($"Type error: if branches must have the same type, but got {thenType} and {elseType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+                result.AddNodeType(expression, thenType);
+                return thenType;
 
             default:
                 result.AddError($"Unsupported expression: {expression.GetType().Name}");

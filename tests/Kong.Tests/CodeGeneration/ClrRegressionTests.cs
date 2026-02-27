@@ -59,11 +59,26 @@ public class ClrRegressionTests
     [InlineData("!false", true)]
     [InlineData("!!true", true)]
     [InlineData("!!false", false)]
-    // [InlineData("!(if (false) { 5; })", true)] // Unsupported expression: IfExpression
+    [InlineData("!(if (false) { 5; })", true)]
     public async Task TestBooleanExpressions(string source, bool expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
         Assert.Equal(expected.ToString(), clrOutput);
+    }
+
+    [Theory]
+    [InlineData("if (true) { 10 }", "10")]
+    [InlineData("if (true) { 10 } else { 20 }", "10")]
+    [InlineData("if (false) { 10 } else { 20 }", "20")]
+    [InlineData("if (1 < 2) { 10 }", "10")]
+    [InlineData("if (1 < 2) { 10 } else { 20 }", "10")]
+    [InlineData("if (1 > 2) { 10 } else { 20 }", "20")]
+    [InlineData("if (1 > 2) { 10 }", "null")]
+    [InlineData("if (false) { 10 }", "null")]
+    public async Task TestConditionals(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
     }
 
     private static async Task<string> CompileAndRunOnClr(string source)

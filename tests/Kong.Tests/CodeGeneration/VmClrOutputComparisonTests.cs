@@ -52,6 +52,13 @@ public class VmClrOutputComparisonTests
         "-1 == -1",
         "1 < 2; 3 < 4;",
         "1 == 2; 3 == 3;",
+        "if (true) { 10 } else { 20 }",
+        "if (false) { 10 } else { 20 }",
+        "if (1 < 2) { 10 } else { 20 }",
+        "if (1 > 2) { 10 } else { 20 }",
+        "let x = 5; if (x > 3) { x } else { 0 }",
+        "if (true) { true } else { false }",
+        "if (false) { true } else { false }",
     ];
 
     [Theory]
