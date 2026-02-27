@@ -71,7 +71,7 @@ public class Compiler
     {
         switch (node)
         {
-            case Parsing.Program program:
+            case Program program:
                 foreach (var s in program.Statements)
                 {
                     var err = Compile(s);

@@ -86,6 +86,10 @@ public class TypeInferer
                 result.AddNodeType(expression, KongType.Boolean);
                 return KongType.Boolean;
 
+            case StringLiteral:
+                result.AddNodeType(expression, KongType.String);
+                return KongType.String;
+
             case InfixExpression infix:
                 return InferInfix(infix, result, env);
 
@@ -122,12 +126,6 @@ public class TypeInferer
                 return KongType.Boolean;
 
             case IfExpression ifExpr:
-                if (ifExpr.Alternative is null)
-                {
-                    result.AddNodeType(expression, KongType.Void);
-                    return KongType.Void;
-                }
-
                 var conditionType = InferExpression(ifExpr.Condition, result, env);
                 if (conditionType != KongType.Boolean)
                 {
@@ -137,6 +135,12 @@ public class TypeInferer
                 }
 
                 var thenType = InferStatement(ifExpr.Consequence, result, env);
+
+                if (ifExpr.Alternative is null)
+                {
+                    result.AddNodeType(expression, KongType.Void);
+                    return KongType.Void;
+                }
                 var elseType = InferStatement(ifExpr.Alternative, result, env);
 
                 if (thenType != elseType)
@@ -167,8 +171,27 @@ public class TypeInferer
     {
         var leftType = InferExpression(infix.Left, result, env);
         var rightType = InferExpression(infix.Right, result, env);
+
+        if (infix.Operator == "+")
+        {
+            if (leftType == KongType.String && rightType == KongType.String)
+            {
+                result.AddNodeType(infix, KongType.String);
+                return KongType.String;
+            }
+
+            if (leftType == KongType.Int64 && rightType == KongType.Int64)
+            {
+                result.AddNodeType(infix, KongType.Int64);
+                return KongType.Int64;
+            }
+
+            result.AddError($"Type error: cannot apply operator '+' to types {leftType} and {rightType}");
+            result.AddNodeType(infix, KongType.Unknown);
+            return KongType.Unknown;
+        }
         
-        if (infix.Operator is "+" or "-" or "*" or "/")
+        if (infix.Operator is "-" or "*" or "/")
         {
             if (leftType != KongType.Int64 || rightType != KongType.Int64)
             {

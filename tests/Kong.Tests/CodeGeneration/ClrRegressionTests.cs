@@ -95,6 +95,16 @@ public class ClrRegressionTests
         Assert.Equal(expected, clrOutput);
     }
 
+    [Theory]
+    [InlineData("\"monkey\"", "monkey")]
+    [InlineData("\"mon\" + \"key\"", "monkey")]
+    [InlineData("\"mon\" + \"key\" + \"banana\"", "monkeybanana")]
+    public async Task TestStringExpressions(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
     private static async Task<string> CompileAndRunOnClr(string source)
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-vm-port-{Guid.NewGuid():N}");

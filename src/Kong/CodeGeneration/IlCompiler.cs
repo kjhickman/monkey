@@ -43,6 +43,10 @@ public class IlCompiler
                 writeLine = module.ImportReference(
                     typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
                 break;
+            case KongType.String:
+                writeLine = module.ImportReference(
+                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
+                break;
             default:
                 return $"Unsupported program result type: {resultType}";
         }
@@ -63,13 +67,29 @@ public class IlCompiler
                 il.Emit(boolLit.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                 return null;
 
+            case StringLiteral strLit:
+                il.Emit(OpCodes.Ldstr, strLit.Value);
+                return null;
+
             case InfixExpression plus when plus.Operator == "+":
                 var leftErr = EmitExpression(plus.Left, types, il, module, mainMethod, locals);
                 if (leftErr is not null) return leftErr;
                 var rightErr = EmitExpression(plus.Right, types, il, module, mainMethod, locals);
                 if (rightErr is not null) return rightErr;
-                il.Emit(OpCodes.Add);
-                return null;
+                var plusType = types.GetNodeType(plus);
+                switch (plusType)
+                {
+                    case KongType.Int64:
+                        il.Emit(OpCodes.Add);
+                        return null;
+                    case KongType.String:
+                        var concatMethod = module.ImportReference(
+                            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
+                        il.Emit(OpCodes.Call, concatMethod);
+                        return null;
+                    default:
+                        return $"Unsupported type for + operator: {plusType}";
+                }
 
             case InfixExpression minus when minus.Operator == "-":
                 var leftErr2 = EmitExpression(minus.Left, types, il, module, mainMethod, locals);
@@ -303,6 +323,7 @@ public class IlCompiler
                 KongType.Int64 => module.TypeSystem.Int64,
                 KongType.Boolean => module.TypeSystem.Boolean,
                 KongType.Void => module.TypeSystem.Object,
+                KongType.String => module.TypeSystem.String,
                 _ => module.TypeSystem.Object,
             };
 

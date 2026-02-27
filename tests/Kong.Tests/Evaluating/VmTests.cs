@@ -358,11 +358,11 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new global::Kong.CodeGeneration.Compiler();
+            var compiler = new Compiler();
             var compErr = compiler.Compile(program);
             Assert.Null(compErr);
 
-            var vm = new global::Kong.Evaluating.Vm(compiler.GetBytecode());
+            var vm = new Kong.Evaluating.Vm(compiler.GetBytecode());
             var err = vm.Run();
             Assert.NotNull(err);
             Assert.Equal(tt.ExpectedError, err);
@@ -546,11 +546,11 @@ public class VmTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new global::Kong.CodeGeneration.Compiler();
+            var compiler = new Compiler();
             var compErr = compiler.Compile(program);
             Assert.Null(compErr);
 
-            var vm = new global::Kong.Evaluating.Vm(compiler.GetBytecode());
+            var vm = new Kong.Evaluating.Vm(compiler.GetBytecode());
             var err = vm.Run();
             Assert.Null(err);
 
@@ -559,10 +559,10 @@ public class VmTests
         }
     }
 
-    private static global::Kong.Parsing.Program Parse(string input)
+    private static Kong.Parsing.Program Parse(string input)
     {
-        var l = new global::Kong.Lexing.Lexer(input);
-        var p = new global::Kong.Parsing.Parser(l);
+        var l = new Kong.Lexing.Lexer(input);
+        var p = new Kong.Parsing.Parser(l);
         return p.ParseProgram();
     }
 

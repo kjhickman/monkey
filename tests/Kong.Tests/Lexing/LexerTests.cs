@@ -124,7 +124,7 @@ public class LexerTests
             (TokenType.Eof, ""),
         };
 
-        var l = new global::Kong.Lexing.Lexer(input);
+        var l = new Lexer(input);
 
         for (var i = 0; i < tests.Length; i++)
         {

@@ -6,4 +6,5 @@ public enum KongType
     Void,
     Int64,
     Boolean,
+    String,
 }

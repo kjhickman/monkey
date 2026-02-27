@@ -557,7 +557,7 @@ public class CompilerTests
     [Fact]
     public void TestCompilerScopes()
     {
-        var compiler = new global::Kong.CodeGeneration.Compiler();
+        var compiler = new Compiler();
         Assert.Equal(0, compiler.ScopeIndex);
 
         var globalSymbolTable = compiler.SymbolTable;
@@ -841,7 +841,7 @@ public class CompilerTests
         foreach (var tt in tests)
         {
             var program = Parse(tt.Input);
-            var compiler = new global::Kong.CodeGeneration.Compiler();
+            var compiler = new Compiler();
             var err = compiler.Compile(program);
             Assert.Null(err);
 
@@ -852,10 +852,10 @@ public class CompilerTests
         }
     }
 
-    private static global::Kong.Parsing.Program Parse(string input)
+    private static Kong.Parsing.Program Parse(string input)
     {
-        var l = new global::Kong.Lexing.Lexer(input);
-        var p = new global::Kong.Parsing.Parser(l);
+        var l = new Kong.Lexing.Lexer(input);
+        var p = new Kong.Parsing.Parser(l);
         return p.ParseProgram();
     }
 
