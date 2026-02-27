@@ -197,6 +197,37 @@ public class IlCompiler
             case IfExpression ifExpr:
                 return EmitIfExpression(ifExpr, types, il, module, mainMethod, locals);
 
+            case IndexExpression indexExpr:
+                var leftType = types.GetNodeType(indexExpr.Left);
+                if (leftType is not KongType.Array and not KongType.Unknown)
+                {
+                    return $"Index operator not supported for type: {leftType}";
+                }
+
+                var indexType = types.GetNodeType(indexExpr.Index);
+                if (indexType is not KongType.Int64 and not KongType.Unknown)
+                {
+                    return $"Array index must be Int64, got: {indexType}";
+                }
+
+                var indexedErr = EmitExpression(indexExpr.Left, types, il, module, mainMethod, locals);
+                if (indexedErr is not null)
+                {
+                    return indexedErr;
+                }
+
+                il.Emit(OpCodes.Castclass, new ArrayType(module.TypeSystem.Object));
+
+                var indexErr = EmitExpression(indexExpr.Index, types, il, module, mainMethod, locals);
+                if (indexErr is not null)
+                {
+                    return indexErr;
+                }
+
+                il.Emit(OpCodes.Conv_I4);
+                il.Emit(OpCodes.Ldelem_Ref);
+                return null;
+
             default:
                 return $"Unsupported expression type: {expression.GetType().Name}";
         }
@@ -406,6 +437,7 @@ public class IlCompiler
                 KongType.Boolean => module.TypeSystem.Boolean,
                 KongType.Void => module.TypeSystem.Object,
                 KongType.String => module.TypeSystem.String,
+                KongType.Array => new ArrayType(module.TypeSystem.Object),
                 _ => module.TypeSystem.Object,
             };
 

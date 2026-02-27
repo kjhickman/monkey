@@ -180,6 +180,26 @@ public class TypeInferer
                 result.AddNodeType(expression, thenType);
                 return thenType;
 
+            case IndexExpression indexExpr:
+                var leftType = InferExpression(indexExpr.Left, result, env);
+                if (leftType is not KongType.Array and not KongType.Unknown)
+                {
+                    result.AddError($"Type error: index operator not supported for type {leftType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+
+                var indexType = InferExpression(indexExpr.Index, result, env);
+                if (indexType is not KongType.Int64 and not KongType.Unknown)
+                {
+                    result.AddError($"Type error: array index must be Int64, but got {indexType}");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+
+                result.AddNodeType(expression, KongType.Unknown);
+                return KongType.Unknown;
+
             default:
                 result.AddError($"Unsupported expression: {expression.GetType().Name}");
                 result.AddNodeType(expression, KongType.Unknown);
