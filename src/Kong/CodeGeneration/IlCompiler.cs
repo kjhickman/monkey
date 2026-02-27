@@ -7,341 +7,130 @@ namespace Kong.CodeGeneration;
 
 public class IlCompiler
 {
+    private sealed class EmitContext
+    {
+        public EmitContext(TypeInferenceResult types, ModuleDefinition module, MethodDefinition mainMethod)
+        {
+            Types = types;
+            Module = module;
+            MainMethod = mainMethod;
+            Il = mainMethod.Body.GetILProcessor();
+            Locals = [];
+            ObjectArrayType = new ArrayType(module.TypeSystem.Object);
+        }
+
+        public TypeInferenceResult Types { get; }
+        public ModuleDefinition Module { get; }
+        public MethodDefinition MainMethod { get; }
+        public ILProcessor Il { get; }
+        public Dictionary<string, VariableDefinition> Locals { get; }
+        public ArrayType ObjectArrayType { get; }
+    }
+
     public string? CompileProgramToMain(Program program, TypeInferenceResult types, ModuleDefinition module, MethodDefinition mainMethod)
     {
-        var il = mainMethod.Body.GetILProcessor();
-        var locals = new Dictionary<string, VariableDefinition>();
+        var context = new EmitContext(types, module, mainMethod);
         var lastPushesValue = false;
 
         for (int i = 0; i < program.Statements.Count; i++)
         {
-            (var err, var pushesValue) = EmitStatement(program.Statements[i], types, il, module, mainMethod, locals);
-            if (err is not null) return err;
+            (var err, var pushesValue) = EmitStatement(program.Statements[i], context);
+            if (err is not null)
+            {
+                return err;
+            }
 
             lastPushesValue = pushesValue;
 
             if (i < program.Statements.Count - 1 && pushesValue)
             {
-                il.Emit(OpCodes.Pop);
+                context.Il.Emit(OpCodes.Pop);
             }
         }
 
-        if (program.Statements.Count == 0 || !lastPushesValue)
-        {
-            return "Program must end with an expression that evaluates to a value";
-        }
-
-        var resultType = types.GetNodeType(program);
-        MethodReference writeLine;
-        switch (resultType)
-        {
-            case KongType.Boolean:
-                writeLine = module.ImportReference(
-                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])!);
-                break;
-            case KongType.Int64:
-                writeLine = module.ImportReference(
-                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!);
-                break;
-            case KongType.String:
-                writeLine = module.ImportReference(
-                    typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
-                break;
-            default:
-                EmitWriteLineForObjectResult(il, module, mainMethod);
-                il.Emit(OpCodes.Ret);
-                return null;
-        }
-        il.Emit(OpCodes.Call, writeLine);
-        il.Emit(OpCodes.Ret);
+        EmitProgramResultAndReturn(program, lastPushesValue, context);
         return null;
     }
 
-    private string? EmitExpression(IExpression expression, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitExpression(IExpression expression, EmitContext context)
     {
-        switch (expression)
+        return expression switch
         {
-            case IntegerLiteral intLit:
-                il.Emit(OpCodes.Ldc_I8, intLit.Value);
-                return null;
-
-            case BooleanLiteral boolLit:
-                il.Emit(boolLit.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-                return null;
-
-            case StringLiteral strLit:
-                il.Emit(OpCodes.Ldstr, strLit.Value);
-                return null;
-
-            case ArrayLiteral arrayLit:
-                il.Emit(OpCodes.Ldc_I4, arrayLit.Elements.Count);
-                il.Emit(OpCodes.Newarr, module.TypeSystem.Object);
-
-                for (var i = 0; i < arrayLit.Elements.Count; i++)
-                {
-                    il.Emit(OpCodes.Dup);
-                    il.Emit(OpCodes.Ldc_I4, i);
-
-                    var elementErr = EmitExpression(arrayLit.Elements[i], types, il, module, mainMethod, locals);
-                    if (elementErr is not null)
-                    {
-                        return elementErr;
-                    }
-
-                    var elementType = types.GetNodeType(arrayLit.Elements[i]);
-                    BoxIfNeeded(elementType, il, module);
-                    il.Emit(OpCodes.Stelem_Ref);
-                }
-
-                return null;
-
-            case InfixExpression plus when plus.Operator == "+":
-                var leftErr = EmitExpression(plus.Left, types, il, module, mainMethod, locals);
-                if (leftErr is not null) return leftErr;
-                var rightErr = EmitExpression(plus.Right, types, il, module, mainMethod, locals);
-                if (rightErr is not null) return rightErr;
-                var plusType = types.GetNodeType(plus);
-                switch (plusType)
-                {
-                    case KongType.Int64:
-                        il.Emit(OpCodes.Add);
-                        return null;
-                    case KongType.String:
-                        var concatMethod = module.ImportReference(
-                            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
-                        il.Emit(OpCodes.Call, concatMethod);
-                        return null;
-                    default:
-                        return $"Unsupported type for + operator: {plusType}";
-                }
-
-            case InfixExpression minus when minus.Operator == "-":
-                var leftErr2 = EmitExpression(minus.Left, types, il, module, mainMethod, locals);
-                if (leftErr2 is not null) return leftErr2;
-                var rightErr2 = EmitExpression(minus.Right, types, il, module, mainMethod, locals);
-                if (rightErr2 is not null) return rightErr2;
-                il.Emit(OpCodes.Sub);
-                return null;
-
-            case InfixExpression times when times.Operator == "*":
-                var leftErr3 = EmitExpression(times.Left, types, il, module, mainMethod, locals);
-                if (leftErr3 is not null) return leftErr3;
-                var rightErr3 = EmitExpression(times.Right, types, il, module, mainMethod, locals);
-                if (rightErr3 is not null) return rightErr3;
-                il.Emit(OpCodes.Mul);
-                return null;
-
-            case InfixExpression div when div.Operator == "/":
-                var leftErr4 = EmitExpression(div.Left, types, il, module, mainMethod, locals);
-                if (leftErr4 is not null) return leftErr4;
-                var rightErr4 = EmitExpression(div.Right, types, il, module, mainMethod, locals);
-                if (rightErr4 is not null) return rightErr4;
-                il.Emit(OpCodes.Div);
-                return null;
-
-            case InfixExpression eq when eq.Operator == "==":
-                var leftErr5 = EmitExpression(eq.Left, types, il, module, mainMethod, locals);
-                if (leftErr5 is not null) return leftErr5;
-                var rightErr5 = EmitExpression(eq.Right, types, il, module, mainMethod, locals);
-                if (rightErr5 is not null) return rightErr5;
-                il.Emit(OpCodes.Ceq);
-                return null;
-
-            case InfixExpression neq when neq.Operator == "!=":
-                var leftErr6 = EmitExpression(neq.Left, types, il, module, mainMethod, locals);
-                if (leftErr6 is not null) return leftErr6;
-                var rightErr6 = EmitExpression(neq.Right, types, il, module, mainMethod, locals);
-                if (rightErr6 is not null) return rightErr6;
-                il.Emit(OpCodes.Ceq);
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Ceq);
-                return null;
-
-            case InfixExpression lt when lt.Operator == "<":
-                var leftErr7 = EmitExpression(lt.Left, types, il, module, mainMethod, locals);
-                if (leftErr7 is not null) return leftErr7;
-                var rightErr7 = EmitExpression(lt.Right, types, il, module, mainMethod, locals);
-                if (rightErr7 is not null) return rightErr7;
-                il.Emit(OpCodes.Clt);
-                return null;
-
-            case InfixExpression gt when gt.Operator == ">":
-                var leftErr8 = EmitExpression(gt.Left, types, il, module, mainMethod, locals);
-                if (leftErr8 is not null) return leftErr8;
-                var rightErr8 = EmitExpression(gt.Right, types, il, module, mainMethod, locals);
-                if (rightErr8 is not null) return rightErr8;
-                il.Emit(OpCodes.Cgt);
-                return null;
-
-            case Identifier id:
-                if (!locals.TryGetValue(id.Value, out var local))
-                {
-                    return $"Undefined variable: {id.Value}";
-                }
-                il.Emit(OpCodes.Ldloc, local);
-                return null;
-
-            case PrefixExpression prefix when prefix.Operator == "-":
-                var operandErr = EmitExpression(prefix.Right, types, il, module, mainMethod, locals);
-                if (operandErr is not null) return operandErr;
-                il.Emit(OpCodes.Neg);
-                return null;
-
-            case PrefixExpression prefix when prefix.Operator == "!":
-                var operandErr2 = EmitExpression(prefix.Right, types, il, module, mainMethod, locals);
-                if (operandErr2 is not null) return operandErr2;
-                il.Emit(OpCodes.Ldc_I4_0);
-                il.Emit(OpCodes.Ceq);
-                return null;
-
-            case IfExpression ifExpr:
-                return EmitIfExpression(ifExpr, types, il, module, mainMethod, locals);
-
-            case IndexExpression indexExpr:
-                var leftType = types.GetNodeType(indexExpr.Left);
-                if (leftType is not KongType.Array and not KongType.Unknown)
-                {
-                    return $"Index operator not supported for type: {leftType}";
-                }
-
-                var indexType = types.GetNodeType(indexExpr.Index);
-                if (indexType is not KongType.Int64 and not KongType.Unknown)
-                {
-                    return $"Array index must be Int64, got: {indexType}";
-                }
-
-                var indexedErr = EmitExpression(indexExpr.Left, types, il, module, mainMethod, locals);
-                if (indexedErr is not null)
-                {
-                    return indexedErr;
-                }
-
-                il.Emit(OpCodes.Castclass, new ArrayType(module.TypeSystem.Object));
-
-                var indexErr = EmitExpression(indexExpr.Index, types, il, module, mainMethod, locals);
-                if (indexErr is not null)
-                {
-                    return indexErr;
-                }
-
-                il.Emit(OpCodes.Conv_I4);
-                il.Emit(OpCodes.Ldelem_Ref);
-                return null;
-
-            default:
-                return $"Unsupported expression type: {expression.GetType().Name}";
-        }
+            Identifier id => EmitIdentifier(id, context),
+            IntegerLiteral intLit => EmitIntegerLiteral(intLit, context),
+            BooleanLiteral boolLit => EmitBooleanLiteral(boolLit, context),
+            StringLiteral strLit => EmitStringLiteral(strLit, context),
+            ArrayLiteral arrayLit => EmitArrayLiteral(arrayLit, context),
+            InfixExpression plus when plus.Operator == "+" => EmitPlusExpression(plus, context),
+            InfixExpression minus when minus.Operator == "-" => EmitBinaryExpression(minus, OpCodes.Sub, context),
+            InfixExpression times when times.Operator == "*" => EmitBinaryExpression(times, OpCodes.Mul, context),
+            InfixExpression div when div.Operator == "/" => EmitBinaryExpression(div, OpCodes.Div, context),
+            InfixExpression eq when eq.Operator == "==" => EmitBinaryExpression(eq, OpCodes.Ceq, context),
+            InfixExpression neq when neq.Operator == "!=" => EmitNotEqualExpression(neq, context),
+            InfixExpression lt when lt.Operator == "<" => EmitBinaryExpression(lt, OpCodes.Clt, context),
+            InfixExpression gt when gt.Operator == ">" => EmitBinaryExpression(gt, OpCodes.Cgt, context),
+            PrefixExpression prefix when prefix.Operator == "-" => EmitNegatePrefix(prefix, context),
+            PrefixExpression prefix when prefix.Operator == "!" => EmitBangPrefix(prefix, context),
+            IfExpression ifExpr => EmitIfExpression(ifExpr, context),
+            IndexExpression indexExpr => EmitIndexExpression(indexExpr, context),
+            _ => $"Unsupported expression type: {expression.GetType().Name}",
+        };
     }
 
-    private static void BoxIfNeeded(KongType type, ILProcessor il, ModuleDefinition module)
-    {
-        switch (type)
-        {
-            case KongType.Int64:
-                il.Emit(OpCodes.Box, module.TypeSystem.Int64);
-                return;
-            case KongType.Boolean:
-                il.Emit(OpCodes.Box, module.TypeSystem.Boolean);
-                return;
-            default:
-                return;
-        }
-    }
-
-    private static void EmitWriteLineForObjectResult(ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod)
-    {
-        var objectLocal = new VariableDefinition(module.TypeSystem.Object);
-        var objectArrayType = new ArrayType(module.TypeSystem.Object);
-        var arrayLocal = new VariableDefinition(objectArrayType);
-        mainMethod.Body.Variables.Add(objectLocal);
-        mainMethod.Body.Variables.Add(arrayLocal);
-
-        var writeLineObject = module.ImportReference(
-            typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(object)])!);
-        var writeLineString = module.ImportReference(
-            typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
-        var stringJoinObjectArray = module.ImportReference(
-            typeof(string).GetMethod(nameof(string.Join), [typeof(string), typeof(object[])])!);
-        var stringConcatThree = module.ImportReference(
-            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string)])!);
-
-        var notArrayLabel = il.Create(OpCodes.Nop);
-        var endLabel = il.Create(OpCodes.Nop);
-
-        il.Emit(OpCodes.Stloc, objectLocal);
-        il.Emit(OpCodes.Ldloc, objectLocal);
-        il.Emit(OpCodes.Isinst, objectArrayType);
-        il.Emit(OpCodes.Stloc, arrayLocal);
-        il.Emit(OpCodes.Ldloc, arrayLocal);
-        il.Emit(OpCodes.Brfalse, notArrayLabel);
-
-        il.Emit(OpCodes.Ldstr, "[");
-        il.Emit(OpCodes.Ldstr, ", ");
-        il.Emit(OpCodes.Ldloc, arrayLocal);
-        il.Emit(OpCodes.Call, stringJoinObjectArray);
-        il.Emit(OpCodes.Ldstr, "]");
-        il.Emit(OpCodes.Call, stringConcatThree);
-        il.Emit(OpCodes.Call, writeLineString);
-        il.Emit(OpCodes.Br, endLabel);
-
-        il.Append(notArrayLabel);
-        il.Emit(OpCodes.Ldloc, objectLocal);
-        il.Emit(OpCodes.Call, writeLineObject);
-
-        il.Append(endLabel);
-    }
-
-    private string? EmitIfExpression(IfExpression ifExpr, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitIfExpression(IfExpression ifExpr, EmitContext context)
     {
         if (ifExpr.Alternative is null)
         {
             return "If expression without else cannot be used as a value";
         }
 
-        var conditionErr = EmitExpression(ifExpr.Condition, types, il, module, mainMethod, locals);
+        var conditionErr = EmitExpression(ifExpr.Condition, context);
         if (conditionErr is not null)
         {
             return conditionErr;
         }
 
-        var elseLabel = il.Create(OpCodes.Nop);
-        var endLabel = il.Create(OpCodes.Nop);
+        var elseLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
 
-        il.Emit(OpCodes.Brfalse, elseLabel);
+        context.Il.Emit(OpCodes.Brfalse, elseLabel);
 
-        var thenErr = EmitBlockExpression(ifExpr.Consequence, types, il, module, mainMethod, locals);
+        var thenErr = EmitBlockExpression(ifExpr.Consequence, context);
         if (thenErr is not null)
         {
             return thenErr;
         }
 
-        il.Emit(OpCodes.Br, endLabel);
-        il.Append(elseLabel);
+        context.Il.Emit(OpCodes.Br, endLabel);
+        context.Il.Append(elseLabel);
 
-        var elseErr = EmitBlockExpression(ifExpr.Alternative, types, il, module, mainMethod, locals);
+        var elseErr = EmitBlockExpression(ifExpr.Alternative, context);
         if (elseErr is not null)
         {
             return elseErr;
         }
 
-        il.Append(endLabel);
+        context.Il.Append(endLabel);
         return null;
     }
 
-    private string? EmitBlockExpression(BlockStatement block, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitBlockExpression(BlockStatement block, EmitContext context)
     {
         var lastPushesValue = false;
 
         for (int i = 0; i < block.Statements.Count; i++)
         {
-            (var err, var pushesValue) = EmitStatement(block.Statements[i], types, il, module, mainMethod, locals);
-            if (err is not null) return err;
+            (var err, var pushesValue) = EmitStatement(block.Statements[i], context);
+            if (err is not null)
+            {
+                return err;
+            }
 
             lastPushesValue = pushesValue;
 
             if (i < block.Statements.Count - 1 && pushesValue)
             {
-                il.Emit(OpCodes.Pop);
+                context.Il.Emit(OpCodes.Pop);
             }
         }
 
@@ -353,11 +142,11 @@ public class IlCompiler
         return null;
     }
 
-    private string? EmitBlockStatement(BlockStatement block, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitBlockStatement(BlockStatement block, EmitContext context)
     {
         for (int i = 0; i < block.Statements.Count; i++)
         {
-            (var err, var pushesValue) = EmitStatement(block.Statements[i], types, il, module, mainMethod, locals);
+            (var err, var pushesValue) = EmitStatement(block.Statements[i], context);
             if (err is not null)
             {
                 return err;
@@ -365,54 +154,54 @@ public class IlCompiler
 
             if (pushesValue)
             {
-                il.Emit(OpCodes.Pop);
+                context.Il.Emit(OpCodes.Pop);
             }
         }
 
         return null;
     }
 
-    private string? EmitIfStatement(IfExpression ifExpr, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitIfStatement(IfExpression ifExpr, EmitContext context)
     {
-        var conditionErr = EmitExpression(ifExpr.Condition, types, il, module, mainMethod, locals);
+        var conditionErr = EmitExpression(ifExpr.Condition, context);
         if (conditionErr is not null)
         {
             return conditionErr;
         }
 
-        var endLabel = il.Create(OpCodes.Nop);
-        il.Emit(OpCodes.Brfalse, endLabel);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+        context.Il.Emit(OpCodes.Brfalse, endLabel);
 
-        var thenErr = EmitBlockStatement(ifExpr.Consequence, types, il, module, mainMethod, locals);
+        var thenErr = EmitBlockStatement(ifExpr.Consequence, context);
         if (thenErr is not null)
         {
             return thenErr;
         }
 
-        il.Append(endLabel);
+        context.Il.Append(endLabel);
         return null;
     }
 
-    private (string? err, bool pushesValue) EmitStatement(IStatement statement, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private (string? err, bool pushesValue) EmitStatement(IStatement statement, EmitContext context)
     {
         switch (statement)
         {
             case ExpressionStatement { Expression: IfExpression ifExpr } when ifExpr.Alternative is null:
-                var ifStmtErr = EmitIfStatement(ifExpr, types, il, module, mainMethod, locals);
+                var ifStmtErr = EmitIfStatement(ifExpr, context);
                 return (ifStmtErr, false);
 
             case ExpressionStatement es when es.Expression is not null:
-                var err = EmitExpression(es.Expression, types, il, module, mainMethod, locals);
+                var err = EmitExpression(es.Expression, context);
                 if (err is not null)
                 {
                     return (err, false);
                 }
 
-                var expressionType = types.GetNodeType(es.Expression);
+                var expressionType = context.Types.GetNodeType(es.Expression);
                 return (null, expressionType != KongType.Void);
 
             case LetStatement ls when ls.Value is not null:
-                var letErr = EmitLetStatement(ls, types, il, module, mainMethod, locals);
+                var letErr = EmitLetStatement(ls, context);
                 return (letErr, false);
 
             default:
@@ -420,33 +209,319 @@ public class IlCompiler
         }
     }
 
-    private string? EmitLetStatement(LetStatement ls, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    private string? EmitLetStatement(LetStatement ls, EmitContext context)
     {
-        var valueErr = EmitExpression(ls.Value!, types, il, module, mainMethod, locals);
+        var valueErr = EmitExpression(ls.Value!, context);
         if (valueErr is not null)
         {
             return valueErr;
         }
 
-        if (!locals.TryGetValue(ls.Name.Value, out var local))
+        if (!context.Locals.TryGetValue(ls.Name.Value, out var local))
         {
-            var valueType = types.GetNodeType(ls.Value!);
-            TypeReference localType = valueType switch
-            {
-                KongType.Int64 => module.TypeSystem.Int64,
-                KongType.Boolean => module.TypeSystem.Boolean,
-                KongType.Void => module.TypeSystem.Object,
-                KongType.String => module.TypeSystem.String,
-                KongType.Array => new ArrayType(module.TypeSystem.Object),
-                _ => module.TypeSystem.Object,
-            };
+            var valueType = context.Types.GetNodeType(ls.Value!);
+            var localType = ResolveLocalType(valueType, context.Module);
 
             local = new VariableDefinition(localType);
-            mainMethod.Body.Variables.Add(local);
-            locals[ls.Name.Value] = local;
+            context.MainMethod.Body.Variables.Add(local);
+            context.Locals[ls.Name.Value] = local;
         }
 
-        il.Emit(OpCodes.Stloc, local);
+        context.Il.Emit(OpCodes.Stloc, local);
         return null;
+    }
+
+    private static TypeReference ResolveLocalType(KongType valueType, ModuleDefinition module)
+    {
+        return valueType switch
+        {
+            KongType.Int64 => module.TypeSystem.Int64,
+            KongType.Boolean => module.TypeSystem.Boolean,
+            KongType.Void => module.TypeSystem.Object,
+            KongType.String => module.TypeSystem.String,
+            KongType.Array => new ArrayType(module.TypeSystem.Object),
+            _ => module.TypeSystem.Object,
+        };
+    }
+
+    private static string? EmitIntegerLiteral(IntegerLiteral literal, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Ldc_I8, literal.Value);
+        return null;
+    }
+
+    private static string? EmitBooleanLiteral(BooleanLiteral literal, EmitContext context)
+    {
+        context.Il.Emit(literal.Value ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
+        return null;
+    }
+
+    private static string? EmitStringLiteral(StringLiteral literal, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Ldstr, literal.Value);
+        return null;
+    }
+
+    private string? EmitArrayLiteral(ArrayLiteral arrayLiteral, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Ldc_I4, arrayLiteral.Elements.Count);
+        context.Il.Emit(OpCodes.Newarr, context.Module.TypeSystem.Object);
+
+        for (var i = 0; i < arrayLiteral.Elements.Count; i++)
+        {
+            context.Il.Emit(OpCodes.Dup);
+            context.Il.Emit(OpCodes.Ldc_I4, i);
+
+            var elementErr = EmitExpression(arrayLiteral.Elements[i], context);
+            if (elementErr is not null)
+            {
+                return elementErr;
+            }
+
+            EmitBoxIfNeeded(context.Types.GetNodeType(arrayLiteral.Elements[i]), context);
+            context.Il.Emit(OpCodes.Stelem_Ref);
+        }
+
+        return null;
+    }
+
+    private string? EmitPlusExpression(InfixExpression expression, EmitContext context)
+    {
+        var operandsErr = EmitBinaryOperands(expression, context);
+        if (operandsErr is not null)
+        {
+            return operandsErr;
+        }
+
+        var plusType = context.Types.GetNodeType(expression);
+        switch (plusType)
+        {
+            case KongType.Int64:
+                context.Il.Emit(OpCodes.Add);
+                return null;
+            case KongType.String:
+                var concatMethod = context.Module.ImportReference(
+                    typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
+                context.Il.Emit(OpCodes.Call, concatMethod);
+                return null;
+            default:
+                return $"Unsupported type for + operator: {plusType}";
+        }
+    }
+
+    private string? EmitBinaryExpression(InfixExpression expression, OpCode opcode, EmitContext context)
+    {
+        var operandsErr = EmitBinaryOperands(expression, context);
+        if (operandsErr is not null)
+        {
+            return operandsErr;
+        }
+
+        context.Il.Emit(opcode);
+        return null;
+    }
+
+    private string? EmitNotEqualExpression(InfixExpression expression, EmitContext context)
+    {
+        var operandsErr = EmitBinaryOperands(expression, context);
+        if (operandsErr is not null)
+        {
+            return operandsErr;
+        }
+
+        context.Il.Emit(OpCodes.Ceq);
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Emit(OpCodes.Ceq);
+        return null;
+    }
+
+    private string? EmitBinaryOperands(InfixExpression expression, EmitContext context)
+    {
+        var leftErr = EmitExpression(expression.Left, context);
+        if (leftErr is not null)
+        {
+            return leftErr;
+        }
+
+        return EmitExpression(expression.Right, context);
+    }
+
+    private static string? EmitIdentifier(Identifier identifier, EmitContext context)
+    {
+        if (!context.Locals.TryGetValue(identifier.Value, out var local))
+        {
+            return $"Undefined variable: {identifier.Value}";
+        }
+
+        context.Il.Emit(OpCodes.Ldloc, local);
+        return null;
+    }
+
+    private string? EmitNegatePrefix(PrefixExpression expression, EmitContext context)
+    {
+        var operandErr = EmitExpression(expression.Right, context);
+        if (operandErr is not null)
+        {
+            return operandErr;
+        }
+
+        context.Il.Emit(OpCodes.Neg);
+        return null;
+    }
+
+    private string? EmitBangPrefix(PrefixExpression expression, EmitContext context)
+    {
+        var operandErr = EmitExpression(expression.Right, context);
+        if (operandErr is not null)
+        {
+            return operandErr;
+        }
+
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Emit(OpCodes.Ceq);
+        return null;
+    }
+
+    private string? EmitIndexExpression(IndexExpression indexExpression, EmitContext context)
+    {
+        var leftType = context.Types.GetNodeType(indexExpression.Left);
+        if (leftType is not KongType.Array and not KongType.Unknown)
+        {
+            return $"Index operator not supported for type: {leftType}";
+        }
+
+        var indexType = context.Types.GetNodeType(indexExpression.Index);
+        if (indexType is not KongType.Int64 and not KongType.Unknown)
+        {
+            return $"Array index must be Int64, got: {indexType}";
+        }
+
+        var indexedErr = EmitExpression(indexExpression.Left, context);
+        if (indexedErr is not null)
+        {
+            return indexedErr;
+        }
+
+        EmitCastToObjectArray(context);
+
+        var indexErr = EmitExpression(indexExpression.Index, context);
+        if (indexErr is not null)
+        {
+            return indexErr;
+        }
+
+        EmitConvertInt64ToInt32(context);
+        context.Il.Emit(OpCodes.Ldelem_Ref);
+        return null;
+    }
+
+    private static void EmitProgramResultAndReturn(Program program, bool lastPushesValue, EmitContext context)
+    {
+        if (program.Statements.Count == 0 || !lastPushesValue)
+        {
+            EmitWriteLineString(context, "no value");
+            context.Il.Emit(OpCodes.Ret);
+            return;
+        }
+
+        var resultType = context.Types.GetNodeType(program);
+        if (!EmitWriteLineForTypedResult(resultType, context))
+        {
+            EmitWriteLineForObjectResult(context);
+        }
+
+        context.Il.Emit(OpCodes.Ret);
+    }
+
+    private static bool EmitWriteLineForTypedResult(KongType resultType, EmitContext context)
+    {
+        var writeLine = ResolveWriteLineMethod(resultType, context.Module);
+        if (writeLine is null)
+        {
+            return false;
+        }
+
+        context.Il.Emit(OpCodes.Call, writeLine);
+        return true;
+    }
+
+    private static MethodReference? ResolveWriteLineMethod(KongType resultType, ModuleDefinition module)
+    {
+        return resultType switch
+        {
+            KongType.Boolean => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])!),
+            KongType.Int64 => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!),
+            KongType.String => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!),
+            _ => null,
+        };
+    }
+
+    private static void EmitWriteLineForObjectResult(EmitContext context)
+    {
+        var objectLocal = new VariableDefinition(context.Module.TypeSystem.Object);
+        var arrayLocal = new VariableDefinition(context.ObjectArrayType);
+        context.MainMethod.Body.Variables.Add(objectLocal);
+        context.MainMethod.Body.Variables.Add(arrayLocal);
+
+        var writeLineObject = context.Module.ImportReference(
+            typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(object)])!);
+        var stringJoinObjectArray = context.Module.ImportReference(
+            typeof(string).GetMethod(nameof(string.Join), [typeof(string), typeof(object[])])!);
+        var stringConcatThree = context.Module.ImportReference(
+            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string)])!);
+
+        var notArrayLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+
+        context.Il.Emit(OpCodes.Stloc, objectLocal);
+        context.Il.Emit(OpCodes.Ldloc, objectLocal);
+        context.Il.Emit(OpCodes.Isinst, context.ObjectArrayType);
+        context.Il.Emit(OpCodes.Stloc, arrayLocal);
+        context.Il.Emit(OpCodes.Ldloc, arrayLocal);
+        context.Il.Emit(OpCodes.Brfalse, notArrayLabel);
+
+        context.Il.Emit(OpCodes.Ldstr, "[");
+        context.Il.Emit(OpCodes.Ldstr, ", ");
+        context.Il.Emit(OpCodes.Ldloc, arrayLocal);
+        context.Il.Emit(OpCodes.Call, stringJoinObjectArray);
+        context.Il.Emit(OpCodes.Ldstr, "]");
+        context.Il.Emit(OpCodes.Call, stringConcatThree);
+        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module)!);
+        context.Il.Emit(OpCodes.Br, endLabel);
+
+        context.Il.Append(notArrayLabel);
+        context.Il.Emit(OpCodes.Ldloc, objectLocal);
+        context.Il.Emit(OpCodes.Call, writeLineObject);
+
+        context.Il.Append(endLabel);
+    }
+
+    private static void EmitWriteLineString(EmitContext context, string value)
+    {
+        context.Il.Emit(OpCodes.Ldstr, value);
+        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module)!);
+    }
+
+    private static void EmitBoxIfNeeded(KongType type, EmitContext context)
+    {
+        switch (type)
+        {
+            case KongType.Int64:
+                context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Int64);
+                break;
+            case KongType.Boolean:
+                context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Boolean);
+                break;
+        }
+    }
+
+    private static void EmitCastToObjectArray(EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Castclass, context.ObjectArrayType);
+    }
+
+    private static void EmitConvertInt64ToInt32(EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Conv_I4);
     }
 }
