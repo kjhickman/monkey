@@ -60,6 +60,11 @@ public class VmClrOutputComparisonTests
         "if (true) { true } else { false }",
         "if (false) { true } else { false }",
         "let y = 4; let x = if (y > 3) { 5 } else { 10 }; x;",
+        "[]",
+        "[1, 2, 3]",
+        "[1 + 2, 3 * 4, 5 + 6]",
+        "let a = [1, 2, 3]; a;",
+        "let a = []; a;",
     ];
 
     [Theory]

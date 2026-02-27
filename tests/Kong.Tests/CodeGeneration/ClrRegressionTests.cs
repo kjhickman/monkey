@@ -105,6 +105,16 @@ public class ClrRegressionTests
         Assert.Equal(expected, clrOutput);
     }
 
+    [Theory]
+    [InlineData("[]", "[]")]
+    [InlineData("[1, 2, 3]", "[1, 2, 3]")]
+    [InlineData("[1 + 2, 3 * 4, 5 + 6]", "[3, 12, 11]")]
+    public async Task TestArrayLiterals(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
     private static async Task<string> CompileAndRunOnClr(string source)
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-vm-port-{Guid.NewGuid():N}");

@@ -90,6 +90,26 @@ public class TypeInferer
                 result.AddNodeType(expression, KongType.String);
                 return KongType.String;
 
+            case ArrayLiteral arrayLit:
+                if (arrayLit.Elements.Count == 0)
+                {
+                    result.AddNodeType(expression, KongType.Array);
+                    return KongType.Array;
+                }
+                var elementType = InferExpression(arrayLit.Elements[0], result, env);
+                foreach (var elem in arrayLit.Elements.Skip(1))
+                {
+                    var currentType = InferExpression(elem, result, env);
+                    if (currentType != elementType)
+                    {
+                        result.AddError($"Type error: array elements must have the same type, but found {elementType} and {currentType}");
+                        result.AddNodeType(expression, KongType.Unknown);
+                        return KongType.Unknown;
+                    }
+                }
+                result.AddNodeType(expression, KongType.Array);
+                return KongType.Array;
+
             case InfixExpression infix:
                 return InferInfix(infix, result, env);
 

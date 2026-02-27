@@ -48,7 +48,9 @@ public class IlCompiler
                     typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
                 break;
             default:
-                return $"Unsupported program result type: {resultType}";
+                EmitWriteLineForObjectResult(il, module, mainMethod);
+                il.Emit(OpCodes.Ret);
+                return null;
         }
         il.Emit(OpCodes.Call, writeLine);
         il.Emit(OpCodes.Ret);
@@ -69,6 +71,28 @@ public class IlCompiler
 
             case StringLiteral strLit:
                 il.Emit(OpCodes.Ldstr, strLit.Value);
+                return null;
+
+            case ArrayLiteral arrayLit:
+                il.Emit(OpCodes.Ldc_I4, arrayLit.Elements.Count);
+                il.Emit(OpCodes.Newarr, module.TypeSystem.Object);
+
+                for (var i = 0; i < arrayLit.Elements.Count; i++)
+                {
+                    il.Emit(OpCodes.Dup);
+                    il.Emit(OpCodes.Ldc_I4, i);
+
+                    var elementErr = EmitExpression(arrayLit.Elements[i], types, il, module, mainMethod, locals);
+                    if (elementErr is not null)
+                    {
+                        return elementErr;
+                    }
+
+                    var elementType = types.GetNodeType(arrayLit.Elements[i]);
+                    BoxIfNeeded(elementType, il, module);
+                    il.Emit(OpCodes.Stelem_Ref);
+                }
+
                 return null;
 
             case InfixExpression plus when plus.Operator == "+":
@@ -176,6 +200,64 @@ public class IlCompiler
             default:
                 return $"Unsupported expression type: {expression.GetType().Name}";
         }
+    }
+
+    private static void BoxIfNeeded(KongType type, ILProcessor il, ModuleDefinition module)
+    {
+        switch (type)
+        {
+            case KongType.Int64:
+                il.Emit(OpCodes.Box, module.TypeSystem.Int64);
+                return;
+            case KongType.Boolean:
+                il.Emit(OpCodes.Box, module.TypeSystem.Boolean);
+                return;
+            default:
+                return;
+        }
+    }
+
+    private static void EmitWriteLineForObjectResult(ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod)
+    {
+        var objectLocal = new VariableDefinition(module.TypeSystem.Object);
+        var objectArrayType = new ArrayType(module.TypeSystem.Object);
+        var arrayLocal = new VariableDefinition(objectArrayType);
+        mainMethod.Body.Variables.Add(objectLocal);
+        mainMethod.Body.Variables.Add(arrayLocal);
+
+        var writeLineObject = module.ImportReference(
+            typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(object)])!);
+        var writeLineString = module.ImportReference(
+            typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!);
+        var stringJoinObjectArray = module.ImportReference(
+            typeof(string).GetMethod(nameof(string.Join), [typeof(string), typeof(object[])])!);
+        var stringConcatThree = module.ImportReference(
+            typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string)])!);
+
+        var notArrayLabel = il.Create(OpCodes.Nop);
+        var endLabel = il.Create(OpCodes.Nop);
+
+        il.Emit(OpCodes.Stloc, objectLocal);
+        il.Emit(OpCodes.Ldloc, objectLocal);
+        il.Emit(OpCodes.Isinst, objectArrayType);
+        il.Emit(OpCodes.Stloc, arrayLocal);
+        il.Emit(OpCodes.Ldloc, arrayLocal);
+        il.Emit(OpCodes.Brfalse, notArrayLabel);
+
+        il.Emit(OpCodes.Ldstr, "[");
+        il.Emit(OpCodes.Ldstr, ", ");
+        il.Emit(OpCodes.Ldloc, arrayLocal);
+        il.Emit(OpCodes.Call, stringJoinObjectArray);
+        il.Emit(OpCodes.Ldstr, "]");
+        il.Emit(OpCodes.Call, stringConcatThree);
+        il.Emit(OpCodes.Call, writeLineString);
+        il.Emit(OpCodes.Br, endLabel);
+
+        il.Append(notArrayLabel);
+        il.Emit(OpCodes.Ldloc, objectLocal);
+        il.Emit(OpCodes.Call, writeLineObject);
+
+        il.Append(endLabel);
     }
 
     private string? EmitIfExpression(IfExpression ifExpr, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
