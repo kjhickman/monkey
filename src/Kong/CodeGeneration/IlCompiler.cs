@@ -162,7 +162,7 @@ public class IlCompiler
     {
         if (ifExpr.Alternative is null)
         {
-            return "If expressions without an else branch are not supported yet";
+            return "If expression without else cannot be used as a value";
         }
 
         var conditionErr = EmitExpression(ifExpr.Condition, types, il, module, mainMethod, locals);
@@ -220,13 +220,63 @@ public class IlCompiler
         return null;
     }
 
+    private string? EmitBlockStatement(BlockStatement block, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    {
+        for (int i = 0; i < block.Statements.Count; i++)
+        {
+            (var err, var pushesValue) = EmitStatement(block.Statements[i], types, il, module, mainMethod, locals);
+            if (err is not null)
+            {
+                return err;
+            }
+
+            if (pushesValue)
+            {
+                il.Emit(OpCodes.Pop);
+            }
+        }
+
+        return null;
+    }
+
+    private string? EmitIfStatement(IfExpression ifExpr, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
+    {
+        var conditionErr = EmitExpression(ifExpr.Condition, types, il, module, mainMethod, locals);
+        if (conditionErr is not null)
+        {
+            return conditionErr;
+        }
+
+        var endLabel = il.Create(OpCodes.Nop);
+        il.Emit(OpCodes.Brfalse, endLabel);
+
+        var thenErr = EmitBlockStatement(ifExpr.Consequence, types, il, module, mainMethod, locals);
+        if (thenErr is not null)
+        {
+            return thenErr;
+        }
+
+        il.Append(endLabel);
+        return null;
+    }
+
     private (string? err, bool pushesValue) EmitStatement(IStatement statement, TypeInferenceResult types, ILProcessor il, ModuleDefinition module, MethodDefinition mainMethod, Dictionary<string, VariableDefinition> locals)
     {
         switch (statement)
         {
+            case ExpressionStatement { Expression: IfExpression ifExpr } when ifExpr.Alternative is null:
+                var ifStmtErr = EmitIfStatement(ifExpr, types, il, module, mainMethod, locals);
+                return (ifStmtErr, false);
+
             case ExpressionStatement es when es.Expression is not null:
                 var err = EmitExpression(es.Expression, types, il, module, mainMethod, locals);
-                return (err, err is null);
+                if (err is not null)
+                {
+                    return (err, false);
+                }
+
+                var expressionType = types.GetNodeType(es.Expression);
+                return (null, expressionType != KongType.Void);
 
             case LetStatement ls when ls.Value is not null:
                 var letErr = EmitLetStatement(ls, types, il, module, mainMethod, locals);
@@ -252,6 +302,7 @@ public class IlCompiler
             {
                 KongType.Int64 => module.TypeSystem.Int64,
                 KongType.Boolean => module.TypeSystem.Boolean,
+                KongType.Void => module.TypeSystem.Object,
                 _ => module.TypeSystem.Object,
             };
 

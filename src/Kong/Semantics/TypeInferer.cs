@@ -46,6 +46,13 @@ public class TypeInferer
 
             case LetStatement ls when ls.Value is not null:
                 var valueType = InferExpression(ls.Value, result, env);
+                if (valueType == KongType.Void)
+                {
+                    result.AddError("Type error: cannot assign an expression with no value");
+                    result.AddNodeType(ls.Name, KongType.Unknown);
+                    result.AddNodeType(statement, KongType.Unknown);
+                    return KongType.Unknown;
+                }
                 env[ls.Name.Value] = valueType;
                 result.AddNodeType(ls.Name, valueType);
                 result.AddNodeType(statement, valueType);
@@ -115,6 +122,12 @@ public class TypeInferer
                 return KongType.Boolean;
 
             case IfExpression ifExpr:
+                if (ifExpr.Alternative is null)
+                {
+                    result.AddNodeType(expression, KongType.Void);
+                    return KongType.Void;
+                }
+
                 var conditionType = InferExpression(ifExpr.Condition, result, env);
                 if (conditionType != KongType.Boolean)
                 {
@@ -122,14 +135,24 @@ public class TypeInferer
                     result.AddNodeType(expression, KongType.Unknown);
                     return KongType.Unknown;
                 }
+
                 var thenType = InferStatement(ifExpr.Consequence, result, env);
-                var elseType = ifExpr.Alternative != null ? InferStatement(ifExpr.Alternative, result, env) : KongType.Unknown;
+                var elseType = InferStatement(ifExpr.Alternative, result, env);
+
                 if (thenType != elseType)
                 {
                     result.AddError($"Type error: if branches must have the same type, but got {thenType} and {elseType}");
                     result.AddNodeType(expression, KongType.Unknown);
                     return KongType.Unknown;
                 }
+
+                if (thenType == KongType.Void)
+                {
+                    result.AddError("Type error: if/else used as an expression must produce a value");
+                    result.AddNodeType(expression, KongType.Unknown);
+                    return KongType.Unknown;
+                }
+
                 result.AddNodeType(expression, thenType);
                 return thenType;
 

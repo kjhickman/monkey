@@ -59,7 +59,10 @@ public class ClrRegressionTests
     [InlineData("!false", true)]
     [InlineData("!!true", true)]
     [InlineData("!!false", false)]
-    [InlineData("!(if (false) { 5; })", true)]
+    [InlineData("!(1 < 2)", false)]
+    [InlineData("!((1 + 2) == 4)", true)]
+    [InlineData("if (1 < 2) { true } else { false }", true)]
+    [InlineData("if (1 > 2) { true } else { false }", false)]
     public async Task TestBooleanExpressions(string source, bool expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
@@ -67,15 +70,26 @@ public class ClrRegressionTests
     }
 
     [Theory]
-    [InlineData("if (true) { 10 }", "10")]
     [InlineData("if (true) { 10 } else { 20 }", "10")]
     [InlineData("if (false) { 10 } else { 20 }", "20")]
-    [InlineData("if (1 < 2) { 10 }", "10")]
     [InlineData("if (1 < 2) { 10 } else { 20 }", "10")]
     [InlineData("if (1 > 2) { 10 } else { 20 }", "20")]
-    [InlineData("if (1 > 2) { 10 }", "null")]
-    [InlineData("if (false) { 10 }", "null")]
+    [InlineData("if (!(1 > 2)) { 10 } else { 20 }", "10")]
+    [InlineData("if (1 < 2) { 10 + 5 } else { 20 + 5 }", "15")]
+    [InlineData("if (true) { if (false) { 1 } else { 2 } } else { 3 }", "2")]
+    [InlineData("let x = 5; if (x > 10) { x } else { x + 1 }", "6")]
     public async Task TestConditionals(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
+    [InlineData("if (true) { 10 }; 99", "99")]
+    [InlineData("if (false) { 10 }; 99", "99")]
+    [InlineData("let x = 1; if (x == 1) { x + 2 }; x + 10", "11")]
+    [InlineData("if (true) { if (false) { 10 }; 20 }; 30", "30")]
+    public async Task TestIfWithoutElseAsStatement(string source, string expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
         Assert.Equal(expected, clrOutput);

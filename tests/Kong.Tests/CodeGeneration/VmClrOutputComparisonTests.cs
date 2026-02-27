@@ -59,6 +59,7 @@ public class VmClrOutputComparisonTests
         "let x = 5; if (x > 3) { x } else { 0 }",
         "if (true) { true } else { false }",
         "if (false) { true } else { false }",
+        "let y = 4; let x = if (y > 3) { 5 } else { 10 }; x;",
     ];
 
     [Theory]
