@@ -72,6 +72,9 @@ public class VmClrOutputComparisonTests
         "[1, 2, 3][0 + 2]",
         "[[1, 1, 1]][0][0]",
         "let a = [1, 2, 3]; a[2];",
+        "{1: 1, 2: 2}[1]",
+        "{1: 1, 2: 2}[2]",
+        "let h = {1: 1, 2: 2}; h[1];",
     ];
 
     [Theory]

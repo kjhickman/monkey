@@ -53,6 +53,7 @@ public class TypeInferer
             BooleanLiteral => SetType(expression, KongType.Boolean, result),
             StringLiteral => SetType(expression, KongType.String, result),
             ArrayLiteral arrayLit => InferArrayLiteral(arrayLit, result, env),
+            HashLiteral hashLit => InferHashLiteral(hashLit, result, env),
             InfixExpression infix => InferInfix(infix, result, env),
             Identifier identifier => InferIdentifier(identifier, result, env),
             PrefixExpression prefix when prefix.Operator == "-" => InferNegationPrefix(prefix, result, env),
@@ -157,6 +158,28 @@ public class TypeInferer
         return SetType(arrayLiteral, KongType.Array, result);
     }
 
+    private KongType InferHashLiteral(HashLiteral hashLit, TypeInferenceResult result, Dictionary<string, KongType> env)
+    {
+        if (hashLit.Pairs.Count == 0)
+        {
+            return SetType(hashLit, KongType.HashMap, result);
+        }
+
+        var keyType = InferExpression(hashLit.Pairs[0].Key, result, env);
+        var valueType = InferExpression(hashLit.Pairs[0].Value, result, env);
+        foreach (var pair in hashLit.Pairs.Skip(1))
+        {
+            var currentKeyType = InferExpression(pair.Key, result, env);
+            var currentValueType = InferExpression(pair.Value, result, env);
+            if (currentKeyType != keyType || currentValueType != valueType)
+            {
+                return AddErrorAndSetType(hashLit, $"Type error: hash map keys and values must have the same type, but found ({keyType}, {valueType}) and ({currentKeyType}, {currentValueType})", KongType.Unknown, result);
+            }
+        }
+
+        return SetType(hashLit, KongType.HashMap, result);
+    }
+
     private KongType InferIdentifier(Identifier identifier, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         if (env.TryGetValue(identifier.Value, out var identifierType))
@@ -220,15 +243,20 @@ public class TypeInferer
     private KongType InferIndexExpression(IndexExpression indexExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
         var leftType = InferExpression(indexExpression.Left, result, env);
-        if (leftType is not KongType.Array and not KongType.Unknown)
+        if (leftType is not KongType.Array and not KongType.HashMap and not KongType.Unknown)
         {
             return AddErrorAndSetType(indexExpression, $"Type error: index operator not supported for type {leftType}", KongType.Unknown, result);
         }
 
         var indexType = InferExpression(indexExpression.Index, result, env);
-        if (indexType is not KongType.Int64 and not KongType.Unknown)
+        if (leftType == KongType.Array && indexType is not KongType.Int64 and not KongType.Unknown)
         {
             return AddErrorAndSetType(indexExpression, $"Type error: array index must be Int64, but got {indexType}", KongType.Unknown, result);
+        }
+
+        if (leftType == KongType.HashMap && indexType is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Unknown)
+        {
+            return AddErrorAndSetType(indexExpression, $"Type error: hash map index must be Int64, Boolean, or String, but got {indexType}", KongType.Unknown, result);
         }
 
         return SetType(indexExpression, KongType.Unknown, result);

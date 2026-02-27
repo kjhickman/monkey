@@ -1,5 +1,6 @@
 using Kong.Parsing;
 using Kong.Semantics;
+using System.Text;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -61,6 +62,7 @@ public class IlCompiler
             BooleanLiteral boolLit => EmitBooleanLiteral(boolLit, context),
             StringLiteral strLit => EmitStringLiteral(strLit, context),
             ArrayLiteral arrayLit => EmitArrayLiteral(arrayLit, context),
+            HashLiteral hashLiteral => EmitHashLiteral(hashLiteral, context),
             InfixExpression plus when plus.Operator == "+" => EmitPlusExpression(plus, context),
             InfixExpression minus when minus.Operator == "-" => EmitBinaryExpression(minus, OpCodes.Sub, context),
             InfixExpression times when times.Operator == "*" => EmitBinaryExpression(times, OpCodes.Mul, context),
@@ -240,6 +242,7 @@ public class IlCompiler
             KongType.Void => module.TypeSystem.Object,
             KongType.String => module.TypeSystem.String,
             KongType.Array => new ArrayType(module.TypeSystem.Object),
+            KongType.HashMap => ResolveHashMapType(module),
             _ => module.TypeSystem.Object,
         };
     }
@@ -285,6 +288,42 @@ public class IlCompiler
         return null;
     }
 
+    private string? EmitHashLiteral(HashLiteral hashLiteral, EmitContext context)
+    {
+        var hashMapType = ResolveHashMapType(context.Module);
+        var hashMapCtor = context.Module.ImportReference(
+            typeof(Dictionary<object, object>).GetConstructor(Type.EmptyTypes));
+        var addMethod = context.Module.ImportReference(
+            typeof(Dictionary<object, object>).GetMethod(nameof(Dictionary<,>.Add), [typeof(object), typeof(object)]));
+
+        context.Il.Emit(OpCodes.Newobj, hashMapCtor);
+        context.Il.Emit(OpCodes.Castclass, hashMapType);
+
+        foreach (var pair in hashLiteral.Pairs)
+        {
+            context.Il.Emit(OpCodes.Dup);
+
+            var keyErr = EmitExpression(pair.Key, context);
+            if (keyErr is not null)
+            {
+                return keyErr;
+            }
+
+            EmitBoxIfNeeded(context.Types.GetNodeType(pair.Key), context);
+
+            var valueErr = EmitExpression(pair.Value, context);
+            if (valueErr is not null)
+            {
+                return valueErr;
+            }
+
+            EmitBoxIfNeeded(context.Types.GetNodeType(pair.Value), context);
+            context.Il.Emit(OpCodes.Callvirt, addMethod);
+        }
+
+        return null;
+    }
+
     private string? EmitPlusExpression(InfixExpression expression, EmitContext context)
     {
         var operandsErr = EmitBinaryOperands(expression, context);
@@ -301,7 +340,7 @@ public class IlCompiler
                 return null;
             case KongType.String:
                 var concatMethod = context.Module.ImportReference(
-                    typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)])!);
+                    typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string)]));
                 context.Il.Emit(OpCodes.Call, concatMethod);
                 return null;
             default:
@@ -385,15 +424,25 @@ public class IlCompiler
     private string? EmitIndexExpression(IndexExpression indexExpression, EmitContext context)
     {
         var leftType = context.Types.GetNodeType(indexExpression.Left);
-        if (leftType is not KongType.Array and not KongType.Unknown)
+        if (leftType is not KongType.Array and not KongType.HashMap and not KongType.Unknown)
         {
             return $"Index operator not supported for type: {leftType}";
         }
 
         var indexType = context.Types.GetNodeType(indexExpression.Index);
-        if (indexType is not KongType.Int64 and not KongType.Unknown)
+        if (leftType == KongType.Array && indexType is not KongType.Int64 and not KongType.Unknown)
         {
             return $"Array index must be Int64, got: {indexType}";
+        }
+
+        if (leftType == KongType.HashMap && indexType is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Unknown)
+        {
+            return $"Hash map index must be Int64, Boolean, or String, got: {indexType}";
+        }
+
+        if (leftType == KongType.HashMap)
+        {
+            return EmitHashMapIndexExpression(indexExpression, context, indexType);
         }
 
         var indexedErr = EmitExpression(indexExpression.Left, context);
@@ -412,6 +461,58 @@ public class IlCompiler
 
         EmitConvertInt64ToInt32(context);
         context.Il.Emit(OpCodes.Ldelem_Ref);
+        return null;
+    }
+
+    private string? EmitHashMapIndexExpression(IndexExpression indexExpression, EmitContext context, KongType indexType)
+    {
+        var hashMapType = ResolveHashMapType(context.Module);
+        var keyType = context.Module.TypeSystem.Object;
+        var hashMapLocal = new VariableDefinition(hashMapType);
+        var keyLocal = new VariableDefinition(keyType);
+        context.MainMethod.Body.Variables.Add(hashMapLocal);
+        context.MainMethod.Body.Variables.Add(keyLocal);
+
+        var containsKeyMethod = context.Module.ImportReference(
+            typeof(Dictionary<object, object>).GetMethod(nameof(Dictionary<object, object>.ContainsKey), [typeof(object)])!);
+        var itemGetterMethod = context.Module.ImportReference(
+            typeof(Dictionary<object, object>).GetProperty("Item")!.GetGetMethod()!);
+
+        var keyMissingLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+
+        var hashMapErr = EmitExpression(indexExpression.Left, context);
+        if (hashMapErr is not null)
+        {
+            return hashMapErr;
+        }
+
+        context.Il.Emit(OpCodes.Castclass, hashMapType);
+        context.Il.Emit(OpCodes.Stloc, hashMapLocal);
+
+        var keyErr = EmitExpression(indexExpression.Index, context);
+        if (keyErr is not null)
+        {
+            return keyErr;
+        }
+
+        EmitBoxIfNeeded(indexType, context);
+        context.Il.Emit(OpCodes.Stloc, keyLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, hashMapLocal);
+        context.Il.Emit(OpCodes.Ldloc, keyLocal);
+        context.Il.Emit(OpCodes.Callvirt, containsKeyMethod);
+        context.Il.Emit(OpCodes.Brfalse, keyMissingLabel);
+
+        context.Il.Emit(OpCodes.Ldloc, hashMapLocal);
+        context.Il.Emit(OpCodes.Ldloc, keyLocal);
+        context.Il.Emit(OpCodes.Callvirt, itemGetterMethod);
+        context.Il.Emit(OpCodes.Br, endLabel);
+
+        context.Il.Append(keyMissingLabel);
+        context.Il.Emit(OpCodes.Ldnull);
+
+        context.Il.Append(endLabel);
         return null;
     }
 
@@ -449,9 +550,9 @@ public class IlCompiler
     {
         return resultType switch
         {
-            KongType.Boolean => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])!),
-            KongType.Int64 => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])!),
-            KongType.String => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])!),
+            KongType.Boolean => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])),
+            KongType.Int64 => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])),
+            KongType.String => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])),
             _ => null,
         };
     }
@@ -460,17 +561,46 @@ public class IlCompiler
     {
         var objectLocal = new VariableDefinition(context.Module.TypeSystem.Object);
         var arrayLocal = new VariableDefinition(context.ObjectArrayType);
+        var hashMapType = ResolveHashMapType(context.Module);
+        var hashMapLocal = new VariableDefinition(hashMapType);
+        var stringBuilderType = context.Module.ImportReference(typeof(StringBuilder));
+        var stringBuilderLocal = new VariableDefinition(stringBuilderType);
+        var boolLocal = new VariableDefinition(context.Module.TypeSystem.Boolean);
+        var hashEnumeratorType = context.Module.ImportReference(typeof(Dictionary<object, object>.Enumerator));
+        var hashEnumeratorLocal = new VariableDefinition(hashEnumeratorType);
+        var keyValuePairType = context.Module.ImportReference(typeof(KeyValuePair<object, object>));
+        var keyValuePairLocal = new VariableDefinition(keyValuePairType);
         context.MainMethod.Body.Variables.Add(objectLocal);
         context.MainMethod.Body.Variables.Add(arrayLocal);
+        context.MainMethod.Body.Variables.Add(hashMapLocal);
+        context.MainMethod.Body.Variables.Add(stringBuilderLocal);
+        context.MainMethod.Body.Variables.Add(boolLocal);
+        context.MainMethod.Body.Variables.Add(hashEnumeratorLocal);
+        context.MainMethod.Body.Variables.Add(keyValuePairLocal);
 
         var writeLineObject = context.Module.ImportReference(
             typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(object)])!);
+        var writeLineString = ResolveWriteLineMethod(KongType.String, context.Module)!;
         var stringJoinObjectArray = context.Module.ImportReference(
             typeof(string).GetMethod(nameof(string.Join), [typeof(string), typeof(object[])])!);
         var stringConcatThree = context.Module.ImportReference(
             typeof(string).GetMethod(nameof(string.Concat), [typeof(string), typeof(string), typeof(string)])!);
+        var stringBuilderCtor = context.Module.ImportReference(typeof(StringBuilder).GetConstructor(Type.EmptyTypes)!);
+        var stringBuilderAppendString = context.Module.ImportReference(typeof(StringBuilder).GetMethod(nameof(StringBuilder.Append), [typeof(string)])!);
+        var stringBuilderAppendObject = context.Module.ImportReference(typeof(StringBuilder).GetMethod(nameof(StringBuilder.Append), [typeof(object)])!);
+        var stringBuilderToString = context.Module.ImportReference(typeof(StringBuilder).GetMethod(nameof(ToString), Type.EmptyTypes)!);
+        var hashGetEnumerator = context.Module.ImportReference(typeof(Dictionary<object, object>).GetMethod(nameof(Dictionary<object, object>.GetEnumerator), Type.EmptyTypes)!);
+        var hashMoveNext = context.Module.ImportReference(typeof(Dictionary<object, object>.Enumerator).GetMethod(nameof(Dictionary<object, object>.Enumerator.MoveNext), Type.EmptyTypes)!);
+        var hashCurrent = context.Module.ImportReference(typeof(Dictionary<object, object>.Enumerator).GetProperty(nameof(Dictionary<object, object>.Enumerator.Current))!.GetGetMethod()!);
+        var keyGetter = context.Module.ImportReference(typeof(KeyValuePair<object, object>).GetProperty(nameof(KeyValuePair<object, object>.Key))!.GetGetMethod()!);
+        var valueGetter = context.Module.ImportReference(typeof(KeyValuePair<object, object>).GetProperty(nameof(KeyValuePair<object, object>.Value))!.GetGetMethod()!);
 
         var notArrayLabel = context.Il.Create(OpCodes.Nop);
+        var notHashLabel = context.Il.Create(OpCodes.Nop);
+        var hashLoopStartLabel = context.Il.Create(OpCodes.Nop);
+        var hashLoopBodyLabel = context.Il.Create(OpCodes.Nop);
+        var hashSkipSeparatorLabel = context.Il.Create(OpCodes.Nop);
+        var hashLoopEndLabel = context.Il.Create(OpCodes.Nop);
         var endLabel = context.Il.Create(OpCodes.Nop);
 
         context.Il.Emit(OpCodes.Stloc, objectLocal);
@@ -486,10 +616,85 @@ public class IlCompiler
         context.Il.Emit(OpCodes.Call, stringJoinObjectArray);
         context.Il.Emit(OpCodes.Ldstr, "]");
         context.Il.Emit(OpCodes.Call, stringConcatThree);
-        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module)!);
+        context.Il.Emit(OpCodes.Call, writeLineString);
         context.Il.Emit(OpCodes.Br, endLabel);
 
         context.Il.Append(notArrayLabel);
+        context.Il.Emit(OpCodes.Ldloc, objectLocal);
+        context.Il.Emit(OpCodes.Isinst, hashMapType);
+        context.Il.Emit(OpCodes.Stloc, hashMapLocal);
+        context.Il.Emit(OpCodes.Ldloc, hashMapLocal);
+        context.Il.Emit(OpCodes.Brfalse, notHashLabel);
+
+        context.Il.Emit(OpCodes.Newobj, stringBuilderCtor);
+        context.Il.Emit(OpCodes.Stloc, stringBuilderLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldstr, "{");
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendString);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Emit(OpCodes.Ldc_I4_1);
+        context.Il.Emit(OpCodes.Stloc, boolLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, hashMapLocal);
+        context.Il.Emit(OpCodes.Callvirt, hashGetEnumerator);
+        context.Il.Emit(OpCodes.Stloc, hashEnumeratorLocal);
+
+        context.Il.Append(hashLoopStartLabel);
+        context.Il.Emit(OpCodes.Ldloca, hashEnumeratorLocal);
+        context.Il.Emit(OpCodes.Call, hashMoveNext);
+        context.Il.Emit(OpCodes.Brtrue, hashLoopBodyLabel);
+        context.Il.Emit(OpCodes.Br, hashLoopEndLabel);
+
+        context.Il.Append(hashLoopBodyLabel);
+        context.Il.Emit(OpCodes.Ldloc, boolLocal);
+        context.Il.Emit(OpCodes.Brtrue, hashSkipSeparatorLabel);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldstr, ", ");
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendString);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Append(hashSkipSeparatorLabel);
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Emit(OpCodes.Stloc, boolLocal);
+
+        context.Il.Emit(OpCodes.Ldloca, hashEnumeratorLocal);
+        context.Il.Emit(OpCodes.Call, hashCurrent);
+        context.Il.Emit(OpCodes.Stloc, keyValuePairLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldloca, keyValuePairLocal);
+        context.Il.Emit(OpCodes.Call, keyGetter);
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendObject);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldstr, ": ");
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendString);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldloca, keyValuePairLocal);
+        context.Il.Emit(OpCodes.Call, valueGetter);
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendObject);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Emit(OpCodes.Br, hashLoopStartLabel);
+
+        context.Il.Append(hashLoopEndLabel);
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Ldstr, "}");
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderAppendString);
+        context.Il.Emit(OpCodes.Pop);
+
+        context.Il.Emit(OpCodes.Ldloc, stringBuilderLocal);
+        context.Il.Emit(OpCodes.Callvirt, stringBuilderToString);
+        context.Il.Emit(OpCodes.Call, writeLineString);
+        context.Il.Emit(OpCodes.Br, endLabel);
+
+        context.Il.Append(notHashLabel);
         context.Il.Emit(OpCodes.Ldloc, objectLocal);
         context.Il.Emit(OpCodes.Call, writeLineObject);
 
@@ -499,7 +704,7 @@ public class IlCompiler
     private static void EmitWriteLineString(EmitContext context, string value)
     {
         context.Il.Emit(OpCodes.Ldstr, value);
-        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module)!);
+        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module));
     }
 
     private static void EmitBoxIfNeeded(KongType type, EmitContext context)
@@ -518,6 +723,11 @@ public class IlCompiler
     private static void EmitCastToObjectArray(EmitContext context)
     {
         context.Il.Emit(OpCodes.Castclass, context.ObjectArrayType);
+    }
+
+    private static TypeReference ResolveHashMapType(ModuleDefinition module)
+    {
+        return module.ImportReference(typeof(Dictionary<object, object>));
     }
 
     private static void EmitConvertInt64ToInt32(EmitContext context)
