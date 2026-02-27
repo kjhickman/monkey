@@ -1,3 +1,5 @@
+set quiet := true
+
 # Show available just recipes
 default:
     @just --list --unsorted
