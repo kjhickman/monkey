@@ -80,6 +80,8 @@ public class VmClrOutputComparisonTests
         "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)",
         "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)",
         "let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; factorial(5)",
+        "let newClosure = fn(a: int) { fn() { a; }; }; let closure = newClosure(99); closure();",
+        "let newAdder = fn(a: int, b: int) { fn(c: int) { a + b + c }; }; let adder = newAdder(1, 2); adder(8);",
     ];
 
     [Theory]

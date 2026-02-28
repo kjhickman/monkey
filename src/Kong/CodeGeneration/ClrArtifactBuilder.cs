@@ -54,12 +54,6 @@ public class ClrArtifactBuilder
     {
         var inferer = new TypeInferer();
 
-        var clrValidationErrors = inferer.ValidateClrFunctionDeclarations(program);
-        if (clrValidationErrors.Count > 0)
-        {
-            return string.Join(Environment.NewLine, clrValidationErrors);
-        }
-
         var annotationErrors = inferer.ValidateFunctionTypeAnnotations(program);
         if (annotationErrors.Count > 0)
         {
