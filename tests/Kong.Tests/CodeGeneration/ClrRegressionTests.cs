@@ -148,6 +148,27 @@ public class ClrRegressionTests
     }
 
     [Theory]
+    [InlineData("puts(len(\"\"));", "0")]
+    [InlineData("puts(len(\"four\"));", "4")]
+    [InlineData("puts(len(\"hello world\"));", "11")]
+    [InlineData("puts(len([1, 2, 3]));", "3")]
+    [InlineData("puts(len([]));", "0")]
+    public async Task TestLenBuiltin(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
+    [InlineData("puts(len(1));", "argument to `len` not supported")]
+    [InlineData("puts(len(\"one\", \"two\"));", "wrong number of arguments. got=2, want=1")]
+    public void TestLenBuiltinErrors(string source, string expectedError)
+    {
+        var compileError = CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
+
+    [Theory]
     [InlineData("let fivePlusTen = fn() { 5 + 10; }; puts(fivePlusTen());", "15")]
     [InlineData("let one = fn() { 1; }; let two = fn() { 2; }; puts(one() + two());", "3")]
     [InlineData("let a = fn() { 1 }; let b = fn() { a() + 1 }; let c = fn() { b() + 1 }; puts(c());", "3")]
@@ -243,6 +264,28 @@ public class ClrRegressionTests
             Assert.True(process.ExitCode == 0, $"dotnet exited with code {process.ExitCode}: {stdErr}");
 
             return stdOut.TrimEnd();
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
+    private static string CompileWithExpectedError(string source)
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-compile-error-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            var assemblyPath = Path.Combine(tempDirectory, "program.dll");
+            var compiler = new KongCompiler();
+            var compileError = compiler.CompileToAssembly(source, "program", assemblyPath);
+            Assert.NotNull(compileError);
+            return compileError!;
         }
         finally
         {

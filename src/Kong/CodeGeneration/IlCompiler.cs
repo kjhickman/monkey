@@ -748,6 +748,11 @@ public class IlCompiler
             return EmitPutsBuiltinCall(callExpression, context);
         }
 
+        if (callExpression.Function is Identifier { Value: "len" })
+        {
+            return EmitLenBuiltinCall(callExpression, context);
+        }
+
         if (callExpression.Function is Identifier functionIdentifier
             && context.Functions.TryGetValue(functionIdentifier.Value, out var functionMetadata)
             && !IsVariableBound(functionIdentifier.Value, context))
@@ -859,6 +864,100 @@ public class IlCompiler
         }
 
         return null;
+    }
+
+    private string? EmitLenBuiltinCall(CallExpression callExpression, EmitContext context)
+    {
+        if (callExpression.Arguments.Count != 1)
+        {
+            return $"wrong number of arguments. got={callExpression.Arguments.Count}, want=1";
+        }
+
+        var argument = callExpression.Arguments[0];
+        var argumentErr = EmitExpression(argument, context);
+        if (argumentErr is not null)
+        {
+            return argumentErr;
+        }
+
+        var argumentType = context.Types.GetNodeType(argument);
+        if (argumentType == KongType.String)
+        {
+            EmitStringLength(context);
+            return null;
+        }
+
+        if (argumentType == KongType.Array)
+        {
+            EmitArrayLength(context);
+            return null;
+        }
+
+        EmitLenWithRuntimeTypeCheck(argumentType, context);
+        return null;
+    }
+
+    private static void EmitStringLength(EmitContext context)
+    {
+        var stringLengthGetter = context.Module.ImportReference(typeof(string).GetProperty(nameof(string.Length))!.GetGetMethod()!);
+        context.Il.Emit(OpCodes.Callvirt, stringLengthGetter);
+        context.Il.Emit(OpCodes.Conv_I8);
+    }
+
+    private static void EmitArrayLength(EmitContext context)
+    {
+        EmitCastToObjectArray(context);
+        context.Il.Emit(OpCodes.Ldlen);
+        context.Il.Emit(OpCodes.Conv_I8);
+    }
+
+    private static void EmitLenWithRuntimeTypeCheck(KongType argumentType, EmitContext context)
+    {
+        EmitBoxIfNeeded(argumentType, context);
+
+        var objectLocal = new VariableDefinition(context.Module.TypeSystem.Object);
+        var stringLocal = new VariableDefinition(context.Module.TypeSystem.String);
+        var arrayLocal = new VariableDefinition(context.ObjectArrayType);
+        context.Method.Body.Variables.Add(objectLocal);
+        context.Method.Body.Variables.Add(stringLocal);
+        context.Method.Body.Variables.Add(arrayLocal);
+
+        var invalidArgLabel = context.Il.Create(OpCodes.Nop);
+        var notStringLabel = context.Il.Create(OpCodes.Nop);
+        var notArrayLabel = context.Il.Create(OpCodes.Nop);
+
+        var stringLengthGetter = context.Module.ImportReference(typeof(string).GetProperty(nameof(string.Length))!.GetGetMethod()!);
+        var invalidOperationCtor = context.Module.ImportReference(typeof(InvalidOperationException).GetConstructor([typeof(string)])!);
+
+        context.Il.Emit(OpCodes.Stloc, objectLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, objectLocal);
+        context.Il.Emit(OpCodes.Isinst, context.Module.TypeSystem.String);
+        context.Il.Emit(OpCodes.Stloc, stringLocal);
+        context.Il.Emit(OpCodes.Ldloc, stringLocal);
+        context.Il.Emit(OpCodes.Brfalse, notStringLabel);
+        context.Il.Emit(OpCodes.Ldloc, stringLocal);
+        context.Il.Emit(OpCodes.Callvirt, stringLengthGetter);
+        context.Il.Emit(OpCodes.Conv_I8);
+        context.Il.Emit(OpCodes.Br, invalidArgLabel);
+
+        context.Il.Append(notStringLabel);
+        context.Il.Emit(OpCodes.Ldloc, objectLocal);
+        context.Il.Emit(OpCodes.Isinst, context.ObjectArrayType);
+        context.Il.Emit(OpCodes.Stloc, arrayLocal);
+        context.Il.Emit(OpCodes.Ldloc, arrayLocal);
+        context.Il.Emit(OpCodes.Brfalse, notArrayLabel);
+        context.Il.Emit(OpCodes.Ldloc, arrayLocal);
+        context.Il.Emit(OpCodes.Ldlen);
+        context.Il.Emit(OpCodes.Conv_I8);
+        context.Il.Emit(OpCodes.Br, invalidArgLabel);
+
+        context.Il.Append(notArrayLabel);
+        context.Il.Emit(OpCodes.Ldstr, "argument to `len` not supported");
+        context.Il.Emit(OpCodes.Newobj, invalidOperationCtor);
+        context.Il.Emit(OpCodes.Throw);
+
+        context.Il.Append(invalidArgLabel);
     }
 
     private static bool IsVariableBound(string name, EmitContext context)

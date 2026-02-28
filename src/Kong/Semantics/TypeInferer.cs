@@ -444,6 +444,22 @@ public class TypeInferer
             return SetType(callExpression, KongType.Void, result);
         }
 
+        if (callExpression.Function is Identifier { Value: "len" })
+        {
+            if (callExpression.Arguments.Count != 1)
+            {
+                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=1", KongType.Unknown, result);
+            }
+
+            var argumentType = InferExpression(callExpression.Arguments[0], result, env);
+            if (argumentType is KongType.String or KongType.Array or KongType.Unknown)
+            {
+                return SetType(callExpression, KongType.Int64, result);
+            }
+
+            return AddErrorAndSetType(callExpression, $"argument to `len` not supported, got {argumentType}", KongType.Unknown, result);
+        }
+
         var _ = InferExpression(callExpression.Function, result, env);
 
         foreach (var argument in callExpression.Arguments)
