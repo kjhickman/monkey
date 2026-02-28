@@ -88,6 +88,42 @@ public class ExpressionStatement : IStatement
     }
 }
 
+public class AssignStatement : IStatement
+{
+    public Token Token { get; set; } // the '=' token
+    public Identifier Name { get; set; } = null!;
+    public IExpression Value { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        return $"{Name.String()} = {Value.String()};";
+    }
+}
+
+public class IfStatement : IStatement
+{
+    public Token Token { get; set; } // the 'if' token
+    public IExpression Condition { get; set; } = null!;
+    public BlockStatement Consequence { get; set; } = null!;
+    public BlockStatement Alternative { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var sb = new StringBuilder();
+        sb.Append("if");
+        sb.Append(Condition.String());
+        sb.Append(' ');
+        sb.Append(Consequence.String());
+        sb.Append("else ");
+        sb.Append(Alternative.String());
+        return sb.ToString();
+    }
+}
+
 public class IntegerLiteral : IExpression
 {
     public Token Token { get; set; }
@@ -263,6 +299,21 @@ public class CallExpression : IExpression
     {
         var args = Arguments.Select(a => a.String());
         return $"{Function.String()}({string.Join(", ", args)})";
+    }
+}
+
+public class IntrinsicCallExpression : IExpression
+{
+    public Token Token { get; set; } // synthetic intrinsic token
+    public string Name { get; set; } = "";
+    public List<IExpression> Arguments { get; set; } = [];
+
+    public string TokenLiteral() => Token.Literal;
+
+    public string String()
+    {
+        var args = string.Join(", ", Arguments.Select(a => a.String()));
+        return $"@{Name}({args})";
     }
 }
 

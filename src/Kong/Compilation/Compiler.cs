@@ -27,7 +27,7 @@ public class Compiler
             return new CompilationResult(parseResult, semanticResult, null, null, diagnostics);
         }
 
-        var lowerer = new IdentityLowerer();
+        var lowerer = new CanonicalLowerer();
         var loweringResult = lowerer.Lower(semanticResult.Program, semanticResult.BoundProgram);
         diagnostics.AddRange(CompilationStage.Lowering, loweringResult.DiagnosticBag);
         if (loweringResult.DiagnosticBag.HasErrors)

@@ -271,6 +271,7 @@ public class ClrEmitter
             IfExpression ifExpr => EmitIfExpression(ifExpr, context),
             IndexExpression indexExpr => EmitIndexExpression(indexExpr, context),
             CallExpression callExpression => EmitCallExpression(callExpression, context),
+            IntrinsicCallExpression intrinsicCall => EmitIntrinsicCallExpression(intrinsicCall, context),
             FunctionLiteral functionLiteral => EmitFunctionLiteralExpression(functionLiteral, context),
             _ => $"Unsupported expression type: {expression.GetType().Name}",
         };
@@ -381,6 +382,37 @@ public class ClrEmitter
         return null;
     }
 
+    private string? EmitIfStatement(IfStatement ifStatement, EmitContext context)
+    {
+        var conditionErr = EmitExpression(ifStatement.Condition, context);
+        if (conditionErr is not null)
+        {
+            return conditionErr;
+        }
+
+        var elseLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+        context.Il.Emit(OpCodes.Brfalse, elseLabel);
+
+        var thenErr = EmitBlockStatement(ifStatement.Consequence, context);
+        if (thenErr is not null)
+        {
+            return thenErr;
+        }
+
+        context.Il.Emit(OpCodes.Br, endLabel);
+        context.Il.Append(elseLabel);
+
+        var elseErr = EmitBlockStatement(ifStatement.Alternative, context);
+        if (elseErr is not null)
+        {
+            return elseErr;
+        }
+
+        context.Il.Append(endLabel);
+        return null;
+    }
+
     private (string? err, bool pushesValue) EmitStatement(IStatement statement, EmitContext context)
     {
         switch (statement)
@@ -402,6 +434,14 @@ public class ClrEmitter
             case LetStatement ls when ls.Value is not null:
                 var letErr = EmitLetStatement(ls, context);
                 return (letErr, false);
+
+            case AssignStatement assignStatement:
+                var assignErr = EmitAssignStatement(assignStatement, context);
+                return (assignErr, false);
+
+            case IfStatement ifStatement:
+                var loweredIfErr = EmitIfStatement(ifStatement, context);
+                return (loweredIfErr, false);
 
             case ReturnStatement rs when rs.ReturnValue is not null:
                 var returnErr = EmitReturnStatement(rs, context);
@@ -428,6 +468,23 @@ public class ClrEmitter
             local = new VariableDefinition(localType);
             context.Method.Body.Variables.Add(local);
             context.Locals[ls.Name.Value] = local;
+        }
+
+        context.Il.Emit(OpCodes.Stloc, local);
+        return null;
+    }
+
+    private string? EmitAssignStatement(AssignStatement assignStatement, EmitContext context)
+    {
+        var valueErr = EmitExpression(assignStatement.Value, context);
+        if (valueErr is not null)
+        {
+            return valueErr;
+        }
+
+        if (!context.Locals.TryGetValue(assignStatement.Name.Value, out var local))
+        {
+            return $"Undefined variable: {assignStatement.Name.Value}";
         }
 
         context.Il.Emit(OpCodes.Stloc, local);
@@ -862,9 +919,20 @@ public class ClrEmitter
         return null;
     }
 
-    private string? EmitPutsBuiltinCall(CallExpression callExpression, EmitContext context)
+    private string? EmitIntrinsicCallExpression(IntrinsicCallExpression intrinsicCall, EmitContext context)
     {
-        foreach (var argument in callExpression.Arguments)
+        return intrinsicCall.Name switch
+        {
+            "puts" => EmitPutsBuiltinCall(intrinsicCall.Arguments, context),
+            "len" => EmitLenBuiltinCall(intrinsicCall.Arguments, context),
+            "push" => EmitPushBuiltinCall(intrinsicCall.Arguments, context),
+            _ => $"Unknown intrinsic: {intrinsicCall.Name}",
+        };
+    }
+
+    private string? EmitPutsBuiltinCall(IReadOnlyList<IExpression> arguments, EmitContext context)
+    {
+        foreach (var argument in arguments)
         {
             var argumentErr = EmitExpression(argument, context);
             if (argumentErr is not null)
@@ -883,14 +951,19 @@ public class ClrEmitter
         return null;
     }
 
-    private string? EmitLenBuiltinCall(CallExpression callExpression, EmitContext context)
+    private string? EmitPutsBuiltinCall(CallExpression callExpression, EmitContext context)
     {
-        if (callExpression.Arguments.Count != 1)
+        return EmitPutsBuiltinCall(callExpression.Arguments, context);
+    }
+
+    private string? EmitLenBuiltinCall(IReadOnlyList<IExpression> arguments, EmitContext context)
+    {
+        if (arguments.Count != 1)
         {
-            return $"wrong number of arguments. got={callExpression.Arguments.Count}, want=1";
+            return $"wrong number of arguments. got={arguments.Count}, want=1";
         }
 
-        var argument = callExpression.Arguments[0];
+        var argument = arguments[0];
         var argumentErr = EmitExpression(argument, context);
         if (argumentErr is not null)
         {
@@ -912,6 +985,11 @@ public class ClrEmitter
 
         EmitLenWithRuntimeTypeCheck(argumentType, context);
         return null;
+    }
+
+    private string? EmitLenBuiltinCall(CallExpression callExpression, EmitContext context)
+    {
+        return EmitLenBuiltinCall(callExpression.Arguments, context);
     }
 
     private static void EmitStringLength(EmitContext context)
@@ -977,14 +1055,14 @@ public class ClrEmitter
         context.Il.Append(invalidArgLabel);
     }
 
-    private string? EmitPushBuiltinCall(CallExpression callExpression, EmitContext context)
+    private string? EmitPushBuiltinCall(IReadOnlyList<IExpression> arguments, EmitContext context)
     {
-        if (callExpression.Arguments.Count != 2)
+        if (arguments.Count != 2)
         {
-            return $"wrong number of arguments. got={callExpression.Arguments.Count}, want=2";
+            return $"wrong number of arguments. got={arguments.Count}, want=2";
         }
 
-        var arrayExpr = callExpression.Arguments[0];
+        var arrayExpr = arguments[0];
         var arrayErr = EmitExpression(arrayExpr, context);
         if (arrayErr is not null)
         {
@@ -994,7 +1072,7 @@ public class ClrEmitter
         var arrayType = context.Types.GetNodeType(arrayExpr);
         if (arrayType == KongType.Array)
         {
-            return EmitPushForArrayOnStack(callExpression.Arguments[1], context);
+            return EmitPushForArrayOnStack(arguments[1], context);
         }
 
         if (arrayType != KongType.Unknown)
@@ -1002,7 +1080,12 @@ public class ClrEmitter
             return $"argument to `push` must be ARRAY, got {arrayType}";
         }
 
-        return EmitPushWithRuntimeTypeCheck(callExpression.Arguments[1], context);
+        return EmitPushWithRuntimeTypeCheck(arguments[1], context);
+    }
+
+    private string? EmitPushBuiltinCall(CallExpression callExpression, EmitContext context)
+    {
+        return EmitPushBuiltinCall(callExpression.Arguments, context);
     }
 
     private string? EmitPushForArrayOnStack(IExpression valueExpr, EmitContext context)
