@@ -181,7 +181,7 @@ public class BlockStatement : IStatement
 public class FunctionLiteral : IExpression
 {
     public Token Token { get; set; } // The 'fn' token
-    public List<Identifier> Parameters { get; set; } = [];
+    public List<FunctionParameter> Parameters { get; set; } = [];
     public BlockStatement Body { get; set; } = null!;
     public string Name { get; set; } = "";
 
@@ -201,6 +201,53 @@ public class FunctionLiteral : IExpression
         sb.Append(") ");
         sb.Append(Body.String());
         return sb.ToString();
+    }
+}
+
+public interface ITypeExpression : INode;
+
+public class NamedTypeExpression : ITypeExpression
+{
+    public Token Token { get; set; }
+    public string Name { get; set; } = "";
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => Name;
+}
+
+public class ArrayTypeExpression : ITypeExpression
+{
+    public Token Token { get; set; } // The '[' token
+    public ITypeExpression ElementType { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"{ElementType.String()}[]";
+}
+
+public class MapTypeExpression : ITypeExpression
+{
+    public Token Token { get; set; } // The 'map' token
+    public ITypeExpression KeyType { get; set; } = null!;
+    public ITypeExpression ValueType { get; set; } = null!;
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"map[{KeyType.String()}]{ValueType.String()}";
+}
+
+public class FunctionParameter : INode
+{
+    public Identifier Name { get; set; } = null!;
+    public ITypeExpression? TypeAnnotation { get; set; }
+
+    public string TokenLiteral() => Name.TokenLiteral();
+    public string String()
+    {
+        if (TypeAnnotation is null)
+        {
+            return Name.String();
+        }
+
+        return $"{Name.String()}: {TypeAnnotation.String()}";
     }
 }
 

@@ -410,27 +410,36 @@ public class Parser
         return exp;
     }
 
-    private List<Identifier> ParseFunctionParameters()
+    private List<FunctionParameter> ParseFunctionParameters()
     {
-        var identifiers = new List<Identifier>();
+        var parameters = new List<FunctionParameter>();
 
         if (PeekTokenIs(TokenType.RParen))
         {
             NextToken();
-            return identifiers;
+            return parameters;
         }
 
         NextToken();
 
-        var identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
-        identifiers.Add(identifier);
+        var parameter = ParseFunctionParameter();
+        if (parameter is null)
+        {
+            return null!;
+        }
+        parameters.Add(parameter);
 
         while (PeekTokenIs(TokenType.Comma))
         {
             NextToken();
             NextToken();
-            identifier = new Identifier { Token = _curToken, Value = _curToken.Literal };
-            identifiers.Add(identifier);
+
+            parameter = ParseFunctionParameter();
+            if (parameter is null)
+            {
+                return null!;
+            }
+            parameters.Add(parameter);
         }
 
         if (!ExpectPeek(TokenType.RParen))
@@ -438,7 +447,115 @@ public class Parser
             return null!;
         }
 
-        return identifiers;
+        return parameters;
+    }
+
+    private FunctionParameter? ParseFunctionParameter()
+    {
+        if (!CurTokenIs(TokenType.Ident))
+        {
+            _errors.Add($"expected function parameter name, got {_curToken.Type} instead");
+            return null;
+        }
+
+        var name = new Identifier { Token = _curToken, Value = _curToken.Literal };
+
+        if (!PeekTokenIs(TokenType.Colon))
+        {
+            _errors.Add($"expected ':' after function parameter name, got {_peekToken.Type} instead");
+            return null;
+        }
+
+        NextToken();
+        NextToken();
+
+        var typeAnnotation = ParseTypeExpression();
+        if (typeAnnotation is null)
+        {
+            return null;
+        }
+
+        return new FunctionParameter { Name = name, TypeAnnotation = typeAnnotation };
+    }
+
+    private ITypeExpression? ParseTypeExpression()
+    {
+        var type = ParsePrimaryTypeExpression();
+        if (type is null)
+        {
+            return null;
+        }
+
+        while (PeekTokenIs(TokenType.LBracket))
+        {
+            NextToken();
+            var bracketToken = _curToken;
+
+            if (!ExpectPeek(TokenType.RBracket))
+            {
+                return null;
+            }
+
+            type = new ArrayTypeExpression
+            {
+                Token = bracketToken,
+                ElementType = type,
+            };
+        }
+
+        return type;
+    }
+
+    private ITypeExpression? ParsePrimaryTypeExpression()
+    {
+        if (!CurTokenIs(TokenType.Ident))
+        {
+            _errors.Add($"expected type name, got {_curToken.Type} instead");
+            return null;
+        }
+
+        if (_curToken.Literal == "map")
+        {
+            return ParseMapTypeExpression();
+        }
+
+        return new NamedTypeExpression { Token = _curToken, Name = _curToken.Literal };
+    }
+
+    private ITypeExpression? ParseMapTypeExpression()
+    {
+        var mapToken = _curToken;
+
+        if (!ExpectPeek(TokenType.LBracket))
+        {
+            return null;
+        }
+
+        NextToken();
+        var keyType = ParseTypeExpression();
+        if (keyType is null)
+        {
+            return null;
+        }
+
+        if (!ExpectPeek(TokenType.RBracket))
+        {
+            return null;
+        }
+
+        NextToken();
+        var valueType = ParseTypeExpression();
+        if (valueType is null)
+        {
+            return null;
+        }
+
+        return new MapTypeExpression
+        {
+            Token = mapToken,
+            KeyType = keyType,
+            ValueType = valueType,
+        };
     }
 
     private IExpression ParseArrayLiteral()

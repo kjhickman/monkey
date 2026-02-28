@@ -295,29 +295,29 @@ public class VmTests
         var tests = new VmTestCase[]
         {
             new(@"
-            let identity = fn(a) { a; };
+            let identity = fn(a: int) { a; };
             identity(4);
             ", 4),
             new(@"
-            let sum = fn(a, b) { a + b; };
+            let sum = fn(a: int, b: int) { a + b; };
             sum(1, 2);
             ", 3),
             new(@"
-            let sum = fn(a, b) {
+            let sum = fn(a: int, b: int) {
                 let c = a + b;
                 c;
             };
             sum(1, 2);
             ", 3),
             new(@"
-            let sum = fn(a, b) {
+            let sum = fn(a: int, b: int) {
                 let c = a + b;
                 c;
             };
             sum(1, 2) + sum(3, 4);
             ", 10),
             new(@"
-            let sum = fn(a, b) {
+            let sum = fn(a: int, b: int) {
                 let c = a + b;
                 c;
             };
@@ -329,7 +329,7 @@ public class VmTests
             new(@"
             let globalNum = 10;
 
-            let sum = fn(a, b) {
+            let sum = fn(a: int, b: int) {
                 let c = a + b;
                 c + globalNum;
             };
@@ -351,8 +351,8 @@ public class VmTests
         var tests = new (string Input, string ExpectedError)[]
         {
             ("fn() { 1; }(1);", "wrong number of arguments: want=0, got=1"),
-            ("fn(a) { a; }();", "wrong number of arguments: want=1, got=0"),
-            ("fn(a, b) { a + b; }(1);", "wrong number of arguments: want=2, got=1"),
+            ("fn(a: int) { a; }();", "wrong number of arguments: want=1, got=0"),
+            ("fn(a: int, b: int) { a + b; }(1);", "wrong number of arguments: want=2, got=1"),
         };
 
         foreach (var tt in tests)
@@ -403,33 +403,33 @@ public class VmTests
         var tests = new VmTestCase[]
         {
             new(@"
-            let newClosure = fn(a) {
+            let newClosure = fn(a: int) {
                 fn() { a; };
             };
             let closure = newClosure(99);
             closure();
             ", 99),
             new(@"
-            let newAdder = fn(a, b) {
-                fn(c) { a + b + c };
+            let newAdder = fn(a: int, b: int) {
+                fn(c: int) { a + b + c };
             };
             let adder = newAdder(1, 2);
             adder(8);
             ", 11),
             new(@"
-            let newAdder = fn(a, b) {
+            let newAdder = fn(a: int, b: int) {
                 let c = a + b;
-                fn(d) { c + d };
+                fn(d: int) { c + d };
             };
             let adder = newAdder(1, 2);
             adder(8);
             ", 11),
             new(@"
-            let newAdderOuter = fn(a, b) {
+            let newAdderOuter = fn(a: int, b: int) {
                 let c = a + b;
-                fn(d) {
+                fn(d: int) {
                     let e = d + c;
-                    fn(f) { e + f; };
+                    fn(f: int) { e + f; };
                 };
             };
             let newAdderInner = newAdderOuter(1, 2)
@@ -438,9 +438,9 @@ public class VmTests
             ", 14),
             new(@"
             let a = 1;
-            let newAdderOuter = fn(b) {
-                fn(c) {
-                    fn(d) { a + b + c + d };
+            let newAdderOuter = fn(b: int) {
+                fn(c: int) {
+                    fn(d: int) { a + b + c + d };
                 };
             };
             let newAdderInner = newAdderOuter(2)
@@ -448,7 +448,7 @@ public class VmTests
             adder(8);
             ", 14),
             new(@"
-            let newClosure = fn(a, b) {
+            let newClosure = fn(a: int, b: int) {
                 let one = fn() { a; };
                 let two = fn() { b; };
                 fn() { one() + two(); };
@@ -467,7 +467,7 @@ public class VmTests
         var tests = new VmTestCase[]
         {
             new(@"
-            let countDown = fn(x) {
+            let countDown = fn(x: int) {
                 if (x == 0) {
                     return 0;
                 } else {
@@ -477,7 +477,7 @@ public class VmTests
             countDown(1);
             ", 0),
             new(@"
-            let countDown = fn(x) {
+            let countDown = fn(x: int) {
                 if (x == 0) {
                     return 0;
                 } else {
@@ -491,7 +491,7 @@ public class VmTests
             ", 0),
             new(@"
             let wrapper = fn() {
-                let countDown = fn(x) {
+                let countDown = fn(x: int) {
                     if (x == 0) {
                         return 0;
                     } else {
@@ -513,7 +513,7 @@ public class VmTests
         var tests = new VmTestCase[]
         {
             new(@"
-            let fibonacci = fn(x) {
+            let fibonacci = fn(x: int) {
                 if (x == 0) {
                     return 0;
                 } else {

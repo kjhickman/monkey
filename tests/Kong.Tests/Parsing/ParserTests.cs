@@ -244,7 +244,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralParsing()
     {
-        var input = "fn(x, y) { x + y; }";
+        var input = "fn(x: int, y: int) { x + y; }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -258,8 +258,8 @@ public class ParserTests
 
         Assert.Equal(2, function.Parameters.Count);
 
-        TestLiteralExpression(function.Parameters[0], "x");
-        TestLiteralExpression(function.Parameters[1], "y");
+        TestFunctionParameter(function.Parameters[0], "x", "int");
+        TestFunctionParameter(function.Parameters[1], "y", "int");
 
         Assert.Single(function.Body.Statements);
 
@@ -268,10 +268,11 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("fn() {};", new string[] { })]
-    [InlineData("fn(x) {};", new[] { "x" })]
-    [InlineData("fn(x, y, z) {};", new[] { "x", "y", "z" })]
-    public void TestFunctionParameterParsing(string input, string[] expectedParams)
+    [InlineData("fn() {};", new string[] { }, new string[] { })]
+    [InlineData("fn(x: int) {};", new[] { "x" }, new[] { "int" })]
+    [InlineData("fn(x: int, y: bool, z: string) {};", new[] { "x", "y", "z" }, new[] { "int", "bool", "string" })]
+    [InlineData("fn(values: int[], lookup: map[string]int) {};", new[] { "values", "lookup" }, new[] { "int[]", "map[string]int" })]
+    public void TestFunctionParameterParsing(string input, string[] expectedParams, string[] expectedTypes)
     {
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -282,11 +283,26 @@ public class ParserTests
         var function = Assert.IsType<FunctionLiteral>(stmt.Expression);
 
         Assert.Equal(expectedParams.Length, function.Parameters.Count);
+        Assert.Equal(expectedTypes.Length, function.Parameters.Count);
 
         for (var i = 0; i < expectedParams.Length; i++)
         {
-            TestLiteralExpression(function.Parameters[i], expectedParams[i]);
+            TestFunctionParameter(function.Parameters[i], expectedParams[i], expectedTypes[i]);
         }
+    }
+
+    [Fact]
+    public void TestFunctionParameterParsingWithoutTypeAnnotation()
+    {
+        var input = "fn(x, y) { x + y; }";
+
+        var l = new Lexer(input);
+        var p = new Parser(l);
+        p.ParseProgram();
+
+        var errors = p.Errors();
+        Assert.NotEmpty(errors);
+        Assert.Contains(errors, e => e.Contains("expected ':' after function parameter name"));
     }
 
     [Fact]
@@ -556,5 +572,19 @@ public class ParserTests
         var bo = Assert.IsType<BooleanLiteral>(exp);
         Assert.Equal(value, bo.Value);
         Assert.Equal(value.ToString().ToLower(), bo.TokenLiteral());
+    }
+
+    private static void TestFunctionParameter(FunctionParameter parameter, string expectedName, string? expectedType)
+    {
+        Assert.Equal(expectedName, parameter.Name.Value);
+
+        if (expectedType is null)
+        {
+            Assert.Null(parameter.TypeAnnotation);
+            return;
+        }
+
+        Assert.NotNull(parameter.TypeAnnotation);
+        Assert.Equal(expectedType, parameter.TypeAnnotation!.String());
     }
 }

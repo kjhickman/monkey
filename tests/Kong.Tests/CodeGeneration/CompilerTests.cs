@@ -431,7 +431,7 @@ public class CompilerTests
                 Code.Make(Opcode.OpPop),
             ]),
             new(@"
-            let oneArg = fn(a) { a };
+            let oneArg = fn(a: int) { a };
             oneArg(24);
             ",
             [
@@ -451,7 +451,7 @@ public class CompilerTests
                 Code.Make(Opcode.OpPop),
             ]),
             new(@"
-            let manyArg = fn(a, b, c) { a; b; c };
+            let manyArg = fn(a: int, b: int, c: int) { a; b; c };
             manyArg(24, 25, 26);
             ",
             [
@@ -638,8 +638,8 @@ public class CompilerTests
         var tests = new CompilerTestCase[]
         {
             new(@"
-            fn(a) {
-                fn(b) {
+            fn(a: int) {
+                fn(b: int) {
                     a + b
                 }
             }
@@ -664,9 +664,9 @@ public class CompilerTests
                 Code.Make(Opcode.OpPop),
             ]),
             new(@"
-            fn(a) {
-                fn(b) {
-                    fn(c) {
+            fn(a: int) {
+                fn(b: int) {
+                    fn(c: int) {
                         a + b + c
                     }
                 }
@@ -767,7 +767,7 @@ public class CompilerTests
         var tests = new CompilerTestCase[]
         {
             new(@"
-            let countDown = fn(x) { countDown(x - 1); };
+            let countDown = fn(x: int) { countDown(x - 1); };
             countDown(1);
             ",
             [
@@ -793,7 +793,7 @@ public class CompilerTests
             ]),
             new(@"
             let wrapper = fn() {
-                let countDown = fn(x) { countDown(x - 1); };
+                let countDown = fn(x: int) { countDown(x - 1); };
                 countDown(1);
             };
             wrapper();
