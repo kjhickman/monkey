@@ -1,7 +1,5 @@
-using Kong.Parsing;
+using Kong.Lowering;
 using Kong.Semantics;
-using Kong.Semantics.Binding;
-using Kong.Semantics.Symbols;
 using System.Text;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -21,21 +19,19 @@ public class ClrEmitter
     private sealed class FunctionMetadata
     {
         public required MethodDefinition Method { get; init; }
-        public required SemanticModel.FunctionSignature Signature { get; init; }
+        public required FunctionSignature Signature { get; init; }
     }
 
     private sealed class EmitContext
     {
-        public EmitContext(SemanticModel types, ModuleDefinition module, MethodDefinition method, Dictionary<string, FunctionMetadata> functions, BoundProgram boundProgram)
+        public EmitContext(ModuleDefinition module, MethodDefinition method, Dictionary<string, FunctionMetadata> functions)
         {
-            Types = types;
             Module = module;
             Method = method;
             Il = method.Body.GetILProcessor();
             Locals = [];
             Parameters = [];
             Functions = functions;
-            BoundProgram = boundProgram;
             ClosureParameterIndices = [];
             ClosureCaptureIndices = [];
             ObjectArrayType = new ArrayType(module.TypeSystem.Object);
@@ -46,14 +42,12 @@ public class ClrEmitter
             }
         }
 
-        public SemanticModel Types { get; }
         public ModuleDefinition Module { get; }
         public MethodDefinition Method { get; }
         public ILProcessor Il { get; }
         public Dictionary<string, VariableDefinition> Locals { get; }
         public Dictionary<string, ParameterDefinition> Parameters { get; }
         public Dictionary<string, FunctionMetadata> Functions { get; }
-        public BoundProgram BoundProgram { get; }
         public Dictionary<string, int> ClosureParameterIndices { get; }
         public Dictionary<string, int> ClosureCaptureIndices { get; }
         public ArrayType ObjectArrayType { get; }
@@ -63,29 +57,22 @@ public class ClrEmitter
             && Method.Parameters[1].ParameterType.FullName == ObjectArrayType.FullName;
     }
 
-    public string? CompileProgramToMain(BoundProgram boundProgram, ModuleDefinition module, MethodDefinition mainMethod)
+    public string? CompileProgramToMain(Program program, ModuleDefinition module, MethodDefinition mainMethod)
     {
-        var program = boundProgram.Syntax;
-        var types = boundProgram.TypeInfo;
-        if (types is null)
-        {
-            return "missing semantic type information";
-        }
-
         var functions = new Dictionary<string, FunctionMetadata>();
-        var functionDeclErr = DeclareTopLevelFunctions(program, module, functions, types);
+        var functionDeclErr = DeclareTopLevelFunctions(program, module, functions);
         if (functionDeclErr is not null)
         {
             return functionDeclErr;
         }
 
-        var functionBodyErr = CompileFunctionBodies(program, module, functions, types, boundProgram);
+        var functionBodyErr = CompileFunctionBodies(program, module, functions);
         if (functionBodyErr is not null)
         {
             return functionBodyErr;
         }
 
-        var context = new EmitContext(types, module, mainMethod, functions, boundProgram);
+        var context = new EmitContext(module, mainMethod, functions);
 
         for (int i = 0; i < program.Statements.Count; i++)
         {
@@ -115,7 +102,7 @@ public class ClrEmitter
         return statement is LetStatement { Value: FunctionLiteral };
     }
 
-    private static string? DeclareTopLevelFunctions(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, SemanticModel types)
+    private static string? DeclareTopLevelFunctions(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions)
     {
         var programType = module.Types.FirstOrDefault(t => t.Name == "Program");
         if (programType is null)
@@ -130,21 +117,21 @@ public class ClrEmitter
                 continue;
             }
 
-            if (!types.TryGetFunctionSignature(letStatement.Name.Value, out var signature))
+            if (!program.FunctionSignatures.TryGetValue(letStatement.Name.Value, out var signature))
             {
-                signature = new SemanticModel.FunctionSignature(letStatement.Name.Value, [], TypeSymbol.Unknown);
+                signature = new FunctionSignature(letStatement.Name.Value, [], KongType.Unknown);
             }
 
             var method = new MethodDefinition(
                 letStatement.Name.Value,
                 MethodAttributes.Public | MethodAttributes.Static,
-                ResolveReturnType(signature.ReturnType.ToKongType(), module));
+                ResolveReturnType(signature.ReturnType, module));
 
             for (var i = 0; i < functionLiteral.Parameters.Count; i++)
             {
                 var parameterName = functionLiteral.Parameters[i].Name.Value;
                 var parameterType = i < signature.ParameterTypes.Count
-                    ? ResolveLocalType(signature.ParameterTypes[i].ToKongType(), module)
+                    ? ResolveLocalType(signature.ParameterTypes[i], module)
                     : module.TypeSystem.Object;
 
                 method.Parameters.Add(new ParameterDefinition(parameterName, ParameterAttributes.None, parameterType));
@@ -161,7 +148,7 @@ public class ClrEmitter
         return null;
     }
 
-    private string? CompileFunctionBodies(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, SemanticModel types, BoundProgram boundProgram)
+    private string? CompileFunctionBodies(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions)
     {
         foreach (var statement in program.Statements)
         {
@@ -170,7 +157,7 @@ public class ClrEmitter
                 continue;
             }
 
-            var functionContext = new EmitContext(types, module, functions[letStatement.Name.Value].Method, functions, boundProgram);
+            var functionContext = new EmitContext(module, functions[letStatement.Name.Value].Method, functions);
             for (var i = 0; i < functionLiteral.Parameters.Count; i++)
             {
                 var parameter = functionLiteral.Parameters[i];
@@ -217,7 +204,7 @@ public class ClrEmitter
 
         if (lastPushesValue && lastExpression is not null)
         {
-            EmitConversionIfNeeded(context.Types.GetNodeType(lastExpression), context.Method.ReturnType, context);
+            EmitConversionIfNeeded(lastExpression.Type, context.Method.ReturnType, context);
             context.Il.Emit(OpCodes.Ret);
             return null;
         }
@@ -428,7 +415,7 @@ public class ClrEmitter
                     return (err, false);
                 }
 
-                var expressionType = context.Types.GetNodeType(es.Expression);
+                var expressionType = es.Expression.Type;
                 return (null, expressionType != KongType.Void);
 
             case LetStatement ls when ls.Value is not null:
@@ -462,7 +449,7 @@ public class ClrEmitter
 
         if (!context.Locals.TryGetValue(ls.Name.Value, out var local))
         {
-            var valueType = context.Types.GetNodeType(ls.Value!);
+            var valueType = ls.Value!.Type;
             var localType = ResolveLocalType(valueType, context.Module);
 
             local = new VariableDefinition(localType);
@@ -550,7 +537,7 @@ public class ClrEmitter
                 return elementErr;
             }
 
-            EmitBoxIfNeeded(context.Types.GetNodeType(arrayLiteral.Elements[i]), context);
+            EmitBoxIfNeeded(arrayLiteral.Elements[i].Type, context);
             context.Il.Emit(OpCodes.Stelem_Ref);
         }
 
@@ -578,7 +565,7 @@ public class ClrEmitter
                 return keyErr;
             }
 
-            EmitBoxIfNeeded(context.Types.GetNodeType(pair.Key), context);
+            EmitBoxIfNeeded(pair.Key.Type, context);
 
             var valueErr = EmitExpression(pair.Value, context);
             if (valueErr is not null)
@@ -586,7 +573,7 @@ public class ClrEmitter
                 return valueErr;
             }
 
-            EmitBoxIfNeeded(context.Types.GetNodeType(pair.Value), context);
+            EmitBoxIfNeeded(pair.Value.Type, context);
             context.Il.Emit(OpCodes.Callvirt, addMethod);
         }
 
@@ -601,7 +588,7 @@ public class ClrEmitter
             return operandsErr;
         }
 
-        var plusType = context.Types.GetNodeType(expression);
+        var plusType = expression.Type;
         switch (plusType)
         {
             case KongType.Int64:
@@ -669,7 +656,7 @@ public class ClrEmitter
                 context.Il.Emit(OpCodes.Ldarg_1);
                 context.Il.Emit(OpCodes.Ldc_I4, parameterIndex);
                 context.Il.Emit(OpCodes.Ldelem_Ref);
-                EmitReadFromObject(context.Types.GetNodeType(identifier), context);
+                EmitReadFromObject(identifier.Type, context);
                 return null;
             }
 
@@ -678,7 +665,7 @@ public class ClrEmitter
                 context.Il.Emit(OpCodes.Ldarg_0);
                 context.Il.Emit(OpCodes.Ldc_I4, captureIndex);
                 context.Il.Emit(OpCodes.Ldelem_Ref);
-                EmitReadFromObject(context.Types.GetNodeType(identifier), context);
+                EmitReadFromObject(identifier.Type, context);
                 return null;
             }
 
@@ -716,13 +703,13 @@ public class ClrEmitter
 
     private string? EmitIndexExpression(IndexExpression indexExpression, EmitContext context)
     {
-        var leftType = context.Types.GetNodeType(indexExpression.Left);
+        var leftType = indexExpression.Left.Type;
         if (leftType is not KongType.Array and not KongType.HashMap and not KongType.Unknown)
         {
             return $"Index operator not supported for type: {leftType}";
         }
 
-        var indexType = context.Types.GetNodeType(indexExpression.Index);
+        var indexType = indexExpression.Index.Type;
         if (leftType == KongType.Array && indexType is not KongType.Int64 and not KongType.Unknown)
         {
             return $"Array index must be Int64, got: {indexType}";
@@ -754,7 +741,7 @@ public class ClrEmitter
 
         EmitConvertInt64ToInt32(context);
         context.Il.Emit(OpCodes.Ldelem_Ref);
-        EmitReadFromObject(context.Types.GetNodeType(indexExpression), context);
+        EmitReadFromObject(indexExpression.Type, context);
         return null;
     }
 
@@ -812,21 +799,6 @@ public class ClrEmitter
 
     private string? EmitCallExpression(CallExpression callExpression, EmitContext context)
     {
-        if (callExpression.Function is Identifier { Value: "puts" })
-        {
-            return EmitPutsBuiltinCall(callExpression, context);
-        }
-
-        if (callExpression.Function is Identifier { Value: "len" })
-        {
-            return EmitLenBuiltinCall(callExpression, context);
-        }
-
-        if (callExpression.Function is Identifier { Value: "push" })
-        {
-            return EmitPushBuiltinCall(callExpression, context);
-        }
-
         if (callExpression.Function is Identifier functionIdentifier
             && context.Functions.TryGetValue(functionIdentifier.Value, out var functionMetadata)
             && !IsVariableBound(functionIdentifier.Value, context))
@@ -846,13 +818,19 @@ public class ClrEmitter
                 }
 
                 var expectedType = functionMetadata.Method.Parameters[i].ParameterType;
-                var argumentType = context.Types.GetNodeType(argument);
+                var argumentType = argument.Type;
                 EmitConversionIfNeeded(argumentType, expectedType, context);
             }
 
             context.Il.Emit(OpCodes.Call, functionMetadata.Method);
 
-            var callType = context.Types.GetNodeType(callExpression);
+            var callType = callExpression.Type;
+            if (callType == KongType.Void)
+            {
+                context.Il.Emit(OpCodes.Pop);
+                return null;
+            }
+
             EmitTypedReadFromObjectIfNeeded(callType, context);
             return null;
         }
@@ -903,7 +881,7 @@ public class ClrEmitter
                 return argumentErr;
             }
 
-            EmitBoxIfNeeded(context.Types.GetNodeType(callExpression.Arguments[i]), context);
+            EmitBoxIfNeeded(callExpression.Arguments[i].Type, context);
             context.Il.Emit(OpCodes.Stelem_Ref);
         }
 
@@ -914,7 +892,13 @@ public class ClrEmitter
         context.Il.Emit(OpCodes.Ldloc, argsLocal);
         context.Il.Emit(OpCodes.Callvirt, invokeMethod);
 
-        var closureCallType = context.Types.GetNodeType(callExpression);
+        var closureCallType = callExpression.Type;
+        if (closureCallType == KongType.Void)
+        {
+            context.Il.Emit(OpCodes.Pop);
+            return null;
+        }
+
         EmitReadFromObject(closureCallType, context);
         return null;
     }
@@ -940,7 +924,7 @@ public class ClrEmitter
                 return argumentErr;
             }
 
-            var argumentType = context.Types.GetNodeType(argument);
+            var argumentType = argument.Type;
             if (!EmitWriteLineForTypedResult(argumentType, context))
             {
                 EmitBoxIfNeeded(argumentType, context);
@@ -949,11 +933,6 @@ public class ClrEmitter
         }
 
         return null;
-    }
-
-    private string? EmitPutsBuiltinCall(CallExpression callExpression, EmitContext context)
-    {
-        return EmitPutsBuiltinCall(callExpression.Arguments, context);
     }
 
     private string? EmitLenBuiltinCall(IReadOnlyList<IExpression> arguments, EmitContext context)
@@ -970,7 +949,7 @@ public class ClrEmitter
             return argumentErr;
         }
 
-        var argumentType = context.Types.GetNodeType(argument);
+        var argumentType = argument.Type;
         if (argumentType == KongType.String)
         {
             EmitStringLength(context);
@@ -985,11 +964,6 @@ public class ClrEmitter
 
         EmitLenWithRuntimeTypeCheck(argumentType, context);
         return null;
-    }
-
-    private string? EmitLenBuiltinCall(CallExpression callExpression, EmitContext context)
-    {
-        return EmitLenBuiltinCall(callExpression.Arguments, context);
     }
 
     private static void EmitStringLength(EmitContext context)
@@ -1069,7 +1043,7 @@ public class ClrEmitter
             return arrayErr;
         }
 
-        var arrayType = context.Types.GetNodeType(arrayExpr);
+        var arrayType = arrayExpr.Type;
         if (arrayType == KongType.Array)
         {
             return EmitPushForArrayOnStack(arguments[1], context);
@@ -1081,11 +1055,6 @@ public class ClrEmitter
         }
 
         return EmitPushWithRuntimeTypeCheck(arguments[1], context);
-    }
-
-    private string? EmitPushBuiltinCall(CallExpression callExpression, EmitContext context)
-    {
-        return EmitPushBuiltinCall(callExpression.Arguments, context);
     }
 
     private string? EmitPushForArrayOnStack(IExpression valueExpr, EmitContext context)
@@ -1126,7 +1095,7 @@ public class ClrEmitter
             return valueErr;
         }
 
-        EmitBoxIfNeeded(context.Types.GetNodeType(valueExpr), context);
+        EmitBoxIfNeeded(valueExpr.Type, context);
         context.Il.Emit(OpCodes.Stelem_Ref);
         context.Il.Emit(OpCodes.Ldloc, newArrayLocal);
         return null;
@@ -1173,7 +1142,7 @@ public class ClrEmitter
 
     private string? EmitFunctionLiteralExpression(FunctionLiteral functionLiteral, EmitContext outerContext)
     {
-        var captures = outerContext.BoundProgram.GetClosureCaptureNames(functionLiteral).ToList();
+        var captures = functionLiteral.Captures.ToList();
         var (closureMethod, createErr) = CreateClosureMethod(functionLiteral, captures, outerContext);
         if (createErr is not null)
         {
@@ -1237,7 +1206,7 @@ public class ClrEmitter
         var programType = outerContext.Module.Types.First(t => t.Name == "Program");
         programType.Methods.Add(method);
 
-        var closureContext = new EmitContext(outerContext.Types, outerContext.Module, method, outerContext.Functions, outerContext.BoundProgram);
+        var closureContext = new EmitContext(outerContext.Module, method, outerContext.Functions);
         for (var i = 0; i < captures.Count; i++)
         {
             closureContext.ClosureCaptureIndices[captures[i]] = i;
@@ -1336,7 +1305,7 @@ public class ClrEmitter
             return emitErr;
         }
 
-        EmitConversionIfNeeded(context.Types.GetNodeType(returnStatement.ReturnValue!), context.Method.ReturnType, context);
+        EmitConversionIfNeeded(returnStatement.ReturnValue.Type, context.Method.ReturnType, context);
         context.Il.Emit(OpCodes.Ret);
         return null;
     }

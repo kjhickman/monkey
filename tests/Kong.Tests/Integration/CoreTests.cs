@@ -88,6 +88,7 @@ public class CoreTests
     [InlineData("if (false) { 10 }; puts(99);", "99")]
     [InlineData("let x = 1; if (x == 1) { x + 2 }; puts(x + 10);", "11")]
     [InlineData("if (true) { if (false) { 10 }; 20 }; puts(30);", "30")]
+    [InlineData("let f = fn() { if (true) { puts(1); } }; f();", "1")]
     public async Task TestIfWithoutElseAsStatement(string source, string expected)
     {
         var clrOutput = await IntegrationTestHarness.CompileAndRunOnClr(source);

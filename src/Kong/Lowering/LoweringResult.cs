@@ -1,6 +1,4 @@
 using Kong.Diagnostics;
-using Kong.Parsing;
-using Kong.Semantics;
 using Kong.Semantics.Binding;
 
 namespace Kong.Lowering;

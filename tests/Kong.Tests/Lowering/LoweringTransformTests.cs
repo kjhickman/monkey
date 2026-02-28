@@ -1,7 +1,7 @@
 using Kong.Compilation;
 using Kong.Lexing;
 using Kong.Lowering;
-using Kong.Parsing;
+using P = Kong.Parsing;
 using Kong.Semantics;
 using Kong.Semantics.Binding;
 
@@ -76,35 +76,35 @@ public class LoweringTransformTests
     public void Lowering_TemporaryNamesAvoidExistingIdentifiers()
     {
         var existingName = "__lowered_tmp_0";
-        var letStatement = new LetStatement
+        var letStatement = new P.LetStatement
         {
             Token = new Token(TokenType.Let, "let"),
-            Name = new Identifier { Token = new Token(TokenType.Ident, existingName), Value = existingName },
-            Value = new IntegerLiteral { Token = new Token(TokenType.Int, "100"), Value = 100 },
+            Name = new P.Identifier { Token = new Token(TokenType.Ident, existingName), Value = existingName },
+            Value = new P.IntegerLiteral { Token = new Token(TokenType.Int, "100"), Value = 100 },
         };
 
-        var callStatement = new ExpressionStatement
+        var callStatement = new P.ExpressionStatement
         {
             Token = new Token(TokenType.Ident, "puts"),
-            Expression = new CallExpression
+            Expression = new P.CallExpression
             {
                 Token = new Token(TokenType.LParen, "("),
-                Function = new Identifier { Token = new Token(TokenType.Ident, "puts"), Value = "puts" },
+                Function = new P.Identifier { Token = new Token(TokenType.Ident, "puts"), Value = "puts" },
                 Arguments =
                 [
-                    new InfixExpression
+                    new P.InfixExpression
                     {
                         Token = new Token(TokenType.Plus, "+"),
-                        Left = new IntegerLiteral { Token = new Token(TokenType.Int, "1"), Value = 1 },
+                        Left = new P.IntegerLiteral { Token = new Token(TokenType.Int, "1"), Value = 1 },
                         Operator = "+",
-                        Right = new IntegerLiteral { Token = new Token(TokenType.Int, "2"), Value = 2 },
+                        Right = new P.IntegerLiteral { Token = new Token(TokenType.Int, "2"), Value = 2 },
                     },
                 ],
             },
         };
 
-        var program = new Program { Statements = [letStatement, callStatement] };
-        var boundProgram = new BoundProgram(program, [], new Dictionary<FunctionLiteral, BoundFunctionExpression>());
+        var program = new P.Program { Statements = [letStatement, callStatement] };
+        var boundProgram = new BoundProgram(program, [], new Dictionary<P.FunctionLiteral, BoundFunctionExpression>());
         boundProgram.SetTypeInfo(new SemanticModel());
 
         var lowerer = new CanonicalLowerer();
