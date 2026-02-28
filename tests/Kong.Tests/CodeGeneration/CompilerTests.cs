@@ -482,6 +482,58 @@ public class CompilerTests
     }
 
     [Fact]
+    public void TestFunctionCallTypeAnnotations()
+    {
+        var okProgram = Parse(@"
+            let id = fn(x: int) { x };
+            id(24);
+        ");
+        var okCompiler = new Compiler();
+        var okErr = okCompiler.Compile(okProgram);
+        Assert.Null(okErr);
+
+        var wrongTypeProgram = Parse(@"
+            let id = fn(x: int) { x };
+            id(true);
+        ");
+        var wrongTypeCompiler = new Compiler();
+        var wrongTypeErr = wrongTypeCompiler.Compile(wrongTypeProgram);
+        Assert.Equal("type mismatch for argument 1 in call to id: expected int, got bool", wrongTypeErr);
+
+        var mapProgram = Parse(@"
+            let get = fn(m: map[string]int) { m[""a""] };
+            get({""a"": 1});
+        ");
+        var mapCompiler = new Compiler();
+        var mapErr = mapCompiler.Compile(mapProgram);
+        Assert.Null(mapErr);
+
+        var unknownTypeProgram = Parse(@"
+            let id = fn(x: integer) { x };
+            id(24);
+        ");
+        var unknownTypeCompiler = new Compiler();
+        var unknownTypeErr = unknownTypeCompiler.Compile(unknownTypeProgram);
+        Assert.Equal("invalid type annotation for parameter 'x': unknown type 'integer'", unknownTypeErr);
+
+        var arrayMismatchProgram = Parse(@"
+            let sumFirst = fn(values: int[]) { values[0] };
+            sumFirst([true]);
+        ");
+        var arrayMismatchCompiler = new Compiler();
+        var arrayMismatchErr = arrayMismatchCompiler.Compile(arrayMismatchProgram);
+        Assert.Equal("type mismatch for argument 1 in call to sumFirst: expected int[], got bool[]", arrayMismatchErr);
+
+        var mapMismatchProgram = Parse(@"
+            let get = fn(m: map[string]int) { m[""a""] };
+            get({""a"": true});
+        ");
+        var mapMismatchCompiler = new Compiler();
+        var mapMismatchErr = mapMismatchCompiler.Compile(mapMismatchProgram);
+        Assert.Equal("type mismatch for argument 1 in call to get: expected map[string]int, got map[string]bool", mapMismatchErr);
+    }
+
+    [Fact]
     public void TestLetStatementScopes()
     {
         var tests = new CompilerTestCase[]

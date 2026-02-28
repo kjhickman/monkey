@@ -1,4 +1,5 @@
 using Kong.Parsing;
+using Kong.Semantics;
 
 namespace Kong.CodeGeneration;
 
@@ -72,6 +73,11 @@ public class Compiler
         switch (node)
         {
             case Program program:
+                var typeInferer = new TypeInferer();
+                var typeErrors = typeInferer.ValidateFunctionTypeAnnotations(program);
+                if (typeErrors.Count > 0)
+                    return typeErrors[0];
+
                 foreach (var s in program.Statements)
                 {
                     var err = Compile(s);

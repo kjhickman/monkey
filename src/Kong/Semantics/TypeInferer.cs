@@ -4,6 +4,87 @@ namespace Kong.Semantics;
 
 public class TypeInferer
 {
+    private sealed class BindingInfo
+    {
+        public StaticType ValueType { get; init; } = StaticType.Unknown;
+        public IReadOnlyList<StaticType>? FunctionParameterTypes { get; init; }
+    }
+
+    private sealed class StaticType
+    {
+        private enum Kind
+        {
+            Unknown,
+            Int,
+            Bool,
+            String,
+            Array,
+            Map,
+        }
+
+        private StaticType(Kind typeKind, StaticType? elementType = null, StaticType? keyType = null, StaticType? valueType = null)
+        {
+            TypeKind = typeKind;
+            ElementType = elementType;
+            KeyType = keyType;
+            ValueType = valueType;
+        }
+
+        private Kind TypeKind { get; }
+        private StaticType? ElementType { get; }
+        private StaticType? KeyType { get; }
+        private StaticType? ValueType { get; }
+
+        public static StaticType Unknown { get; } = new(Kind.Unknown);
+        public static StaticType Int { get; } = new(Kind.Int);
+        public static StaticType Bool { get; } = new(Kind.Bool);
+        public static StaticType String { get; } = new(Kind.String);
+        public static StaticType ArrayOf(StaticType elementType) => new(Kind.Array, elementType: elementType);
+        public static StaticType MapOf(StaticType keyType, StaticType valueType) => new(Kind.Map, keyType: keyType, valueType: valueType);
+
+        public bool IsUnknown => TypeKind == Kind.Unknown;
+
+        public bool IsCompatibleWith(StaticType actual)
+        {
+            if (IsUnknown || actual.IsUnknown)
+            {
+                return true;
+            }
+
+            if (TypeKind != actual.TypeKind)
+            {
+                return false;
+            }
+
+            return TypeKind switch
+            {
+                Kind.Array => ElementType!.IsCompatibleWith(actual.ElementType!),
+                Kind.Map => KeyType!.IsCompatibleWith(actual.KeyType!) && ValueType!.IsCompatibleWith(actual.ValueType!),
+                _ => true,
+            };
+        }
+
+        public override string ToString()
+        {
+            return TypeKind switch
+            {
+                Kind.Int => "int",
+                Kind.Bool => "bool",
+                Kind.String => "string",
+                Kind.Array => $"{ElementType}[]",
+                Kind.Map => $"map[{KeyType}]{ValueType}",
+                _ => "unknown",
+            };
+        }
+    }
+
+    public List<string> ValidateFunctionTypeAnnotations(Program root)
+    {
+        var env = new Dictionary<string, BindingInfo>();
+        var error = ValidateProgramFunctionTypes(root, env);
+        return error is null ? [] : [error];
+    }
+
     public TypeInferenceResult InferTypes(Program root)
     {
         var result = new TypeInferenceResult();
@@ -277,5 +358,474 @@ public class TypeInferer
     private KongType InferUnsupported(INode node, TypeInferenceResult result)
     {
         return AddErrorAndSetType(node, $"Unsupported node type: {node.GetType().Name}", KongType.Unknown, result);
+    }
+
+    private static string? ValidateProgramFunctionTypes(Program program, Dictionary<string, BindingInfo> env)
+    {
+        foreach (var statement in program.Statements)
+        {
+            var err = ValidateFunctionTypesInStatement(statement, env);
+            if (err is not null)
+            {
+                return err;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ValidateFunctionTypesInStatement(IStatement statement, Dictionary<string, BindingInfo> env)
+    {
+        switch (statement)
+        {
+            case LetStatement { Value: not null } letStatement:
+            {
+                if (letStatement.Value is FunctionLiteral functionLiteral)
+                {
+                    var fnParamTypes = ParseFunctionParameterTypes(functionLiteral, out var parseErr);
+                    if (parseErr is not null)
+                    {
+                        return parseErr;
+                    }
+
+                    env[letStatement.Name.Value] = new BindingInfo { FunctionParameterTypes = fnParamTypes };
+
+                    var fnErr = ValidateFunctionLiteral(functionLiteral, env);
+                    if (fnErr is not null)
+                    {
+                        return fnErr;
+                    }
+                }
+                else
+                {
+                    var valueErr = ValidateFunctionTypesInExpression(letStatement.Value, env);
+                    if (valueErr is not null)
+                    {
+                        return valueErr;
+                    }
+
+                    env[letStatement.Name.Value] = new BindingInfo
+                    {
+                        ValueType = InferStaticExpressionType(letStatement.Value, env),
+                    };
+                }
+
+                return null;
+            }
+
+            case ReturnStatement { ReturnValue: not null } returnStatement:
+                return ValidateFunctionTypesInExpression(returnStatement.ReturnValue, env);
+
+            case ExpressionStatement { Expression: not null } expressionStatement:
+                return ValidateFunctionTypesInExpression(expressionStatement.Expression, env);
+
+            case BlockStatement blockStatement:
+            {
+                foreach (var inner in blockStatement.Statements)
+                {
+                    var err = ValidateFunctionTypesInStatement(inner, env);
+                    if (err is not null)
+                    {
+                        return err;
+                    }
+                }
+
+                return null;
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    private static string? ValidateFunctionTypesInExpression(IExpression expression, Dictionary<string, BindingInfo> env)
+    {
+        switch (expression)
+        {
+            case FunctionLiteral functionLiteral:
+                return ValidateFunctionLiteral(functionLiteral, env);
+
+            case CallExpression callExpression:
+            {
+                var functionErr = ValidateFunctionTypesInExpression(callExpression.Function, env);
+                if (functionErr is not null)
+                {
+                    return functionErr;
+                }
+
+                foreach (var argument in callExpression.Arguments)
+                {
+                    var argumentErr = ValidateFunctionTypesInExpression(argument, env);
+                    if (argumentErr is not null)
+                    {
+                        return argumentErr;
+                    }
+                }
+
+                var fnParamTypes = ResolveFunctionParameterTypes(callExpression.Function, env, out var resolveErr);
+                if (resolveErr is not null)
+                {
+                    return resolveErr;
+                }
+
+                if (fnParamTypes is null)
+                {
+                    return null;
+                }
+
+                var count = Math.Min(fnParamTypes.Count, callExpression.Arguments.Count);
+                for (var i = 0; i < count; i++)
+                {
+                    var expected = fnParamTypes[i];
+                    var actual = InferStaticExpressionType(callExpression.Arguments[i], env);
+                    if (!expected.IsCompatibleWith(actual))
+                    {
+                        return $"type mismatch for argument {i + 1} in call to {callExpression.Function.String()}: expected {expected}, got {actual}";
+                    }
+                }
+
+                return null;
+            }
+
+            case IfExpression ifExpression:
+            {
+                var conditionErr = ValidateFunctionTypesInExpression(ifExpression.Condition, env);
+                if (conditionErr is not null)
+                {
+                    return conditionErr;
+                }
+
+                var thenEnv = new Dictionary<string, BindingInfo>(env);
+                var thenErr = ValidateFunctionTypesInStatement(ifExpression.Consequence, thenEnv);
+                if (thenErr is not null)
+                {
+                    return thenErr;
+                }
+
+                if (ifExpression.Alternative is not null)
+                {
+                    var elseEnv = new Dictionary<string, BindingInfo>(env);
+                    var elseErr = ValidateFunctionTypesInStatement(ifExpression.Alternative, elseEnv);
+                    if (elseErr is not null)
+                    {
+                        return elseErr;
+                    }
+                }
+
+                return null;
+            }
+
+            case PrefixExpression prefixExpression:
+                return ValidateFunctionTypesInExpression(prefixExpression.Right, env);
+
+            case InfixExpression infixExpression:
+            {
+                var leftErr = ValidateFunctionTypesInExpression(infixExpression.Left, env);
+                if (leftErr is not null)
+                {
+                    return leftErr;
+                }
+
+                return ValidateFunctionTypesInExpression(infixExpression.Right, env);
+            }
+
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    var err = ValidateFunctionTypesInExpression(element, env);
+                    if (err is not null)
+                    {
+                        return err;
+                    }
+                }
+                return null;
+
+            case HashLiteral hashLiteral:
+                foreach (var pair in hashLiteral.Pairs)
+                {
+                    var keyErr = ValidateFunctionTypesInExpression(pair.Key, env);
+                    if (keyErr is not null)
+                    {
+                        return keyErr;
+                    }
+
+                    var valueErr = ValidateFunctionTypesInExpression(pair.Value, env);
+                    if (valueErr is not null)
+                    {
+                        return valueErr;
+                    }
+                }
+                return null;
+
+            case IndexExpression indexExpression:
+            {
+                var leftErr = ValidateFunctionTypesInExpression(indexExpression.Left, env);
+                if (leftErr is not null)
+                {
+                    return leftErr;
+                }
+
+                return ValidateFunctionTypesInExpression(indexExpression.Index, env);
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    private static string? ValidateFunctionLiteral(FunctionLiteral functionLiteral, Dictionary<string, BindingInfo> outerEnv)
+    {
+        var paramTypes = ParseFunctionParameterTypes(functionLiteral, out var parseErr);
+        if (parseErr is not null)
+        {
+            return parseErr;
+        }
+
+        var localEnv = new Dictionary<string, BindingInfo>(outerEnv);
+
+        if (!string.IsNullOrEmpty(functionLiteral.Name))
+        {
+            localEnv[functionLiteral.Name] = new BindingInfo { FunctionParameterTypes = paramTypes };
+        }
+
+        for (var i = 0; i < functionLiteral.Parameters.Count; i++)
+        {
+            var parameter = functionLiteral.Parameters[i];
+            localEnv[parameter.Name.Value] = new BindingInfo
+            {
+                ValueType = paramTypes[i],
+            };
+        }
+
+        return ValidateFunctionTypesInStatement(functionLiteral.Body, localEnv);
+    }
+
+    private static IReadOnlyList<StaticType>? ResolveFunctionParameterTypes(IExpression functionExpression, Dictionary<string, BindingInfo> env, out string? err)
+    {
+        err = null;
+
+        return functionExpression switch
+        {
+            Identifier identifier when env.TryGetValue(identifier.Value, out var binding) => binding.FunctionParameterTypes,
+            FunctionLiteral literal => ParseFunctionParameterTypes(literal, out err),
+            _ => null,
+        };
+    }
+
+    private static List<StaticType> ParseFunctionParameterTypes(FunctionLiteral functionLiteral, out string? err)
+    {
+        var parameterTypes = new List<StaticType>(functionLiteral.Parameters.Count);
+        foreach (var parameter in functionLiteral.Parameters)
+        {
+            if (parameter.TypeAnnotation is null)
+            {
+                err = $"missing type annotation for parameter '{parameter.Name.Value}'";
+                return [];
+            }
+
+            var type = ParseTypeAnnotation(parameter.TypeAnnotation, out err);
+            if (err is not null)
+            {
+                err = $"invalid type annotation for parameter '{parameter.Name.Value}': {err}";
+                return [];
+            }
+
+            parameterTypes.Add(type);
+        }
+
+        err = null;
+        return parameterTypes;
+    }
+
+    private static StaticType ParseTypeAnnotation(ITypeExpression annotation, out string? err)
+    {
+        switch (annotation)
+        {
+            case NamedTypeExpression namedType:
+                return namedType.Name switch
+                {
+                    "int" => SetNoError(StaticType.Int, out err),
+                    "bool" => SetNoError(StaticType.Bool, out err),
+                    "string" => SetNoError(StaticType.String, out err),
+                    _ => SetErrorAndReturnUnknown($"unknown type '{namedType.Name}'", out err),
+                };
+
+            case ArrayTypeExpression arrayType:
+            {
+                var elementType = ParseTypeAnnotation(arrayType.ElementType, out err);
+                if (err is not null)
+                {
+                    return StaticType.Unknown;
+                }
+
+                return SetNoError(StaticType.ArrayOf(elementType), out err);
+            }
+
+            case MapTypeExpression mapType:
+            {
+                var keyType = ParseTypeAnnotation(mapType.KeyType, out err);
+                if (err is not null)
+                {
+                    return StaticType.Unknown;
+                }
+
+                var valueType = ParseTypeAnnotation(mapType.ValueType, out err);
+                if (err is not null)
+                {
+                    return StaticType.Unknown;
+                }
+
+                return SetNoError(StaticType.MapOf(keyType, valueType), out err);
+            }
+
+            default:
+                return SetErrorAndReturnUnknown($"unsupported type annotation '{annotation.GetType().Name}'", out err);
+        }
+    }
+
+    private static StaticType SetNoError(StaticType type, out string? err)
+    {
+        err = null;
+        return type;
+    }
+
+    private static StaticType SetErrorAndReturnUnknown(string error, out string? err)
+    {
+        err = error;
+        return StaticType.Unknown;
+    }
+
+    private static StaticType InferStaticExpressionType(IExpression expression, Dictionary<string, BindingInfo> env)
+    {
+        switch (expression)
+        {
+            case IntegerLiteral:
+                return StaticType.Int;
+            case BooleanLiteral:
+                return StaticType.Bool;
+            case StringLiteral:
+                return StaticType.String;
+            case Identifier identifier when env.TryGetValue(identifier.Value, out var binding):
+                return binding.ValueType;
+            case ArrayLiteral arrayLiteral:
+            {
+                if (arrayLiteral.Elements.Count == 0)
+                {
+                    return StaticType.ArrayOf(StaticType.Unknown);
+                }
+
+                var elementType = InferStaticExpressionType(arrayLiteral.Elements[0], env);
+                for (var i = 1; i < arrayLiteral.Elements.Count; i++)
+                {
+                    var currentType = InferStaticExpressionType(arrayLiteral.Elements[i], env);
+                    if (!elementType.IsCompatibleWith(currentType) || !currentType.IsCompatibleWith(elementType))
+                    {
+                        return StaticType.ArrayOf(StaticType.Unknown);
+                    }
+                }
+
+                return StaticType.ArrayOf(elementType);
+            }
+            case HashLiteral hashLiteral:
+            {
+                if (hashLiteral.Pairs.Count == 0)
+                {
+                    return StaticType.MapOf(StaticType.Unknown, StaticType.Unknown);
+                }
+
+                var first = hashLiteral.Pairs[0];
+                var keyType = InferStaticExpressionType(first.Key, env);
+                var valueType = InferStaticExpressionType(first.Value, env);
+
+                for (var i = 1; i < hashLiteral.Pairs.Count; i++)
+                {
+                    var currentKeyType = InferStaticExpressionType(hashLiteral.Pairs[i].Key, env);
+                    var currentValueType = InferStaticExpressionType(hashLiteral.Pairs[i].Value, env);
+                    if (!keyType.IsCompatibleWith(currentKeyType) || !currentKeyType.IsCompatibleWith(keyType) || !valueType.IsCompatibleWith(currentValueType) || !currentValueType.IsCompatibleWith(valueType))
+                    {
+                        return StaticType.MapOf(StaticType.Unknown, StaticType.Unknown);
+                    }
+                }
+
+                return StaticType.MapOf(keyType, valueType);
+            }
+            case PrefixExpression prefixExpression when prefixExpression.Operator == "-":
+                return StaticType.Int;
+            case PrefixExpression prefixExpression when prefixExpression.Operator == "!":
+                return StaticType.Bool;
+            case InfixExpression infixExpression when infixExpression.Operator == "+":
+            {
+                var left = InferStaticExpressionType(infixExpression.Left, env);
+                var right = InferStaticExpressionType(infixExpression.Right, env);
+                if (left.IsCompatibleWith(StaticType.String) && right.IsCompatibleWith(StaticType.String))
+                {
+                    return StaticType.String;
+                }
+
+                if (left.IsCompatibleWith(StaticType.Int) && right.IsCompatibleWith(StaticType.Int))
+                {
+                    return StaticType.Int;
+                }
+
+                return StaticType.Unknown;
+            }
+            case InfixExpression infixExpression when infixExpression.Operator is "-" or "*" or "/":
+                return StaticType.Int;
+            case InfixExpression infixExpression when infixExpression.Operator is "==" or "!=" or "<" or ">":
+                return StaticType.Bool;
+            case IfExpression ifExpression:
+            {
+                var thenType = InferStaticBlockType(ifExpression.Consequence, env);
+                if (ifExpression.Alternative is null)
+                {
+                    return StaticType.Unknown;
+                }
+
+                var elseType = InferStaticBlockType(ifExpression.Alternative, env);
+                return thenType.IsCompatibleWith(elseType) && elseType.IsCompatibleWith(thenType)
+                    ? thenType
+                    : StaticType.Unknown;
+            }
+            case IndexExpression:
+            case CallExpression:
+            case FunctionLiteral:
+            default:
+                return StaticType.Unknown;
+        }
+    }
+
+    private static StaticType InferStaticBlockType(BlockStatement blockStatement, Dictionary<string, BindingInfo> env)
+    {
+        if (blockStatement.Statements.Count == 0)
+        {
+            return StaticType.Unknown;
+        }
+
+        var localEnv = new Dictionary<string, BindingInfo>(env);
+        var lastType = StaticType.Unknown;
+        foreach (var statement in blockStatement.Statements)
+        {
+            switch (statement)
+            {
+                case LetStatement { Value: not null } letStatement:
+                    localEnv[letStatement.Name.Value] = new BindingInfo
+                    {
+                        ValueType = InferStaticExpressionType(letStatement.Value, localEnv),
+                    };
+                    lastType = StaticType.Unknown;
+                    break;
+                case ExpressionStatement { Expression: not null } expressionStatement:
+                    lastType = InferStaticExpressionType(expressionStatement.Expression, localEnv);
+                    break;
+                case ReturnStatement { ReturnValue: not null } returnStatement:
+                    lastType = InferStaticExpressionType(returnStatement.ReturnValue, localEnv);
+                    break;
+                default:
+                    lastType = StaticType.Unknown;
+                    break;
+            }
+        }
+
+        return lastType;
     }
 }
