@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using Kong.CodeGeneration;
 using Kong.Lexing;
 using Kong.Parsing;
@@ -8,85 +9,25 @@ namespace Kong.Tests.CodeGeneration;
 
 public class VmClrOutputComparisonTests
 {
-    public static TheoryData<string> ArithmeticPrograms =>
+    public static TheoryData<string> OutputPrograms =>
     [
-        "1",
-        "1 + 2",
-        "1 - 2",
-        "1 * 2",
-        "4 / 2",
-        "1 + 1; 5 - 1;",
-        "let a = 5; a;",
-        "let a = 5; a + 1;",
-        "let a = 5; let b = 10; a + b;",
-        "let a = 5; let b = a + 2; b + a;",
-        "-1",
-        "let a = 5; -a + 2;",
-        "true",
-        "false",
-        "1 < 2",
-        "1 > 2",
-        "1 == 1",
-        "1 != 1",
-        "1 == 2",
-        "1 != 2",
-        "true == true",
-        "true != false",
-        "false == false",
-        "(1 < 2) == true",
-        "(1 > 2) == false",
-        "1 + 2 == 3",
-        "1 + 2 * 3 == 7",
-        "(1 + 2) * 3 == 9",
-        "let a = 5; let b = 10; a < b;",
-        "let a = 5; let b = 10; a == b;",
-        "let t = true; t;",
-        "let t = true; let f = false; t != f;",
-        "!true",
-        "!false",
-        "!!true",
-        "!!false",
-        "let t = true; !t;",
-        "let f = false; !f;",
-        "-1 < 0",
-        "-1 == -1",
-        "1 < 2; 3 < 4;",
-        "1 == 2; 3 == 3;",
-        "if (true) { 10 } else { 20 }",
-        "if (false) { 10 } else { 20 }",
-        "if (1 < 2) { 10 } else { 20 }",
-        "if (1 > 2) { 10 } else { 20 }",
-        "let x = 5; if (x > 3) { x } else { 0 }",
-        "if (true) { true } else { false }",
-        "if (false) { true } else { false }",
-        "let y = 4; let x = if (y > 3) { 5 } else { 10 }; x;",
-        "[]",
-        "[1, 2, 3]",
-        "[1 + 2, 3 * 4, 5 + 6]",
-        "let a = [1, 2, 3]; a;",
-        "let a = []; a;",
-        "let a = [1 + 2, 3 * 4, 5 + 6]; a;",
-        "[\"a\", \"b\", \"c\"]",
-        "let a = []; let b = [1, 2]; b;",
-        "[1, 2, 3][1]",
-        "[1, 2, 3][0 + 2]",
-        "[[1, 1, 1]][0][0]",
-        "let a = [1, 2, 3]; a[2];",
-        "{1: 1, 2: 2}[1]",
-        "{1: 1, 2: 2}[2]",
-        "let h = {1: 1, 2: 2}; h[1];",
-        "let add = fn(a: int, b: int) { a + b }; add(5, 3)",
-        "let identity = fn(x: int) { x }; identity(42)",
-        "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)",
-        "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)",
-        "let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; factorial(5)",
-        "let newClosure = fn(a: int) { fn() { a; }; }; let closure = newClosure(99); closure();",
-        "let newAdder = fn(a: int, b: int) { fn(c: int) { a + b + c }; }; let adder = newAdder(1, 2); adder(8);",
+        "puts(1)",
+        "puts(1 + 2)",
+        "puts(true != false)",
+        "puts(if (1 < 2) { 10 } else { 20 })",
+        "puts(\"mon\" + \"key\")",
+        "puts([1 + 2, 3 * 4, 5 + 6])",
+        "puts({1 + 1: 2 * 2, 3 + 3: 4 * 4})",
+        "puts([1, 2, 3][0 + 2])",
+        "let add = fn(a: int, b: int) { a + b }; puts(add(5, 3));",
+        "let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; puts(factorial(5));",
+        "let newClosure = fn(a: int) { fn() { a; }; }; let closure = newClosure(99); puts(closure());",
+        "puts(\"hello\", \"world!\")",
     ];
 
     [Theory]
-    [MemberData(nameof(ArithmeticPrograms))]
-    public async Task ClrBackend_MatchesVm_ForStarterArithmeticMatrix(string source)
+    [MemberData(nameof(OutputPrograms))]
+    public async Task ClrBackend_MatchesVm_ForExplicitPutsPrograms(string source)
     {
         var vmOutput = RunOnVm(source);
         var clrOutput = await CompileAndRunOnClr(source);
@@ -108,10 +49,20 @@ public class VmClrOutputComparisonTests
         Assert.Null(compileError);
 
         var vm = new Vm(compiler.GetBytecode());
-        var vmError = vm.Run();
-        Assert.Null(vmError);
 
-        return vm.LastPoppedStackElem().Inspect();
+        var originalOut = Console.Out;
+        var writer = new StringWriter();
+        Console.SetOut(writer);
+        try
+        {
+            var vmError = vm.Run();
+            Assert.Null(vmError);
+            return writer.ToString().TrimEnd();
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
     }
 
     private static async Task<string> CompileAndRunOnClr(string source)

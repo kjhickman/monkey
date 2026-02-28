@@ -75,9 +75,6 @@ public class IlCompiler
         }
 
         var context = new EmitContext(types, module, mainMethod, functions);
-        var lastPushesValue = false;
-        var emittedStatementCount = 0;
-        var lastResultType = KongType.Unknown;
 
         for (int i = 0; i < program.Statements.Count; i++)
         {
@@ -92,44 +89,19 @@ public class IlCompiler
                 return err;
             }
 
-            lastPushesValue = pushesValue;
-            emittedStatementCount++;
-
-            if (program.Statements[i] is ExpressionStatement { Expression: not null } expressionStatement)
-            {
-                lastResultType = context.Types.GetNodeType(expressionStatement.Expression);
-            }
-            else
-            {
-                lastResultType = KongType.Unknown;
-            }
-
-            if (HasRemainingNonFunctionStatements(program, i) && pushesValue)
+            if (pushesValue)
             {
                 context.Il.Emit(OpCodes.Pop);
             }
         }
 
-        EmitProgramResultAndReturn(emittedStatementCount, lastPushesValue, lastResultType, context);
+        context.Il.Emit(OpCodes.Ret);
         return null;
     }
 
     private static bool IsTopLevelFunctionDeclaration(IStatement statement)
     {
         return statement is LetStatement { Value: FunctionLiteral };
-    }
-
-    private static bool HasRemainingNonFunctionStatements(Program program, int currentIndex)
-    {
-        for (var i = currentIndex + 1; i < program.Statements.Count; i++)
-        {
-            if (!IsTopLevelFunctionDeclaration(program.Statements[i]))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static string? DeclareTopLevelFunctions(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, TypeInferenceResult types)
@@ -1292,24 +1264,6 @@ public class IlCompiler
         }
     }
 
-    private static void EmitProgramResultAndReturn(int statementCount, bool lastPushesValue, KongType resultType, EmitContext context)
-    {
-        if (statementCount == 0 || !lastPushesValue)
-        {
-            EmitWriteLineString(context, "no value");
-            context.Il.Emit(OpCodes.Ret);
-            return;
-        }
-
-        if (!EmitWriteLineForTypedResult(resultType, context))
-        {
-            EmitBoxIfNeeded(resultType, context);
-            EmitWriteLineForObjectResult(context);
-        }
-
-        context.Il.Emit(OpCodes.Ret);
-    }
-
     private static bool EmitWriteLineForTypedResult(KongType resultType, EmitContext context)
     {
         var writeLine = ResolveWriteLineMethod(resultType, context.Module);
@@ -1475,12 +1429,6 @@ public class IlCompiler
         context.Il.Emit(OpCodes.Call, writeLineObject);
 
         context.Il.Append(endLabel);
-    }
-
-    private static void EmitWriteLineString(EmitContext context, string value)
-    {
-        context.Il.Emit(OpCodes.Ldstr, value);
-        context.Il.Emit(OpCodes.Call, ResolveWriteLineMethod(KongType.String, context.Module));
     }
 
     private static void EmitBoxIfNeeded(KongType type, EmitContext context)
