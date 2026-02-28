@@ -53,6 +53,19 @@ public class ClrArtifactBuilder
     private static string? CompileMainBody(Program program, ModuleDefinition module, MethodDefinition mainMethod)
     {
         var inferer = new TypeInferer();
+
+        var clrValidationErrors = inferer.ValidateClrFunctionDeclarations(program);
+        if (clrValidationErrors.Count > 0)
+        {
+            return string.Join(Environment.NewLine, clrValidationErrors);
+        }
+
+        var annotationErrors = inferer.ValidateFunctionTypeAnnotations(program);
+        if (annotationErrors.Count > 0)
+        {
+            return string.Join(Environment.NewLine, annotationErrors);
+        }
+
         var types = inferer.InferTypes(program);
         var typeErrors = types.GetErrors().ToList();
         if (typeErrors.Count > 0)

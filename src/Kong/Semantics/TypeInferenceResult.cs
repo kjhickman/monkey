@@ -4,9 +4,12 @@ namespace Kong.Semantics;
 
 public sealed class TypeInferenceResult
 {
+    public sealed record FunctionSignature(string Name, IReadOnlyList<KongType> ParameterTypes, KongType ReturnType);
+
     // Maps each node to its inferred type. Note: uses reference equality for keys
     private Dictionary<INode, KongType> Types { get; set; } = [];
     private List<string> Errors { get; set; } = [];
+    private Dictionary<string, FunctionSignature> FunctionSignatures { get; set; } = [];
 
     public void AddNodeType(INode node, KongType type)
     {
@@ -26,5 +29,20 @@ public sealed class TypeInferenceResult
     public IEnumerable<string> GetErrors()
     {
         return Errors;
+    }
+
+    public void AddFunctionSignature(string name, IReadOnlyList<KongType> parameterTypes, KongType returnType)
+    {
+        FunctionSignatures[name] = new FunctionSignature(name, parameterTypes, returnType);
+    }
+
+    public bool TryGetFunctionSignature(string name, out FunctionSignature signature)
+    {
+        return FunctionSignatures.TryGetValue(name, out signature!);
+    }
+
+    public IEnumerable<FunctionSignature> GetFunctionSignatures()
+    {
+        return FunctionSignatures.Values;
     }
 }

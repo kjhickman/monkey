@@ -137,6 +137,44 @@ public class ClrRegressionTests
         Assert.Equal(expected, clrOutput);
     }
 
+    [Theory]
+    [InlineData("let add = fn(a: int, b: int) { a + b }; add(5, 3)", "8")]
+    [InlineData("let identity = fn(x: int) { x }; identity(42)", "42")]
+    [InlineData("let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)", "10")]
+    [InlineData("let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)", "20")]
+    [InlineData("let get = fn(h: map[string]int) { h[\"answer\"] }; get({\"answer\": 42})", "42")]
+    public async Task TestTopLevelFunctionDeclarations(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
+    [InlineData("let outer = fn(x: int) { let inner = fn(y: int) { y }; inner(x) }; outer(1)", "nested function declarations are not supported")]
+    [InlineData("let base = 10; let addBase = fn(x: int) { x + base }; addBase(1)", "captured variables are not supported")]
+    [InlineData("let loop = fn(x: int) { loop(x) }; loop(1)", "recursion is not supported")]
+    public void TestClrFunctionDeclarationLimitations(string source, string expectedError)
+    {
+        var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-fn-limit-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            var assemblyPath = Path.Combine(tempDirectory, "program.dll");
+            var compiler = new KongCompiler();
+            var compileError = compiler.CompileToAssembly(source, "program", assemblyPath);
+            Assert.NotNull(compileError);
+            Assert.Contains(expectedError, compileError);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, recursive: true);
+            }
+        }
+    }
+
     private static async Task<string> CompileAndRunOnClr(string source)
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-vm-port-{Guid.NewGuid():N}");

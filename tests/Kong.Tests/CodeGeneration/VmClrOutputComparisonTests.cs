@@ -75,6 +75,10 @@ public class VmClrOutputComparisonTests
         "{1: 1, 2: 2}[1]",
         "{1: 1, 2: 2}[2]",
         "let h = {1: 1, 2: 2}; h[1];",
+        "let add = fn(a: int, b: int) { a + b }; add(5, 3)",
+        "let identity = fn(x: int) { x }; identity(42)",
+        "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)",
+        "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)",
     ];
 
     [Theory]

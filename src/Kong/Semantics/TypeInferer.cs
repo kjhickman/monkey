@@ -85,10 +85,46 @@ public class TypeInferer
         return error is null ? [] : [error];
     }
 
+    public List<string> ValidateClrFunctionDeclarations(Program root)
+    {
+        var errors = new List<string>();
+        var topLevelFunctionNames = root.Statements
+            .OfType<LetStatement>()
+            .Where(ls => ls.Value is FunctionLiteral)
+            .Select(ls => ls.Name.Value)
+            .ToHashSet();
+
+        foreach (var statement in root.Statements)
+        {
+            if (statement is LetStatement { Value: FunctionLiteral functionLiteral })
+            {
+                ValidateClrFunctionLiteral(functionLiteral, topLevelFunctionNames, errors);
+                continue;
+            }
+
+            ValidateNoNestedFunctionsInStatement(statement, errors);
+        }
+
+        return errors;
+    }
+
     public TypeInferenceResult InferTypes(Program root)
     {
         var result = new TypeInferenceResult();
         var env = new Dictionary<string, KongType>();
+
+        foreach (var statement in root.Statements)
+        {
+            if (statement is LetStatement { Value: FunctionLiteral fl })
+            {
+                var parameterTypes = fl.Parameters
+                    .Select(p => p.TypeAnnotation is null ? KongType.Unknown : ConvertTypeAnnotationToKongType(p.TypeAnnotation))
+                    .ToList();
+                result.AddFunctionSignature(fl.Name, parameterTypes, KongType.Unknown);
+                env[fl.Name] = KongType.Unknown;
+            }
+        }
+
         InferNode(root, result, env);
         return result;
     }
@@ -121,6 +157,7 @@ public class TypeInferer
         {
             ExpressionStatement es when es.Expression is not null => InferExpressionStatement(es, result, env),
             LetStatement ls when ls.Value is not null => InferLetStatement(ls, result, env),
+            ReturnStatement rs when rs.ReturnValue is not null => InferReturnStatement(rs, result, env),
             BlockStatement bs => InferBlockStatement(bs, result, env),
             _ => AddErrorAndSetType(statement, $"Unsupported statement type: {statement.GetType().Name}", KongType.Unknown, result),
         };
@@ -141,6 +178,8 @@ public class TypeInferer
             PrefixExpression prefix when prefix.Operator == "!" => InferBangPrefix(prefix, result, env),
             IfExpression ifExpr => InferIfExpression(ifExpr, result, env),
             IndexExpression indexExpr => InferIndexExpression(indexExpr, result, env),
+            FunctionLiteral functionLiteral => InferFunctionLiteral(functionLiteral, result, env),
+            CallExpression callExpression => InferCallExpression(callExpression, result, env),
             _ => AddErrorAndSetType(expression, $"Unsupported expression: {expression.GetType().Name}", KongType.Unknown, result),
         };
     }
@@ -196,6 +235,14 @@ public class TypeInferer
 
     private KongType InferLetStatement(LetStatement letStatement, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
+        if (letStatement.Value is FunctionLiteral functionLiteral)
+        {
+            var functionType = InferFunctionLiteral(functionLiteral, result, env);
+            env[letStatement.Name.Value] = functionType;
+            SetType(letStatement.Name, functionType, result);
+            return SetType(letStatement, functionType, result);
+        }
+
         var valueType = InferExpression(letStatement.Value!, result, env);
         if (valueType == KongType.Void)
         {
@@ -206,6 +253,12 @@ public class TypeInferer
         env[letStatement.Name.Value] = valueType;
         SetType(letStatement.Name, valueType, result);
         return SetType(letStatement, valueType, result);
+    }
+
+    private KongType InferReturnStatement(ReturnStatement returnStatement, TypeInferenceResult result, Dictionary<string, KongType> env)
+    {
+        var returnType = InferExpression(returnStatement.ReturnValue!, result, env);
+        return SetType(returnStatement, returnType, result);
     }
 
     private KongType InferBlockStatement(BlockStatement block, TypeInferenceResult result, Dictionary<string, KongType> env)
@@ -341,6 +394,83 @@ public class TypeInferer
         }
 
         return SetType(indexExpression, KongType.Unknown, result);
+    }
+
+    private KongType InferFunctionLiteral(FunctionLiteral functionLiteral, TypeInferenceResult result, Dictionary<string, KongType> env)
+    {
+        var localEnv = new Dictionary<string, KongType>(env);
+        var parameterTypes = new List<KongType>(functionLiteral.Parameters.Count);
+
+        foreach (var parameter in functionLiteral.Parameters)
+        {
+            if (parameter.TypeAnnotation is null)
+            {
+                return AddErrorAndSetType(functionLiteral, $"missing type annotation for parameter '{parameter.Name.Value}'", KongType.Unknown, result);
+            }
+
+            var parameterType = ConvertTypeAnnotationToKongType(parameter.TypeAnnotation);
+            parameterTypes.Add(parameterType);
+            localEnv[parameter.Name.Value] = parameterType;
+            SetType(parameter.Name, parameterType, result);
+        }
+
+        var bodyType = InferBlockStatement(functionLiteral.Body, result, localEnv);
+        if (!string.IsNullOrEmpty(functionLiteral.Name))
+        {
+            result.AddFunctionSignature(functionLiteral.Name, parameterTypes, bodyType);
+        }
+
+        return SetType(functionLiteral, KongType.Unknown, result);
+    }
+
+    private KongType InferCallExpression(CallExpression callExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
+    {
+        var _ = InferExpression(callExpression.Function, result, env);
+
+        foreach (var argument in callExpression.Arguments)
+        {
+            InferExpression(argument, result, env);
+        }
+
+        if (callExpression.Function is not Identifier identifier)
+        {
+            return SetType(callExpression, KongType.Unknown, result);
+        }
+
+        if (!result.TryGetFunctionSignature(identifier.Value, out var signature))
+        {
+            return SetType(callExpression, KongType.Unknown, result);
+        }
+
+        if (callExpression.Arguments.Count != signature.ParameterTypes.Count)
+        {
+            return AddErrorAndSetType(callExpression, $"wrong number of arguments for {identifier.Value}: want={signature.ParameterTypes.Count}, got={callExpression.Arguments.Count}", KongType.Unknown, result);
+        }
+
+        for (var i = 0; i < callExpression.Arguments.Count; i++)
+        {
+            var argumentType = result.GetNodeType(callExpression.Arguments[i]);
+            var parameterType = signature.ParameterTypes[i];
+            if (argumentType != KongType.Unknown && parameterType != KongType.Unknown && argumentType != parameterType)
+            {
+                return AddErrorAndSetType(callExpression, $"Type error: argument {i + 1} for {identifier.Value} expects {parameterType}, got {argumentType}", KongType.Unknown, result);
+            }
+        }
+
+        return SetType(callExpression, signature.ReturnType, result);
+    }
+
+    private static KongType ConvertTypeAnnotationToKongType(ITypeExpression annotation)
+    {
+        return annotation switch
+        {
+            NamedTypeExpression { Name: "int" } => KongType.Int64,
+            NamedTypeExpression { Name: "bool" } => KongType.Boolean,
+            NamedTypeExpression { Name: "string" } => KongType.String,
+            ArrayTypeExpression => KongType.Array,
+            MapTypeExpression => KongType.HashMap,
+            _ => KongType.Unknown,
+        };
     }
 
     private static KongType SetType(INode node, KongType type, TypeInferenceResult result)
@@ -827,5 +957,194 @@ public class TypeInferer
         }
 
         return lastType;
+    }
+
+    private static void ValidateClrFunctionLiteral(FunctionLiteral functionLiteral, HashSet<string> topLevelFunctionNames, List<string> errors)
+    {
+        var functionScope = new HashSet<string>(topLevelFunctionNames);
+        foreach (var parameter in functionLiteral.Parameters)
+        {
+            functionScope.Add(parameter.Name.Value);
+        }
+
+        ValidateClrStatementScope(functionLiteral.Body, functionScope, topLevelFunctionNames, errors, functionLiteral.Name);
+    }
+
+    private static void ValidateClrStatementScope(IStatement statement, HashSet<string> scope, HashSet<string> topLevelFunctionNames, List<string> errors, string currentFunctionName)
+    {
+        switch (statement)
+        {
+            case LetStatement { Value: FunctionLiteral nestedFunction }:
+                errors.Add($"nested function declarations are not supported in CLR backend: {nestedFunction.Name}");
+                return;
+
+            case LetStatement { Value: not null } letStatement:
+                ValidateClrExpressionScope(letStatement.Value, scope, topLevelFunctionNames, errors, currentFunctionName);
+                scope.Add(letStatement.Name.Value);
+                return;
+
+            case ReturnStatement { ReturnValue: not null } returnStatement:
+                ValidateClrExpressionScope(returnStatement.ReturnValue, scope, topLevelFunctionNames, errors, currentFunctionName);
+                return;
+
+            case ExpressionStatement { Expression: not null } expressionStatement:
+                ValidateClrExpressionScope(expressionStatement.Expression, scope, topLevelFunctionNames, errors, currentFunctionName);
+                return;
+
+            case BlockStatement blockStatement:
+                foreach (var innerStatement in blockStatement.Statements)
+                {
+                    ValidateClrStatementScope(innerStatement, scope, topLevelFunctionNames, errors, currentFunctionName);
+                }
+                return;
+        }
+    }
+
+    private static void ValidateClrExpressionScope(IExpression expression, HashSet<string> scope, HashSet<string> topLevelFunctionNames, List<string> errors, string currentFunctionName)
+    {
+        switch (expression)
+        {
+            case Identifier identifier when !scope.Contains(identifier.Value):
+                errors.Add($"captured variables are not supported in CLR backend function '{currentFunctionName}': {identifier.Value}");
+                return;
+
+            case FunctionLiteral nestedFunction:
+                errors.Add($"nested function declarations are not supported in CLR backend: {nestedFunction.Name}");
+                return;
+
+            case CallExpression callExpression:
+                if (callExpression.Function is not Identifier callIdentifier)
+                {
+                    errors.Add("function values and higher-order function calls are not supported in CLR backend");
+                    return;
+                }
+
+                if (callIdentifier.Value == currentFunctionName)
+                {
+                    errors.Add($"recursion is not supported in CLR backend function '{currentFunctionName}' yet");
+                    return;
+                }
+
+                if (!topLevelFunctionNames.Contains(callIdentifier.Value) && !scope.Contains(callIdentifier.Value))
+                {
+                    errors.Add($"undefined function in CLR backend: {callIdentifier.Value}");
+                    return;
+                }
+
+                foreach (var argument in callExpression.Arguments)
+                {
+                    ValidateClrExpressionScope(argument, scope, topLevelFunctionNames, errors, currentFunctionName);
+                }
+                return;
+
+            case InfixExpression infixExpression:
+                ValidateClrExpressionScope(infixExpression.Left, scope, topLevelFunctionNames, errors, currentFunctionName);
+                ValidateClrExpressionScope(infixExpression.Right, scope, topLevelFunctionNames, errors, currentFunctionName);
+                return;
+
+            case PrefixExpression prefixExpression:
+                ValidateClrExpressionScope(prefixExpression.Right, scope, topLevelFunctionNames, errors, currentFunctionName);
+                return;
+
+            case IfExpression ifExpression:
+                ValidateClrExpressionScope(ifExpression.Condition, scope, topLevelFunctionNames, errors, currentFunctionName);
+                ValidateClrStatementScope(ifExpression.Consequence, scope, topLevelFunctionNames, errors, currentFunctionName);
+                if (ifExpression.Alternative is not null)
+                {
+                    ValidateClrStatementScope(ifExpression.Alternative, scope, topLevelFunctionNames, errors, currentFunctionName);
+                }
+                return;
+
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    ValidateClrExpressionScope(element, scope, topLevelFunctionNames, errors, currentFunctionName);
+                }
+                return;
+
+            case HashLiteral hashLiteral:
+                foreach (var pair in hashLiteral.Pairs)
+                {
+                    ValidateClrExpressionScope(pair.Key, scope, topLevelFunctionNames, errors, currentFunctionName);
+                    ValidateClrExpressionScope(pair.Value, scope, topLevelFunctionNames, errors, currentFunctionName);
+                }
+                return;
+
+            case IndexExpression indexExpression:
+                ValidateClrExpressionScope(indexExpression.Left, scope, topLevelFunctionNames, errors, currentFunctionName);
+                ValidateClrExpressionScope(indexExpression.Index, scope, topLevelFunctionNames, errors, currentFunctionName);
+                return;
+        }
+    }
+
+    private static void ValidateNoNestedFunctionsInStatement(IStatement statement, List<string> errors)
+    {
+        switch (statement)
+        {
+            case LetStatement { Value: not null } letStatement:
+                ValidateNoNestedFunctionsInExpression(letStatement.Value, errors);
+                break;
+            case ExpressionStatement { Expression: not null } expressionStatement:
+                ValidateNoNestedFunctionsInExpression(expressionStatement.Expression, errors);
+                break;
+            case ReturnStatement { ReturnValue: not null } returnStatement:
+                ValidateNoNestedFunctionsInExpression(returnStatement.ReturnValue, errors);
+                break;
+            case BlockStatement blockStatement:
+                foreach (var inner in blockStatement.Statements)
+                {
+                    ValidateNoNestedFunctionsInStatement(inner, errors);
+                }
+                break;
+        }
+    }
+
+    private static void ValidateNoNestedFunctionsInExpression(IExpression expression, List<string> errors)
+    {
+        switch (expression)
+        {
+            case FunctionLiteral nestedFunction:
+                errors.Add($"nested function declarations are not supported in CLR backend: {nestedFunction.Name}");
+                return;
+            case PrefixExpression prefixExpression:
+                ValidateNoNestedFunctionsInExpression(prefixExpression.Right, errors);
+                return;
+            case InfixExpression infixExpression:
+                ValidateNoNestedFunctionsInExpression(infixExpression.Left, errors);
+                ValidateNoNestedFunctionsInExpression(infixExpression.Right, errors);
+                return;
+            case IfExpression ifExpression:
+                ValidateNoNestedFunctionsInExpression(ifExpression.Condition, errors);
+                ValidateNoNestedFunctionsInStatement(ifExpression.Consequence, errors);
+                if (ifExpression.Alternative is not null)
+                {
+                    ValidateNoNestedFunctionsInStatement(ifExpression.Alternative, errors);
+                }
+                return;
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    ValidateNoNestedFunctionsInExpression(element, errors);
+                }
+                return;
+            case HashLiteral hashLiteral:
+                foreach (var pair in hashLiteral.Pairs)
+                {
+                    ValidateNoNestedFunctionsInExpression(pair.Key, errors);
+                    ValidateNoNestedFunctionsInExpression(pair.Value, errors);
+                }
+                return;
+            case IndexExpression indexExpression:
+                ValidateNoNestedFunctionsInExpression(indexExpression.Left, errors);
+                ValidateNoNestedFunctionsInExpression(indexExpression.Index, errors);
+                return;
+            case CallExpression callExpression:
+                ValidateNoNestedFunctionsInExpression(callExpression.Function, errors);
+                foreach (var argument in callExpression.Arguments)
+                {
+                    ValidateNoNestedFunctionsInExpression(argument, errors);
+                }
+                return;
+        }
     }
 }
