@@ -138,6 +138,16 @@ public class ClrRegressionTests
     }
 
     [Theory]
+    [InlineData("puts(\"hello\"); 1", "hello\n1")]
+    [InlineData("puts(1, true, \"x\"); 0", "1\nTrue\nx\n0")]
+    [InlineData("puts([1, 2], {1: 2}); 0", "[1, 2]\n{1: 2}\n0")]
+    public async Task TestPutsBuiltin(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
     [InlineData("let fivePlusTen = fn() { 5 + 10; }; fivePlusTen();", "15")]
     [InlineData("let one = fn() { 1; }; let two = fn() { 2; }; one() + two();", "3")]
     [InlineData("let a = fn() { 1 }; let b = fn() { a() + 1 }; let c = fn() { b() + 1 }; c();", "3")]

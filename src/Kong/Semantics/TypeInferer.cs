@@ -434,6 +434,16 @@ public class TypeInferer
 
     private KongType InferCallExpression(CallExpression callExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
     {
+        if (callExpression.Function is Identifier { Value: "puts" })
+        {
+            foreach (var argument in callExpression.Arguments)
+            {
+                InferExpression(argument, result, env);
+            }
+
+            return SetType(callExpression, KongType.Void, result);
+        }
+
         var _ = InferExpression(callExpression.Function, result, env);
 
         foreach (var argument in callExpression.Arguments)

@@ -771,6 +771,11 @@ public class IlCompiler
 
     private string? EmitCallExpression(CallExpression callExpression, EmitContext context)
     {
+        if (callExpression.Function is Identifier { Value: "puts" })
+        {
+            return EmitPutsBuiltinCall(callExpression, context);
+        }
+
         if (callExpression.Function is Identifier functionIdentifier
             && context.Functions.TryGetValue(functionIdentifier.Value, out var functionMetadata)
             && !IsVariableBound(functionIdentifier.Value, context))
@@ -860,6 +865,27 @@ public class IlCompiler
 
         var closureCallType = context.Types.GetNodeType(callExpression);
         EmitReadFromObject(closureCallType, context);
+        return null;
+    }
+
+    private string? EmitPutsBuiltinCall(CallExpression callExpression, EmitContext context)
+    {
+        foreach (var argument in callExpression.Arguments)
+        {
+            var argumentErr = EmitExpression(argument, context);
+            if (argumentErr is not null)
+            {
+                return argumentErr;
+            }
+
+            var argumentType = context.Types.GetNodeType(argument);
+            if (!EmitWriteLineForTypedResult(argumentType, context))
+            {
+                EmitBoxIfNeeded(argumentType, context);
+                EmitWriteLineForObjectResult(context);
+            }
+        }
+
         return null;
     }
 
