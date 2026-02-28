@@ -67,8 +67,8 @@ public class ClrArtifactBuilder
             return string.Join(Environment.NewLine, typeErrors);
         }
 
-        var ilCompiler = new IlCompiler();
-        return ilCompiler.CompileProgramToMain(program, types, module, mainMethod);
+        var emitter = new ClrEmitter();
+        return emitter.CompileProgramToMain(program, types, module, mainMethod);
     }
 
     private static void WriteArtifacts(AssemblyDefinition assembly, string outputAssembly)

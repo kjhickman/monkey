@@ -6,7 +6,7 @@ using Mono.Cecil.Cil;
 
 namespace Kong.CodeGeneration;
 
-public class IlCompiler
+public class ClrEmitter
 {
     private int _nextClosureId;
 
