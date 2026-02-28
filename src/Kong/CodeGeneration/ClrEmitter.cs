@@ -1,5 +1,6 @@
 using Kong.Parsing;
 using Kong.Semantics;
+using Kong.Semantics.Symbols;
 using System.Text;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -121,19 +122,19 @@ public class ClrEmitter
 
             if (!types.TryGetFunctionSignature(letStatement.Name.Value, out var signature))
             {
-                signature = new TypeInferenceResult.FunctionSignature(letStatement.Name.Value, [], KongType.Unknown);
+                signature = new TypeInferenceResult.FunctionSignature(letStatement.Name.Value, [], TypeSymbol.Unknown);
             }
 
             var method = new MethodDefinition(
                 letStatement.Name.Value,
                 MethodAttributes.Public | MethodAttributes.Static,
-                ResolveReturnType(signature.ReturnType, module));
+                ResolveReturnType(signature.ReturnType.ToKongType(), module));
 
             for (var i = 0; i < functionLiteral.Parameters.Count; i++)
             {
                 var parameterName = functionLiteral.Parameters[i].Name.Value;
                 var parameterType = i < signature.ParameterTypes.Count
-                    ? ResolveLocalType(signature.ParameterTypes[i], module)
+                    ? ResolveLocalType(signature.ParameterTypes[i].ToKongType(), module)
                     : module.TypeSystem.Object;
 
                 method.Parameters.Add(new ParameterDefinition(parameterName, ParameterAttributes.None, parameterType));

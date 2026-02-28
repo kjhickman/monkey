@@ -1,835 +1,160 @@
 using Kong.Parsing;
+using Kong.Semantics.Symbols;
 
 namespace Kong.Semantics;
 
 public class TypeInferer
 {
-    private sealed class BindingInfo
-    {
-        public StaticType ValueType { get; init; } = StaticType.Unknown;
-        public IReadOnlyList<StaticType>? FunctionParameterTypes { get; init; }
-    }
-
-    private sealed class StaticType
-    {
-        private enum Kind
-        {
-            Unknown,
-            Int,
-            Bool,
-            String,
-            Array,
-            Map,
-        }
-
-        private StaticType(Kind typeKind, StaticType? elementType = null, StaticType? keyType = null, StaticType? valueType = null)
-        {
-            TypeKind = typeKind;
-            ElementType = elementType;
-            KeyType = keyType;
-            ValueType = valueType;
-        }
-
-        private Kind TypeKind { get; }
-        private StaticType? ElementType { get; }
-        private StaticType? KeyType { get; }
-        private StaticType? ValueType { get; }
-
-        public static StaticType Unknown { get; } = new(Kind.Unknown);
-        public static StaticType Int { get; } = new(Kind.Int);
-        public static StaticType Bool { get; } = new(Kind.Bool);
-        public static StaticType String { get; } = new(Kind.String);
-        public static StaticType ArrayOf(StaticType elementType) => new(Kind.Array, elementType: elementType);
-        public static StaticType MapOf(StaticType keyType, StaticType valueType) => new(Kind.Map, keyType: keyType, valueType: valueType);
-
-        public bool IsUnknown => TypeKind == Kind.Unknown;
-
-        public bool IsCompatibleWith(StaticType actual)
-        {
-            if (IsUnknown || actual.IsUnknown)
-            {
-                return true;
-            }
-
-            if (TypeKind != actual.TypeKind)
-            {
-                return false;
-            }
-
-            return TypeKind switch
-            {
-                Kind.Array => ElementType!.IsCompatibleWith(actual.ElementType!),
-                Kind.Map => KeyType!.IsCompatibleWith(actual.KeyType!) && ValueType!.IsCompatibleWith(actual.ValueType!),
-                _ => true,
-            };
-        }
-
-        public override string ToString()
-        {
-            return TypeKind switch
-            {
-                Kind.Int => "int",
-                Kind.Bool => "bool",
-                Kind.String => "string",
-                Kind.Array => $"{ElementType}[]",
-                Kind.Map => $"map[{KeyType}]{ValueType}",
-                _ => "unknown",
-            };
-        }
-    }
-
     public List<string> ValidateFunctionTypeAnnotations(Program root)
     {
-        var env = new Dictionary<string, BindingInfo>();
-        var error = ValidateProgramFunctionTypes(root, env);
-        return error is null ? [] : [error];
+        var errors = new List<string>();
+        foreach (var statement in root.Statements)
+        {
+            ValidateTypeAnnotationsInStatement(statement, errors);
+        }
+
+        return errors;
     }
 
     public TypeInferenceResult InferTypes(Program root)
     {
-        var bootstrap = new TypeInferenceResult();
-        var bootstrapEnv = new Dictionary<string, KongType>();
+        var topLevelFunctionCount = root.Statements.Count(s => s is LetStatement { Value: FunctionLiteral });
+        var maxIterations = Math.Max(1, topLevelFunctionCount + 1);
 
-        foreach (var statement in root.Statements)
+        Dictionary<string, TypeSymbol>? seededReturnTypes = null;
+        for (var i = 0; i < maxIterations; i++)
         {
-            if (statement is LetStatement { Value: FunctionLiteral fl })
+            var passResult = InferTypesPass(root, reportTopLevelAnnotationErrors: false, seededReturnTypes);
+            var inferredReturnTypes = BuildTopLevelReturnTypeMap(passResult);
+
+            if (seededReturnTypes is not null && HaveSameTopLevelReturnTypes(seededReturnTypes, inferredReturnTypes))
             {
-                var parameterTypes = fl.Parameters
-                    .Select(p => p.TypeAnnotation is null ? KongType.Unknown : ConvertTypeAnnotationToKongType(p.TypeAnnotation))
-                    .ToList();
-                bootstrap.AddFunctionSignature(fl.Name, parameterTypes, KongType.Unknown);
-                bootstrapEnv[fl.Name] = KongType.Unknown;
+                seededReturnTypes = inferredReturnTypes;
+                break;
             }
+
+            seededReturnTypes = inferredReturnTypes;
         }
 
-        InferNode(root, bootstrap, bootstrapEnv);
+        return InferTypesPass(root, reportTopLevelAnnotationErrors: true, seededReturnTypes);
+    }
 
+    private TypeInferenceResult InferTypesPass(
+        Program root,
+        bool reportTopLevelAnnotationErrors,
+        IReadOnlyDictionary<string, TypeSymbol>? seededReturnTypes)
+    {
         var result = new TypeInferenceResult();
-        var env = new Dictionary<string, KongType>();
-        foreach (var signature in bootstrap.GetFunctionSignatures())
-        {
-            result.AddFunctionSignature(signature.Name, signature.ParameterTypes, signature.ReturnType);
-            env[signature.Name] = signature.ReturnType;
-        }
+        var globalScope = new SymbolScope();
 
-        InferNode(root, result, env);
+        BootstrapTopLevelFunctions(root, result, globalScope, reportTopLevelAnnotationErrors, seededReturnTypes);
+        InferNode(root, result, globalScope);
+
         return result;
     }
 
-    private KongType InferNode(INode node, TypeInferenceResult result, Dictionary<string, KongType> env)
+    private static Dictionary<string, TypeSymbol> BuildTopLevelReturnTypeMap(TypeInferenceResult result)
     {
-        return node switch
-        {
-            Program p => InferProgram(p, result, env),
-            IStatement s => InferStatement(s, result, env),
-            IExpression e => InferExpression(e, result, env),
-            _ => InferUnsupported(node, result),
-        };
+        return result
+            .GetFunctionSignatures()
+            .ToDictionary(signature => signature.Name, signature => signature.ReturnType);
     }
 
-    private KongType InferProgram(Program program, TypeInferenceResult result, Dictionary<string, KongType> env)
+    private static bool HaveSameTopLevelReturnTypes(
+        IReadOnlyDictionary<string, TypeSymbol> previous,
+        IReadOnlyDictionary<string, TypeSymbol> current)
     {
-        var lastType = KongType.Unknown;
-        foreach (var statement in program.Statements)
+        if (previous.Count != current.Count)
         {
-            lastType = InferNode(statement, result, env);
+            return false;
         }
 
-        return SetType(program, lastType, result);
-    }
-
-    private KongType InferStatement(IStatement statement, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        return statement switch
+        foreach (var (name, previousType) in previous)
         {
-            ExpressionStatement es when es.Expression is not null => InferExpressionStatement(es, result, env),
-            LetStatement ls when ls.Value is not null => InferLetStatement(ls, result, env),
-            ReturnStatement rs when rs.ReturnValue is not null => InferReturnStatement(rs, result, env),
-            BlockStatement bs => InferBlockStatement(bs, result, env),
-            _ => AddErrorAndSetType(statement, $"Unsupported statement type: {statement.GetType().Name}", KongType.Unknown, result),
-        };
-    }
-
-    private KongType InferExpression(IExpression expression, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        return expression switch
-        {
-            IntegerLiteral => SetType(expression, KongType.Int64, result),
-            BooleanLiteral => SetType(expression, KongType.Boolean, result),
-            StringLiteral => SetType(expression, KongType.String, result),
-            ArrayLiteral arrayLit => InferArrayLiteral(arrayLit, result, env),
-            HashLiteral hashLit => InferHashLiteral(hashLit, result, env),
-            InfixExpression infix => InferInfix(infix, result, env),
-            Identifier identifier => InferIdentifier(identifier, result, env),
-            PrefixExpression prefix when prefix.Operator == "-" => InferNegationPrefix(prefix, result, env),
-            PrefixExpression prefix when prefix.Operator == "!" => InferBangPrefix(prefix, result, env),
-            IfExpression ifExpr => InferIfExpression(ifExpr, result, env),
-            IndexExpression indexExpr => InferIndexExpression(indexExpr, result, env),
-            FunctionLiteral functionLiteral => InferFunctionLiteral(functionLiteral, result, env),
-            CallExpression callExpression => InferCallExpression(callExpression, result, env),
-            _ => AddErrorAndSetType(expression, $"Unsupported expression: {expression.GetType().Name}", KongType.Unknown, result),
-        };
-    }
-
-    private KongType InferInfix(InfixExpression infix, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var leftType = InferExpression(infix.Left, result, env);
-        var rightType = InferExpression(infix.Right, result, env);
-
-        if (infix.Operator == "+")
-        {
-            if (leftType == KongType.String && rightType == KongType.String)
+            if (!current.TryGetValue(name, out var currentType) || previousType != currentType)
             {
-                return SetType(infix, KongType.String, result);
-            }
-
-            if (leftType == KongType.Int64 && rightType == KongType.Int64)
-            {
-                return SetType(infix, KongType.Int64, result);
-            }
-
-            if ((leftType == KongType.Int64 && rightType == KongType.Unknown)
-                || (leftType == KongType.Unknown && rightType == KongType.Int64))
-            {
-                return SetType(infix, KongType.Int64, result);
-            }
-
-            if ((leftType == KongType.String && rightType == KongType.Unknown)
-                || (leftType == KongType.Unknown && rightType == KongType.String))
-            {
-                return SetType(infix, KongType.String, result);
-            }
-
-            return AddErrorAndSetType(infix, $"Type error: cannot apply operator '+' to types {leftType} and {rightType}", KongType.Unknown, result);
-        }
-        
-        if (infix.Operator is "-" or "*" or "/")
-        {
-            if (leftType == KongType.Unknown || rightType == KongType.Unknown)
-            {
-                return SetType(infix, KongType.Int64, result);
-            }
-
-            if (leftType != KongType.Int64 || rightType != KongType.Int64)
-            {
-                return AddErrorAndSetType(infix, $"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}", KongType.Unknown, result);
-            }
-
-            return SetType(infix, KongType.Int64, result);
-        }
-
-        if (infix.Operator is "==" or "!=" or "<" or ">")
-        {
-            if (leftType == KongType.Unknown || rightType == KongType.Unknown)
-            {
-                return SetType(infix, KongType.Boolean, result);
-            }
-
-            if (leftType != rightType)
-            {
-                return AddErrorAndSetType(infix, $"Type error: cannot compare types {leftType} and {rightType} with operator '{infix.Operator}'", KongType.Unknown, result);
-            }
-
-            return SetType(infix, KongType.Boolean, result);
-        }
-        
-        return AddErrorAndSetType(infix, $"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}", KongType.Unknown, result);
-    }
-
-    private KongType InferExpressionStatement(ExpressionStatement expressionStatement, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var expressionType = InferExpression(expressionStatement.Expression!, result, env);
-        return SetType(expressionStatement, expressionType, result);
-    }
-
-    private KongType InferLetStatement(LetStatement letStatement, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        if (letStatement.Value is FunctionLiteral functionLiteral)
-        {
-            var functionType = InferFunctionLiteral(functionLiteral, result, env);
-            env[letStatement.Name.Value] = functionType;
-            SetType(letStatement.Name, functionType, result);
-            return SetType(letStatement, functionType, result);
-        }
-
-        var valueType = InferExpression(letStatement.Value!, result, env);
-        if (valueType == KongType.Void)
-        {
-            SetType(letStatement.Name, KongType.Unknown, result);
-            return AddErrorAndSetType(letStatement, "Type error: cannot assign an expression with no value", KongType.Unknown, result);
-        }
-
-        env[letStatement.Name.Value] = valueType;
-        SetType(letStatement.Name, valueType, result);
-        return SetType(letStatement, valueType, result);
-    }
-
-    private KongType InferReturnStatement(ReturnStatement returnStatement, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var returnType = InferExpression(returnStatement.ReturnValue!, result, env);
-        return SetType(returnStatement, returnType, result);
-    }
-
-    private KongType InferBlockStatement(BlockStatement block, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var lastType = KongType.Unknown;
-        foreach (var statement in block.Statements)
-        {
-            lastType = InferNode(statement, result, env);
-        }
-
-        return SetType(block, lastType, result);
-    }
-
-    private KongType InferArrayLiteral(ArrayLiteral arrayLiteral, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        if (arrayLiteral.Elements.Count == 0)
-        {
-            return SetType(arrayLiteral, KongType.Array, result);
-        }
-
-        var elementType = InferExpression(arrayLiteral.Elements[0], result, env);
-        foreach (var element in arrayLiteral.Elements.Skip(1))
-        {
-            var currentType = InferExpression(element, result, env);
-            if (currentType != elementType)
-            {
-                return AddErrorAndSetType(arrayLiteral, $"Type error: array elements must have the same type, but found {elementType} and {currentType}", KongType.Unknown, result);
+                return false;
             }
         }
 
-        return SetType(arrayLiteral, KongType.Array, result);
+        return true;
     }
 
-    private KongType InferHashLiteral(HashLiteral hashLit, TypeInferenceResult result, Dictionary<string, KongType> env)
+    private static void BootstrapTopLevelFunctions(
+        Program root,
+        TypeInferenceResult result,
+        SymbolScope globalScope,
+        bool reportAnnotationErrors,
+        IReadOnlyDictionary<string, TypeSymbol>? seededReturnTypes)
     {
-        if (hashLit.Pairs.Count == 0)
+        foreach (var statement in root.Statements)
         {
-            return SetType(hashLit, KongType.HashMap, result);
-        }
-
-        var keyType = InferExpression(hashLit.Pairs[0].Key, result, env);
-        var valueType = InferExpression(hashLit.Pairs[0].Value, result, env);
-        foreach (var pair in hashLit.Pairs.Skip(1))
-        {
-            var currentKeyType = InferExpression(pair.Key, result, env);
-            var currentValueType = InferExpression(pair.Value, result, env);
-            if (currentKeyType != keyType || currentValueType != valueType)
+            if (statement is not LetStatement { Value: FunctionLiteral functionLiteral } letStatement)
             {
-                return AddErrorAndSetType(hashLit, $"Type error: hash map keys and values must have the same type, but found ({keyType}, {valueType}) and ({currentKeyType}, {currentValueType})", KongType.Unknown, result);
-            }
-        }
-
-        return SetType(hashLit, KongType.HashMap, result);
-    }
-
-    private KongType InferIdentifier(Identifier identifier, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        if (env.TryGetValue(identifier.Value, out var identifierType))
-        {
-            return SetType(identifier, identifierType, result);
-        }
-
-        return AddErrorAndSetType(identifier, $"Undefined variable: {identifier.Value}", KongType.Unknown, result);
-    }
-
-    private KongType InferNegationPrefix(PrefixExpression prefix, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var rightType = InferExpression(prefix.Right, result, env);
-        if (rightType != KongType.Int64)
-        {
-            return AddErrorAndSetType(prefix, $"Type error: cannot apply operator '-' to type {rightType}", KongType.Unknown, result);
-        }
-
-        return SetType(prefix, KongType.Int64, result);
-    }
-
-    private KongType InferBangPrefix(PrefixExpression prefix, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var operandType = InferExpression(prefix.Right, result, env);
-        if (operandType != KongType.Boolean)
-        {
-            return AddErrorAndSetType(prefix, $"Type error: cannot apply operator '!' to type {operandType}", KongType.Unknown, result);
-        }
-
-        return SetType(prefix, KongType.Boolean, result);
-    }
-
-    private KongType InferIfExpression(IfExpression ifExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var conditionType = InferExpression(ifExpression.Condition, result, env);
-        if (conditionType != KongType.Boolean)
-        {
-            return AddErrorAndSetType(ifExpression, $"Type error: if condition must be of type Boolean, but got {conditionType}", KongType.Unknown, result);
-        }
-
-        var thenType = InferStatement(ifExpression.Consequence, result, env);
-        if (ifExpression.Alternative is null)
-        {
-            return SetType(ifExpression, KongType.Void, result);
-        }
-
-        var elseType = InferStatement(ifExpression.Alternative, result, env);
-        if (thenType != elseType)
-        {
-            return AddErrorAndSetType(ifExpression, $"Type error: if branches must have the same type, but got {thenType} and {elseType}", KongType.Unknown, result);
-        }
-
-        if (thenType == KongType.Void)
-        {
-            return AddErrorAndSetType(ifExpression, "Type error: if/else used as an expression must produce a value", KongType.Unknown, result);
-        }
-
-        return SetType(ifExpression, thenType, result);
-    }
-
-    private KongType InferIndexExpression(IndexExpression indexExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var leftType = InferExpression(indexExpression.Left, result, env);
-        if (leftType is not KongType.Array and not KongType.HashMap and not KongType.Unknown)
-        {
-            return AddErrorAndSetType(indexExpression, $"Type error: index operator not supported for type {leftType}", KongType.Unknown, result);
-        }
-
-        var indexType = InferExpression(indexExpression.Index, result, env);
-        if (leftType == KongType.Array && indexType is not KongType.Int64 and not KongType.Unknown)
-        {
-            return AddErrorAndSetType(indexExpression, $"Type error: array index must be Int64, but got {indexType}", KongType.Unknown, result);
-        }
-
-        if (leftType == KongType.HashMap && indexType is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Unknown)
-        {
-            return AddErrorAndSetType(indexExpression, $"Type error: hash map index must be Int64, Boolean, or String, but got {indexType}", KongType.Unknown, result);
-        }
-
-        return SetType(indexExpression, KongType.Unknown, result);
-    }
-
-    private KongType InferFunctionLiteral(FunctionLiteral functionLiteral, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        var localEnv = new Dictionary<string, KongType>(env);
-        var parameterTypes = new List<KongType>(functionLiteral.Parameters.Count);
-
-        foreach (var parameter in functionLiteral.Parameters)
-        {
-            if (parameter.TypeAnnotation is null)
-            {
-                return AddErrorAndSetType(functionLiteral, $"missing type annotation for parameter '{parameter.Name.Value}'", KongType.Unknown, result);
+                continue;
             }
 
-            var parameterType = ConvertTypeAnnotationToKongType(parameter.TypeAnnotation);
-            parameterTypes.Add(parameterType);
-            localEnv[parameter.Name.Value] = parameterType;
-            SetType(parameter.Name, parameterType, result);
-        }
+            var parameterTypes = ParseFunctionParameterTypes(functionLiteral, result, reportErrors: reportAnnotationErrors);
+            var parameterSymbols = CreateParameterSymbols(functionLiteral, parameterTypes);
+            var returnType = seededReturnTypes is not null && seededReturnTypes.TryGetValue(letStatement.Name.Value, out var seededReturnType)
+                ? seededReturnType
+                : TypeSymbol.Unknown;
 
-        var bodyType = InferBlockStatement(functionLiteral.Body, result, localEnv);
-        if (!string.IsNullOrEmpty(functionLiteral.Name))
-        {
-            result.AddFunctionSignature(functionLiteral.Name, parameterTypes, bodyType);
-        }
-
-        return SetType(functionLiteral, KongType.Unknown, result);
-    }
-
-    private KongType InferCallExpression(CallExpression callExpression, TypeInferenceResult result, Dictionary<string, KongType> env)
-    {
-        if (callExpression.Function is Identifier { Value: "puts" })
-        {
-            foreach (var argument in callExpression.Arguments)
-            {
-                InferExpression(argument, result, env);
-            }
-
-            return SetType(callExpression, KongType.Void, result);
-        }
-
-        if (callExpression.Function is Identifier { Value: "len" })
-        {
-            if (callExpression.Arguments.Count != 1)
-            {
-                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=1", KongType.Unknown, result);
-            }
-
-            var argumentType = InferExpression(callExpression.Arguments[0], result, env);
-            if (argumentType is KongType.String or KongType.Array or KongType.Unknown)
-            {
-                return SetType(callExpression, KongType.Int64, result);
-            }
-
-            return AddErrorAndSetType(callExpression, $"argument to `len` not supported, got {argumentType}", KongType.Unknown, result);
-        }
-
-        if (callExpression.Function is Identifier { Value: "push" })
-        {
-            if (callExpression.Arguments.Count != 2)
-            {
-                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=2", KongType.Unknown, result);
-            }
-
-            var arrayType = InferExpression(callExpression.Arguments[0], result, env);
-            InferExpression(callExpression.Arguments[1], result, env);
-
-            if (arrayType is KongType.Array or KongType.Unknown)
-            {
-                return SetType(callExpression, KongType.Array, result);
-            }
-
-            return AddErrorAndSetType(callExpression, $"argument to `push` must be ARRAY, got {arrayType}", KongType.Unknown, result);
-        }
-
-        var _ = InferExpression(callExpression.Function, result, env);
-
-        foreach (var argument in callExpression.Arguments)
-        {
-            InferExpression(argument, result, env);
-        }
-
-        if (callExpression.Function is not Identifier identifier)
-        {
-            return SetType(callExpression, KongType.Unknown, result);
-        }
-
-        if (!result.TryGetFunctionSignature(identifier.Value, out var signature))
-        {
-            return SetType(callExpression, KongType.Unknown, result);
-        }
-
-        if (callExpression.Arguments.Count != signature.ParameterTypes.Count)
-        {
-            return AddErrorAndSetType(callExpression, $"wrong number of arguments for {identifier.Value}: want={signature.ParameterTypes.Count}, got={callExpression.Arguments.Count}", KongType.Unknown, result);
-        }
-
-        for (var i = 0; i < callExpression.Arguments.Count; i++)
-        {
-            var argumentType = result.GetNodeType(callExpression.Arguments[i]);
-            var parameterType = signature.ParameterTypes[i];
-            if (argumentType != KongType.Unknown && parameterType != KongType.Unknown && argumentType != parameterType)
-            {
-                return AddErrorAndSetType(callExpression, $"Type error: argument {i + 1} for {identifier.Value} expects {parameterType}, got {argumentType}", KongType.Unknown, result);
-            }
-        }
-
-        return SetType(callExpression, signature.ReturnType, result);
-    }
-
-    private static KongType ConvertTypeAnnotationToKongType(ITypeExpression annotation)
-    {
-        return annotation switch
-        {
-            NamedTypeExpression { Name: "int" } => KongType.Int64,
-            NamedTypeExpression { Name: "bool" } => KongType.Boolean,
-            NamedTypeExpression { Name: "string" } => KongType.String,
-            ArrayTypeExpression => KongType.Array,
-            MapTypeExpression => KongType.HashMap,
-            _ => KongType.Unknown,
-        };
-    }
-
-    private static KongType SetType(INode node, KongType type, TypeInferenceResult result)
-    {
-        result.AddNodeType(node, type);
-        return type;
-    }
-
-    private static KongType AddErrorAndSetType(INode node, string error, KongType type, TypeInferenceResult result)
-    {
-        result.AddError(error);
-        return SetType(node, type, result);
-    }
-
-    private KongType InferUnsupported(INode node, TypeInferenceResult result)
-    {
-        return AddErrorAndSetType(node, $"Unsupported node type: {node.GetType().Name}", KongType.Unknown, result);
-    }
-
-    private static string? ValidateProgramFunctionTypes(Program program, Dictionary<string, BindingInfo> env)
-    {
-        foreach (var statement in program.Statements)
-        {
-            var err = ValidateFunctionTypesInStatement(statement, env);
-            if (err is not null)
-            {
-                return err;
-            }
-        }
-
-        return null;
-    }
-
-    private static string? ValidateFunctionTypesInStatement(IStatement statement, Dictionary<string, BindingInfo> env)
-    {
-        switch (statement)
-        {
-            case LetStatement { Value: not null } letStatement:
-            {
-                if (letStatement.Value is FunctionLiteral functionLiteral)
-                {
-                    var fnParamTypes = ParseFunctionParameterTypes(functionLiteral, out var parseErr);
-                    if (parseErr is not null)
-                    {
-                        return parseErr;
-                    }
-
-                    env[letStatement.Name.Value] = new BindingInfo { FunctionParameterTypes = fnParamTypes };
-
-                    var fnErr = ValidateFunctionLiteral(functionLiteral, env);
-                    if (fnErr is not null)
-                    {
-                        return fnErr;
-                    }
-                }
-                else
-                {
-                    var valueErr = ValidateFunctionTypesInExpression(letStatement.Value, env);
-                    if (valueErr is not null)
-                    {
-                        return valueErr;
-                    }
-
-                    env[letStatement.Name.Value] = new BindingInfo
-                    {
-                        ValueType = InferStaticExpressionType(letStatement.Value, env),
-                    };
-                }
-
-                return null;
-            }
-
-            case ReturnStatement { ReturnValue: not null } returnStatement:
-                return ValidateFunctionTypesInExpression(returnStatement.ReturnValue, env);
-
-            case ExpressionStatement { Expression: not null } expressionStatement:
-                return ValidateFunctionTypesInExpression(expressionStatement.Expression, env);
-
-            case BlockStatement blockStatement:
-            {
-                foreach (var inner in blockStatement.Statements)
-                {
-                    var err = ValidateFunctionTypesInStatement(inner, env);
-                    if (err is not null)
-                    {
-                        return err;
-                    }
-                }
-
-                return null;
-            }
-
-            default:
-                return null;
+            var functionSymbol = new FunctionSymbol(letStatement.Name.Value, parameterSymbols, returnType);
+            globalScope.Define(functionSymbol);
+            result.AddFunctionSignature(letStatement.Name.Value, parameterTypes, returnType);
         }
     }
 
-    private static string? ValidateFunctionTypesInExpression(IExpression expression, Dictionary<string, BindingInfo> env)
+    private static List<VariableSymbol> CreateParameterSymbols(FunctionLiteral functionLiteral, IReadOnlyList<TypeSymbol> parameterTypes)
     {
-        switch (expression)
-        {
-            case FunctionLiteral functionLiteral:
-                return ValidateFunctionLiteral(functionLiteral, env);
-
-            case CallExpression callExpression:
-            {
-                var functionErr = ValidateFunctionTypesInExpression(callExpression.Function, env);
-                if (functionErr is not null)
-                {
-                    return functionErr;
-                }
-
-                foreach (var argument in callExpression.Arguments)
-                {
-                    var argumentErr = ValidateFunctionTypesInExpression(argument, env);
-                    if (argumentErr is not null)
-                    {
-                        return argumentErr;
-                    }
-                }
-
-                var fnParamTypes = ResolveFunctionParameterTypes(callExpression.Function, env, out var resolveErr);
-                if (resolveErr is not null)
-                {
-                    return resolveErr;
-                }
-
-                if (fnParamTypes is null)
-                {
-                    return null;
-                }
-
-                var count = Math.Min(fnParamTypes.Count, callExpression.Arguments.Count);
-                for (var i = 0; i < count; i++)
-                {
-                    var expected = fnParamTypes[i];
-                    var actual = InferStaticExpressionType(callExpression.Arguments[i], env);
-                    if (!expected.IsCompatibleWith(actual))
-                    {
-                        return $"type mismatch for argument {i + 1} in call to {callExpression.Function.String()}: expected {expected}, got {actual}";
-                    }
-                }
-
-                return null;
-            }
-
-            case IfExpression ifExpression:
-            {
-                var conditionErr = ValidateFunctionTypesInExpression(ifExpression.Condition, env);
-                if (conditionErr is not null)
-                {
-                    return conditionErr;
-                }
-
-                var thenEnv = new Dictionary<string, BindingInfo>(env);
-                var thenErr = ValidateFunctionTypesInStatement(ifExpression.Consequence, thenEnv);
-                if (thenErr is not null)
-                {
-                    return thenErr;
-                }
-
-                if (ifExpression.Alternative is not null)
-                {
-                    var elseEnv = new Dictionary<string, BindingInfo>(env);
-                    var elseErr = ValidateFunctionTypesInStatement(ifExpression.Alternative, elseEnv);
-                    if (elseErr is not null)
-                    {
-                        return elseErr;
-                    }
-                }
-
-                return null;
-            }
-
-            case PrefixExpression prefixExpression:
-                return ValidateFunctionTypesInExpression(prefixExpression.Right, env);
-
-            case InfixExpression infixExpression:
-            {
-                var leftErr = ValidateFunctionTypesInExpression(infixExpression.Left, env);
-                if (leftErr is not null)
-                {
-                    return leftErr;
-                }
-
-                return ValidateFunctionTypesInExpression(infixExpression.Right, env);
-            }
-
-            case ArrayLiteral arrayLiteral:
-                foreach (var element in arrayLiteral.Elements)
-                {
-                    var err = ValidateFunctionTypesInExpression(element, env);
-                    if (err is not null)
-                    {
-                        return err;
-                    }
-                }
-                return null;
-
-            case HashLiteral hashLiteral:
-                foreach (var pair in hashLiteral.Pairs)
-                {
-                    var keyErr = ValidateFunctionTypesInExpression(pair.Key, env);
-                    if (keyErr is not null)
-                    {
-                        return keyErr;
-                    }
-
-                    var valueErr = ValidateFunctionTypesInExpression(pair.Value, env);
-                    if (valueErr is not null)
-                    {
-                        return valueErr;
-                    }
-                }
-                return null;
-
-            case IndexExpression indexExpression:
-            {
-                var leftErr = ValidateFunctionTypesInExpression(indexExpression.Left, env);
-                if (leftErr is not null)
-                {
-                    return leftErr;
-                }
-
-                return ValidateFunctionTypesInExpression(indexExpression.Index, env);
-            }
-
-            default:
-                return null;
-        }
-    }
-
-    private static string? ValidateFunctionLiteral(FunctionLiteral functionLiteral, Dictionary<string, BindingInfo> outerEnv)
-    {
-        var paramTypes = ParseFunctionParameterTypes(functionLiteral, out var parseErr);
-        if (parseErr is not null)
-        {
-            return parseErr;
-        }
-
-        var localEnv = new Dictionary<string, BindingInfo>(outerEnv);
-
-        if (!string.IsNullOrEmpty(functionLiteral.Name))
-        {
-            localEnv[functionLiteral.Name] = new BindingInfo { FunctionParameterTypes = paramTypes };
-        }
-
+        var symbols = new List<VariableSymbol>(functionLiteral.Parameters.Count);
         for (var i = 0; i < functionLiteral.Parameters.Count; i++)
         {
-            var parameter = functionLiteral.Parameters[i];
-            localEnv[parameter.Name.Value] = new BindingInfo
-            {
-                ValueType = paramTypes[i],
-            };
+            symbols.Add(new VariableSymbol(functionLiteral.Parameters[i].Name.Value, parameterTypes[i]));
         }
 
-        return ValidateFunctionTypesInStatement(functionLiteral.Body, localEnv);
+        return symbols;
     }
 
-    private static IReadOnlyList<StaticType>? ResolveFunctionParameterTypes(IExpression functionExpression, Dictionary<string, BindingInfo> env, out string? err)
+    private static List<TypeSymbol> ParseFunctionParameterTypes(FunctionLiteral functionLiteral, TypeInferenceResult result, bool reportErrors)
     {
-        err = null;
-
-        return functionExpression switch
-        {
-            Identifier identifier when env.TryGetValue(identifier.Value, out var binding) => binding.FunctionParameterTypes,
-            FunctionLiteral literal => ParseFunctionParameterTypes(literal, out err),
-            _ => null,
-        };
-    }
-
-    private static List<StaticType> ParseFunctionParameterTypes(FunctionLiteral functionLiteral, out string? err)
-    {
-        var parameterTypes = new List<StaticType>(functionLiteral.Parameters.Count);
+        var parameterTypes = new List<TypeSymbol>(functionLiteral.Parameters.Count);
         foreach (var parameter in functionLiteral.Parameters)
         {
             if (parameter.TypeAnnotation is null)
             {
-                err = $"missing type annotation for parameter '{parameter.Name.Value}'";
-                return [];
+                if (reportErrors)
+                {
+                    result.AddError($"missing type annotation for parameter '{parameter.Name.Value}'");
+                }
+
+                parameterTypes.Add(TypeSymbol.Unknown);
+                continue;
             }
 
-            var type = ParseTypeAnnotation(parameter.TypeAnnotation, out err);
-            if (err is not null)
+            var parameterType = ParseTypeAnnotation(parameter.TypeAnnotation, out var parseErr);
+            if (parseErr is not null && reportErrors)
             {
-                err = $"invalid type annotation for parameter '{parameter.Name.Value}': {err}";
-                return [];
+                result.AddError($"invalid type annotation for parameter '{parameter.Name.Value}': {parseErr}");
             }
 
-            parameterTypes.Add(type);
+            parameterTypes.Add(parameterType);
         }
 
-        err = null;
         return parameterTypes;
     }
 
-    private static StaticType ParseTypeAnnotation(ITypeExpression annotation, out string? err)
+    private static TypeSymbol ParseTypeAnnotation(ITypeExpression annotation, out string? err)
     {
         switch (annotation)
         {
             case NamedTypeExpression namedType:
                 return namedType.Name switch
                 {
-                    "int" => SetNoError(StaticType.Int, out err),
-                    "bool" => SetNoError(StaticType.Bool, out err),
-                    "string" => SetNoError(StaticType.String, out err),
+                    "int" => SetNoError(TypeSymbol.Int, out err),
+                    "bool" => SetNoError(TypeSymbol.Bool, out err),
+                    "string" => SetNoError(TypeSymbol.String, out err),
                     _ => SetErrorAndReturnUnknown($"unknown type '{namedType.Name}'", out err),
                 };
 
@@ -838,10 +163,10 @@ public class TypeInferer
                 var elementType = ParseTypeAnnotation(arrayType.ElementType, out err);
                 if (err is not null)
                 {
-                    return StaticType.Unknown;
+                    return TypeSymbol.Unknown;
                 }
 
-                return SetNoError(StaticType.ArrayOf(elementType), out err);
+                return SetNoError(TypeSymbol.ArrayOf(elementType), out err);
             }
 
             case MapTypeExpression mapType:
@@ -849,16 +174,16 @@ public class TypeInferer
                 var keyType = ParseTypeAnnotation(mapType.KeyType, out err);
                 if (err is not null)
                 {
-                    return StaticType.Unknown;
+                    return TypeSymbol.Unknown;
                 }
 
                 var valueType = ParseTypeAnnotation(mapType.ValueType, out err);
                 if (err is not null)
                 {
-                    return StaticType.Unknown;
+                    return TypeSymbol.Unknown;
                 }
 
-                return SetNoError(StaticType.MapOf(keyType, valueType), out err);
+                return SetNoError(TypeSymbol.MapOf(keyType, valueType), out err);
             }
 
             default:
@@ -866,150 +191,623 @@ public class TypeInferer
         }
     }
 
-    private static StaticType SetNoError(StaticType type, out string? err)
+    private static TypeSymbol SetNoError(TypeSymbol type, out string? err)
     {
         err = null;
         return type;
     }
 
-    private static StaticType SetErrorAndReturnUnknown(string error, out string? err)
+    private static TypeSymbol SetErrorAndReturnUnknown(string error, out string? err)
     {
         err = error;
-        return StaticType.Unknown;
+        return TypeSymbol.Unknown;
     }
 
-    private static StaticType InferStaticExpressionType(IExpression expression, Dictionary<string, BindingInfo> env)
+    private static void ValidateTypeAnnotationsInStatement(IStatement statement, List<string> errors)
+    {
+        switch (statement)
+        {
+            case LetStatement { Value: not null } letStatement:
+                ValidateTypeAnnotationsInExpression(letStatement.Value, errors);
+                return;
+            case ReturnStatement { ReturnValue: not null } returnStatement:
+                ValidateTypeAnnotationsInExpression(returnStatement.ReturnValue, errors);
+                return;
+            case ExpressionStatement { Expression: not null } expressionStatement:
+                ValidateTypeAnnotationsInExpression(expressionStatement.Expression, errors);
+                return;
+            case BlockStatement blockStatement:
+                foreach (var inner in blockStatement.Statements)
+                {
+                    ValidateTypeAnnotationsInStatement(inner, errors);
+                }
+
+                return;
+            default:
+                return;
+        }
+    }
+
+    private static void ValidateTypeAnnotationsInExpression(IExpression expression, List<string> errors)
     {
         switch (expression)
         {
-            case IntegerLiteral:
-                return StaticType.Int;
-            case BooleanLiteral:
-                return StaticType.Bool;
-            case StringLiteral:
-                return StaticType.String;
-            case Identifier identifier when env.TryGetValue(identifier.Value, out var binding):
-                return binding.ValueType;
-            case ArrayLiteral arrayLiteral:
-            {
-                if (arrayLiteral.Elements.Count == 0)
+            case FunctionLiteral functionLiteral:
+                ValidateFunctionLiteralAnnotations(functionLiteral, errors);
+                return;
+            case CallExpression callExpression:
+                ValidateTypeAnnotationsInExpression(callExpression.Function, errors);
+                foreach (var argument in callExpression.Arguments)
                 {
-                    return StaticType.ArrayOf(StaticType.Unknown);
+                    ValidateTypeAnnotationsInExpression(argument, errors);
                 }
 
-                var elementType = InferStaticExpressionType(arrayLiteral.Elements[0], env);
-                for (var i = 1; i < arrayLiteral.Elements.Count; i++)
-                {
-                    var currentType = InferStaticExpressionType(arrayLiteral.Elements[i], env);
-                    if (!elementType.IsCompatibleWith(currentType) || !currentType.IsCompatibleWith(elementType))
-                    {
-                        return StaticType.ArrayOf(StaticType.Unknown);
-                    }
-                }
-
-                return StaticType.ArrayOf(elementType);
-            }
-            case HashLiteral hashLiteral:
-            {
-                if (hashLiteral.Pairs.Count == 0)
-                {
-                    return StaticType.MapOf(StaticType.Unknown, StaticType.Unknown);
-                }
-
-                var first = hashLiteral.Pairs[0];
-                var keyType = InferStaticExpressionType(first.Key, env);
-                var valueType = InferStaticExpressionType(first.Value, env);
-
-                for (var i = 1; i < hashLiteral.Pairs.Count; i++)
-                {
-                    var currentKeyType = InferStaticExpressionType(hashLiteral.Pairs[i].Key, env);
-                    var currentValueType = InferStaticExpressionType(hashLiteral.Pairs[i].Value, env);
-                    if (!keyType.IsCompatibleWith(currentKeyType) || !currentKeyType.IsCompatibleWith(keyType) || !valueType.IsCompatibleWith(currentValueType) || !currentValueType.IsCompatibleWith(valueType))
-                    {
-                        return StaticType.MapOf(StaticType.Unknown, StaticType.Unknown);
-                    }
-                }
-
-                return StaticType.MapOf(keyType, valueType);
-            }
-            case PrefixExpression prefixExpression when prefixExpression.Operator == "-":
-                return StaticType.Int;
-            case PrefixExpression prefixExpression when prefixExpression.Operator == "!":
-                return StaticType.Bool;
-            case InfixExpression infixExpression when infixExpression.Operator == "+":
-            {
-                var left = InferStaticExpressionType(infixExpression.Left, env);
-                var right = InferStaticExpressionType(infixExpression.Right, env);
-                if (left.IsCompatibleWith(StaticType.String) && right.IsCompatibleWith(StaticType.String))
-                {
-                    return StaticType.String;
-                }
-
-                if (left.IsCompatibleWith(StaticType.Int) && right.IsCompatibleWith(StaticType.Int))
-                {
-                    return StaticType.Int;
-                }
-
-                return StaticType.Unknown;
-            }
-            case InfixExpression infixExpression when infixExpression.Operator is "-" or "*" or "/":
-                return StaticType.Int;
-            case InfixExpression infixExpression when infixExpression.Operator is "==" or "!=" or "<" or ">":
-                return StaticType.Bool;
+                return;
             case IfExpression ifExpression:
-            {
-                var thenType = InferStaticBlockType(ifExpression.Consequence, env);
-                if (ifExpression.Alternative is null)
+                ValidateTypeAnnotationsInExpression(ifExpression.Condition, errors);
+                ValidateTypeAnnotationsInStatement(ifExpression.Consequence, errors);
+                if (ifExpression.Alternative is not null)
                 {
-                    return StaticType.Unknown;
+                    ValidateTypeAnnotationsInStatement(ifExpression.Alternative, errors);
                 }
 
-                var elseType = InferStaticBlockType(ifExpression.Alternative, env);
-                return thenType.IsCompatibleWith(elseType) && elseType.IsCompatibleWith(thenType)
-                    ? thenType
-                    : StaticType.Unknown;
-            }
-            case IndexExpression:
-            case CallExpression:
-            case FunctionLiteral:
+                return;
+            case PrefixExpression prefixExpression:
+                ValidateTypeAnnotationsInExpression(prefixExpression.Right, errors);
+                return;
+            case InfixExpression infixExpression:
+                ValidateTypeAnnotationsInExpression(infixExpression.Left, errors);
+                ValidateTypeAnnotationsInExpression(infixExpression.Right, errors);
+                return;
+            case ArrayLiteral arrayLiteral:
+                foreach (var element in arrayLiteral.Elements)
+                {
+                    ValidateTypeAnnotationsInExpression(element, errors);
+                }
+
+                return;
+            case HashLiteral hashLiteral:
+                foreach (var pair in hashLiteral.Pairs)
+                {
+                    ValidateTypeAnnotationsInExpression(pair.Key, errors);
+                    ValidateTypeAnnotationsInExpression(pair.Value, errors);
+                }
+
+                return;
+            case IndexExpression indexExpression:
+                ValidateTypeAnnotationsInExpression(indexExpression.Left, errors);
+                ValidateTypeAnnotationsInExpression(indexExpression.Index, errors);
+                return;
             default:
-                return StaticType.Unknown;
+                return;
         }
     }
 
-    private static StaticType InferStaticBlockType(BlockStatement blockStatement, Dictionary<string, BindingInfo> env)
+    private static void ValidateFunctionLiteralAnnotations(FunctionLiteral functionLiteral, List<string> errors)
     {
-        if (blockStatement.Statements.Count == 0)
+        foreach (var parameter in functionLiteral.Parameters)
         {
-            return StaticType.Unknown;
+            if (parameter.TypeAnnotation is null)
+            {
+                errors.Add($"missing type annotation for parameter '{parameter.Name.Value}'");
+                continue;
+            }
+
+            _ = ParseTypeAnnotation(parameter.TypeAnnotation, out var parseErr);
+            if (parseErr is not null)
+            {
+                errors.Add($"invalid type annotation for parameter '{parameter.Name.Value}': {parseErr}");
+            }
         }
 
-        var localEnv = new Dictionary<string, BindingInfo>(env);
-        var lastType = StaticType.Unknown;
+        ValidateTypeAnnotationsInStatement(functionLiteral.Body, errors);
+    }
+
+    private TypeSymbol InferNode(INode node, TypeInferenceResult result, SymbolScope scope)
+    {
+        return node switch
+        {
+            Program program => InferProgram(program, result, scope),
+            IStatement statement => InferStatement(statement, result, scope),
+            IExpression expression => InferExpression(expression, result, scope),
+            _ => InferUnsupported(node, result),
+        };
+    }
+
+    private TypeSymbol InferProgram(Program program, TypeInferenceResult result, SymbolScope scope)
+    {
+        var lastType = TypeSymbol.Unknown;
+        foreach (var statement in program.Statements)
+        {
+            lastType = InferNode(statement, result, scope);
+        }
+
+        return SetType(program, lastType, result);
+    }
+
+    private TypeSymbol InferStatement(IStatement statement, TypeInferenceResult result, SymbolScope scope)
+    {
+        return statement switch
+        {
+            ExpressionStatement expressionStatement when expressionStatement.Expression is not null => InferExpressionStatement(expressionStatement, result, scope),
+            LetStatement letStatement when letStatement.Value is not null => InferLetStatement(letStatement, result, scope),
+            ReturnStatement returnStatement when returnStatement.ReturnValue is not null => InferReturnStatement(returnStatement, result, scope),
+            BlockStatement blockStatement => InferBlockStatement(blockStatement, result, scope),
+            _ => AddErrorAndSetType(statement, $"Unsupported statement type: {statement.GetType().Name}", TypeSymbol.Unknown, result),
+        };
+    }
+
+    private TypeSymbol InferExpression(IExpression expression, TypeInferenceResult result, SymbolScope scope)
+    {
+        return expression switch
+        {
+            IntegerLiteral => SetType(expression, TypeSymbol.Int, result),
+            BooleanLiteral => SetType(expression, TypeSymbol.Bool, result),
+            StringLiteral => SetType(expression, TypeSymbol.String, result),
+            ArrayLiteral arrayLiteral => InferArrayLiteral(arrayLiteral, result, scope),
+            HashLiteral hashLiteral => InferHashLiteral(hashLiteral, result, scope),
+            InfixExpression infixExpression => InferInfixExpression(infixExpression, result, scope),
+            Identifier identifier => InferIdentifier(identifier, result, scope),
+            PrefixExpression prefixExpression when prefixExpression.Operator == "-" => InferNegationPrefix(prefixExpression, result, scope),
+            PrefixExpression prefixExpression when prefixExpression.Operator == "!" => InferBangPrefix(prefixExpression, result, scope),
+            IfExpression ifExpression => InferIfExpression(ifExpression, result, scope),
+            IndexExpression indexExpression => InferIndexExpression(indexExpression, result, scope),
+            FunctionLiteral functionLiteral => InferFunctionLiteral(functionLiteral, null, result, scope, recordTopLevelSignature: false),
+            CallExpression callExpression => InferCallExpression(callExpression, result, scope),
+            _ => AddErrorAndSetType(expression, $"Unsupported expression: {expression.GetType().Name}", TypeSymbol.Unknown, result),
+        };
+    }
+
+    private TypeSymbol InferExpressionStatement(ExpressionStatement expressionStatement, TypeInferenceResult result, SymbolScope scope)
+    {
+        var expressionType = InferExpression(expressionStatement.Expression!, result, scope);
+        return SetType(expressionStatement, expressionType, result);
+    }
+
+    private TypeSymbol InferLetStatement(LetStatement letStatement, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (letStatement.Value is FunctionLiteral functionLiteral)
+        {
+            var functionSymbol = ResolveDeclaredFunctionSymbol(letStatement, functionLiteral, result, scope);
+            scope.Define(functionSymbol);
+
+            var functionType = InferFunctionLiteral(
+                functionLiteral,
+                functionSymbol,
+                result,
+                scope,
+                recordTopLevelSignature: scope.Parent is null);
+
+            SetType(letStatement.Name, functionType, result);
+            return SetType(letStatement, functionType, result);
+        }
+
+        var valueType = InferExpression(letStatement.Value!, result, scope);
+        if (valueType == TypeSymbol.Void)
+        {
+            SetType(letStatement.Name, TypeSymbol.Unknown, result);
+            return AddErrorAndSetType(letStatement, "Type error: cannot assign an expression with no value", TypeSymbol.Unknown, result);
+        }
+
+        scope.Define(new VariableSymbol(letStatement.Name.Value, valueType));
+        SetType(letStatement.Name, valueType, result);
+        return SetType(letStatement, valueType, result);
+    }
+
+    private static FunctionSymbol ResolveDeclaredFunctionSymbol(LetStatement letStatement, FunctionLiteral functionLiteral, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (scope.Parent is null && scope.TryLookupFunction(letStatement.Name.Value, out var existingGlobalFunction) && existingGlobalFunction is not null)
+        {
+            return existingGlobalFunction;
+        }
+
+        var parameterTypes = ParseFunctionParameterTypes(functionLiteral, result, reportErrors: true);
+        var parameterSymbols = CreateParameterSymbols(functionLiteral, parameterTypes);
+        return new FunctionSymbol(letStatement.Name.Value, parameterSymbols, TypeSymbol.Unknown);
+    }
+
+    private TypeSymbol InferReturnStatement(ReturnStatement returnStatement, TypeInferenceResult result, SymbolScope scope)
+    {
+        var returnType = InferExpression(returnStatement.ReturnValue!, result, scope);
+        return SetType(returnStatement, returnType, result);
+    }
+
+    private TypeSymbol InferBlockStatement(BlockStatement blockStatement, TypeInferenceResult result, SymbolScope scope)
+    {
+        var lastType = TypeSymbol.Unknown;
         foreach (var statement in blockStatement.Statements)
         {
-            switch (statement)
+            lastType = InferNode(statement, result, scope);
+        }
+
+        return SetType(blockStatement, lastType, result);
+    }
+
+    private TypeSymbol InferArrayLiteral(ArrayLiteral arrayLiteral, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (arrayLiteral.Elements.Count == 0)
+        {
+            return SetType(arrayLiteral, TypeSymbol.Array, result);
+        }
+
+        var elementType = InferExpression(arrayLiteral.Elements[0], result, scope);
+        foreach (var element in arrayLiteral.Elements.Skip(1))
+        {
+            var currentType = InferExpression(element, result, scope);
+            if (!elementType.IsCompatibleWith(currentType) || !currentType.IsCompatibleWith(elementType))
             {
-                case LetStatement { Value: not null } letStatement:
-                    localEnv[letStatement.Name.Value] = new BindingInfo
-                    {
-                        ValueType = InferStaticExpressionType(letStatement.Value, localEnv),
-                    };
-                    lastType = StaticType.Unknown;
-                    break;
-                case ExpressionStatement { Expression: not null } expressionStatement:
-                    lastType = InferStaticExpressionType(expressionStatement.Expression, localEnv);
-                    break;
-                case ReturnStatement { ReturnValue: not null } returnStatement:
-                    lastType = InferStaticExpressionType(returnStatement.ReturnValue, localEnv);
-                    break;
-                default:
-                    lastType = StaticType.Unknown;
-                    break;
+                return AddErrorAndSetType(
+                    arrayLiteral,
+                    $"Type error: array elements must have the same type, but found {elementType} and {currentType}",
+                    TypeSymbol.Unknown,
+                    result);
             }
         }
 
-        return lastType;
+        return SetType(arrayLiteral, TypeSymbol.ArrayOf(elementType), result);
     }
 
+    private TypeSymbol InferHashLiteral(HashLiteral hashLiteral, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (hashLiteral.Pairs.Count == 0)
+        {
+            return SetType(hashLiteral, TypeSymbol.HashMap, result);
+        }
+
+        var keyType = InferExpression(hashLiteral.Pairs[0].Key, result, scope);
+        var valueType = InferExpression(hashLiteral.Pairs[0].Value, result, scope);
+        foreach (var pair in hashLiteral.Pairs.Skip(1))
+        {
+            var currentKeyType = InferExpression(pair.Key, result, scope);
+            var currentValueType = InferExpression(pair.Value, result, scope);
+            if (!keyType.IsCompatibleWith(currentKeyType)
+                || !currentKeyType.IsCompatibleWith(keyType)
+                || !valueType.IsCompatibleWith(currentValueType)
+                || !currentValueType.IsCompatibleWith(valueType))
+            {
+                return AddErrorAndSetType(
+                    hashLiteral,
+                    $"Type error: hash map keys and values must have the same type, but found ({keyType}, {valueType}) and ({currentKeyType}, {currentValueType})",
+                    TypeSymbol.Unknown,
+                    result);
+            }
+        }
+
+        return SetType(hashLiteral, TypeSymbol.MapOf(keyType, valueType), result);
+    }
+
+    private TypeSymbol InferIdentifier(Identifier identifier, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (scope.TryLookupVariable(identifier.Value, out var variableSymbol) && variableSymbol is not null)
+        {
+            return SetType(identifier, variableSymbol.Type, result);
+        }
+
+        if (scope.TryLookupFunction(identifier.Value, out var functionSymbol) && functionSymbol is not null)
+        {
+            return SetType(identifier, functionSymbol.Type, result);
+        }
+
+        return AddErrorAndSetType(identifier, $"Undefined variable: {identifier.Value}", TypeSymbol.Unknown, result);
+    }
+
+    private TypeSymbol InferInfixExpression(InfixExpression infixExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        var leftType = InferExpression(infixExpression.Left, result, scope);
+        var rightType = InferExpression(infixExpression.Right, result, scope);
+
+        if (infixExpression.Operator == "+")
+        {
+            if (leftType == TypeSymbol.String && rightType == TypeSymbol.String)
+            {
+                return SetType(infixExpression, TypeSymbol.String, result);
+            }
+
+            if (leftType == TypeSymbol.Int && rightType == TypeSymbol.Int)
+            {
+                return SetType(infixExpression, TypeSymbol.Int, result);
+            }
+
+            if ((leftType == TypeSymbol.Int && rightType == TypeSymbol.Unknown)
+                || (leftType == TypeSymbol.Unknown && rightType == TypeSymbol.Int))
+            {
+                return SetType(infixExpression, TypeSymbol.Int, result);
+            }
+
+            if ((leftType == TypeSymbol.String && rightType == TypeSymbol.Unknown)
+                || (leftType == TypeSymbol.Unknown && rightType == TypeSymbol.String))
+            {
+                return SetType(infixExpression, TypeSymbol.String, result);
+            }
+
+            return AddErrorAndSetType(infixExpression, $"Type error: cannot apply operator '+' to types {leftType} and {rightType}", TypeSymbol.Unknown, result);
+        }
+
+        if (infixExpression.Operator is "-" or "*" or "/")
+        {
+            if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
+            {
+                return SetType(infixExpression, TypeSymbol.Int, result);
+            }
+
+            if (leftType != TypeSymbol.Int || rightType != TypeSymbol.Int)
+            {
+                return AddErrorAndSetType(infixExpression, $"Type error: cannot apply operator '{infixExpression.Operator}' to types {leftType} and {rightType}", TypeSymbol.Unknown, result);
+            }
+
+            return SetType(infixExpression, TypeSymbol.Int, result);
+        }
+
+        if (infixExpression.Operator is "==" or "!=" or "<" or ">")
+        {
+            if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
+            {
+                return SetType(infixExpression, TypeSymbol.Bool, result);
+            }
+
+            if (!leftType.IsCompatibleWith(rightType) || !rightType.IsCompatibleWith(leftType))
+            {
+                return AddErrorAndSetType(infixExpression, $"Type error: cannot compare types {leftType} and {rightType} with operator '{infixExpression.Operator}'", TypeSymbol.Unknown, result);
+            }
+
+            return SetType(infixExpression, TypeSymbol.Bool, result);
+        }
+
+        return AddErrorAndSetType(infixExpression, $"Type error: cannot apply operator '{infixExpression.Operator}' to types {leftType} and {rightType}", TypeSymbol.Unknown, result);
+    }
+
+    private TypeSymbol InferNegationPrefix(PrefixExpression prefixExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        var rightType = InferExpression(prefixExpression.Right, result, scope);
+        if (rightType != TypeSymbol.Int)
+        {
+            return AddErrorAndSetType(prefixExpression, $"Type error: cannot apply operator '-' to type {rightType}", TypeSymbol.Unknown, result);
+        }
+
+        return SetType(prefixExpression, TypeSymbol.Int, result);
+    }
+
+    private TypeSymbol InferBangPrefix(PrefixExpression prefixExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        var operandType = InferExpression(prefixExpression.Right, result, scope);
+        if (operandType != TypeSymbol.Bool)
+        {
+            return AddErrorAndSetType(prefixExpression, $"Type error: cannot apply operator '!' to type {operandType}", TypeSymbol.Unknown, result);
+        }
+
+        return SetType(prefixExpression, TypeSymbol.Bool, result);
+    }
+
+    private TypeSymbol InferIfExpression(IfExpression ifExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        var conditionType = InferExpression(ifExpression.Condition, result, scope);
+        if (conditionType != TypeSymbol.Bool)
+        {
+            return AddErrorAndSetType(ifExpression, $"Type error: if condition must be of type Boolean, but got {conditionType}", TypeSymbol.Unknown, result);
+        }
+
+        var thenScope = new SymbolScope(scope);
+        var thenType = InferStatement(ifExpression.Consequence, result, thenScope);
+        if (ifExpression.Alternative is null)
+        {
+            return SetType(ifExpression, TypeSymbol.Void, result);
+        }
+
+        var elseScope = new SymbolScope(scope);
+        var elseType = InferStatement(ifExpression.Alternative, result, elseScope);
+        if (!thenType.IsCompatibleWith(elseType) || !elseType.IsCompatibleWith(thenType))
+        {
+            return AddErrorAndSetType(ifExpression, $"Type error: if branches must have the same type, but got {thenType} and {elseType}", TypeSymbol.Unknown, result);
+        }
+
+        if (thenType == TypeSymbol.Void)
+        {
+            return AddErrorAndSetType(ifExpression, "Type error: if/else used as an expression must produce a value", TypeSymbol.Unknown, result);
+        }
+
+        return SetType(ifExpression, thenType, result);
+    }
+
+    private TypeSymbol InferIndexExpression(IndexExpression indexExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        var leftType = InferExpression(indexExpression.Left, result, scope);
+        var leftKind = leftType.ToKongType();
+        if (leftKind is not KongType.Array and not KongType.HashMap and not KongType.Unknown)
+        {
+            return AddErrorAndSetType(indexExpression, $"Type error: index operator not supported for type {leftType}", TypeSymbol.Unknown, result);
+        }
+
+        var indexType = InferExpression(indexExpression.Index, result, scope);
+        var indexKind = indexType.ToKongType();
+
+        if (leftKind == KongType.Array && indexKind is not KongType.Int64 and not KongType.Unknown)
+        {
+            return AddErrorAndSetType(indexExpression, $"Type error: array index must be Int64, but got {indexType}", TypeSymbol.Unknown, result);
+        }
+
+        if (leftKind == KongType.HashMap && indexKind is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Unknown)
+        {
+            return AddErrorAndSetType(indexExpression, $"Type error: hash map index must be Int64, Boolean, or String, but got {indexType}", TypeSymbol.Unknown, result);
+        }
+
+        return SetType(indexExpression, TypeSymbol.Unknown, result);
+    }
+
+    private TypeSymbol InferFunctionLiteral(
+        FunctionLiteral functionLiteral,
+        FunctionSymbol? functionSymbol,
+        TypeInferenceResult result,
+        SymbolScope scope,
+        bool recordTopLevelSignature)
+    {
+        var resolvedFunctionSymbol = functionSymbol ?? CreateAnonymousFunctionSymbol(functionLiteral, result);
+        var localScope = new SymbolScope(scope);
+
+        if (!string.IsNullOrEmpty(functionLiteral.Name))
+        {
+            localScope.Define(resolvedFunctionSymbol);
+        }
+
+        foreach (var parameter in resolvedFunctionSymbol.Parameters)
+        {
+            localScope.Define(parameter);
+        }
+
+        for (var i = 0; i < functionLiteral.Parameters.Count; i++)
+        {
+            SetType(functionLiteral.Parameters[i].Name, resolvedFunctionSymbol.Parameters[i].Type, result);
+        }
+
+        var bodyType = InferBlockStatement(functionLiteral.Body, result, localScope);
+        resolvedFunctionSymbol.SetReturnType(bodyType);
+
+        if (recordTopLevelSignature && !string.IsNullOrEmpty(functionLiteral.Name))
+        {
+            result.AddFunctionSignature(
+                functionLiteral.Name,
+                resolvedFunctionSymbol.Parameters.Select(p => p.Type).ToList(),
+                bodyType);
+        }
+
+        return SetType(functionLiteral, resolvedFunctionSymbol.Type, result);
+    }
+
+    private static FunctionSymbol CreateAnonymousFunctionSymbol(FunctionLiteral functionLiteral, TypeInferenceResult result)
+    {
+        var parameterTypes = ParseFunctionParameterTypes(functionLiteral, result, reportErrors: true);
+        var parameterSymbols = CreateParameterSymbols(functionLiteral, parameterTypes);
+        var name = string.IsNullOrEmpty(functionLiteral.Name) ? "<anonymous>" : functionLiteral.Name;
+        return new FunctionSymbol(name, parameterSymbols, TypeSymbol.Unknown);
+    }
+
+    private TypeSymbol InferCallExpression(CallExpression callExpression, TypeInferenceResult result, SymbolScope scope)
+    {
+        if (callExpression.Function is Identifier { Value: "puts" })
+        {
+            foreach (var argument in callExpression.Arguments)
+            {
+                InferExpression(argument, result, scope);
+            }
+
+            return SetType(callExpression, TypeSymbol.Void, result);
+        }
+
+        if (callExpression.Function is Identifier { Value: "len" })
+        {
+            if (callExpression.Arguments.Count != 1)
+            {
+                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=1", TypeSymbol.Unknown, result);
+            }
+
+            var argumentType = InferExpression(callExpression.Arguments[0], result, scope);
+            var argumentKind = argumentType.ToKongType();
+            if (argumentKind is KongType.String or KongType.Array or KongType.Unknown)
+            {
+                return SetType(callExpression, TypeSymbol.Int, result);
+            }
+
+            return AddErrorAndSetType(callExpression, $"argument to `len` not supported, got {argumentType}", TypeSymbol.Unknown, result);
+        }
+
+        if (callExpression.Function is Identifier { Value: "push" })
+        {
+            if (callExpression.Arguments.Count != 2)
+            {
+                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=2", TypeSymbol.Unknown, result);
+            }
+
+            var arrayType = InferExpression(callExpression.Arguments[0], result, scope);
+            InferExpression(callExpression.Arguments[1], result, scope);
+
+            var arrayKind = arrayType.ToKongType();
+            if (arrayKind is KongType.Array or KongType.Unknown)
+            {
+                return SetType(callExpression, arrayKind == KongType.Array ? arrayType : TypeSymbol.Array, result);
+            }
+
+            return AddErrorAndSetType(callExpression, $"argument to `push` must be ARRAY, got {arrayType}", TypeSymbol.Unknown, result);
+        }
+
+        var functionType = InferExpression(callExpression.Function, result, scope);
+        foreach (var argument in callExpression.Arguments)
+        {
+            InferExpression(argument, result, scope);
+        }
+
+        if (callExpression.Function is Identifier identifier
+            && scope.TryLookupFunction(identifier.Value, out var functionSymbol)
+            && functionSymbol is not null)
+        {
+            return InferTypedFunctionCall(
+                callExpression,
+                functionSymbol.Name,
+                functionSymbol.Parameters.Select(p => p.Type).ToList(),
+                functionSymbol.ReturnType,
+                result);
+        }
+
+        if (functionType is FunctionTypeSymbol functionTypeSymbol)
+        {
+            return InferTypedFunctionCall(
+                callExpression,
+                callExpression.Function.String(),
+                functionTypeSymbol.ParameterTypes,
+                functionTypeSymbol.ReturnType,
+                result);
+        }
+
+        return SetType(callExpression, TypeSymbol.Unknown, result);
+    }
+
+    private TypeSymbol InferTypedFunctionCall(
+        CallExpression callExpression,
+        string functionName,
+        IReadOnlyList<TypeSymbol> parameterTypes,
+        TypeSymbol returnType,
+        TypeInferenceResult result)
+    {
+        if (callExpression.Arguments.Count != parameterTypes.Count)
+        {
+            return AddErrorAndSetType(
+                callExpression,
+                $"wrong number of arguments for {functionName}: want={parameterTypes.Count}, got={callExpression.Arguments.Count}",
+                TypeSymbol.Unknown,
+                result);
+        }
+
+        for (var i = 0; i < callExpression.Arguments.Count; i++)
+        {
+            var argumentType = result.GetNodeTypeSymbol(callExpression.Arguments[i]);
+            var parameterType = parameterTypes[i];
+            if (argumentType != TypeSymbol.Unknown
+                && parameterType != TypeSymbol.Unknown
+                && (!parameterType.IsCompatibleWith(argumentType) || !argumentType.IsCompatibleWith(parameterType)))
+            {
+                return AddErrorAndSetType(
+                    callExpression,
+                    $"Type error: argument {i + 1} for {functionName} expects {parameterType}, got {argumentType}",
+                    TypeSymbol.Unknown,
+                    result);
+            }
+        }
+
+        return SetType(callExpression, returnType, result);
+    }
+
+    private static TypeSymbol SetType(INode node, TypeSymbol type, TypeInferenceResult result)
+    {
+        result.AddNodeType(node, type);
+        return type;
+    }
+
+    private static TypeSymbol AddErrorAndSetType(INode node, string error, TypeSymbol type, TypeInferenceResult result)
+    {
+        result.AddError(error);
+        return SetType(node, type, result);
+    }
+
+    private TypeSymbol InferUnsupported(INode node, TypeInferenceResult result)
+    {
+        return AddErrorAndSetType(node, $"Unsupported node type: {node.GetType().Name}", TypeSymbol.Unknown, result);
+    }
 }
