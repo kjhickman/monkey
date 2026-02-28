@@ -21,6 +21,8 @@ public class VmClrOutputComparisonTests
         "puts([1, 2, 3][0 + 2])",
         "puts(len(\"hello\"))",
         "puts(len([1, 2, 3]))",
+        "puts(push([], 1))",
+        "puts(push([1, 2], 3))",
         "let add = fn(a: int, b: int) { a + b }; puts(add(5, 3));",
         "let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; puts(factorial(5));",
         "let newClosure = fn(a: int) { fn() { a; }; }; let closure = newClosure(99); puts(closure());",

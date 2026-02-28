@@ -460,6 +460,24 @@ public class TypeInferer
             return AddErrorAndSetType(callExpression, $"argument to `len` not supported, got {argumentType}", KongType.Unknown, result);
         }
 
+        if (callExpression.Function is Identifier { Value: "push" })
+        {
+            if (callExpression.Arguments.Count != 2)
+            {
+                return AddErrorAndSetType(callExpression, $"wrong number of arguments. got={callExpression.Arguments.Count}, want=2", KongType.Unknown, result);
+            }
+
+            var arrayType = InferExpression(callExpression.Arguments[0], result, env);
+            InferExpression(callExpression.Arguments[1], result, env);
+
+            if (arrayType is KongType.Array or KongType.Unknown)
+            {
+                return SetType(callExpression, KongType.Array, result);
+            }
+
+            return AddErrorAndSetType(callExpression, $"argument to `push` must be ARRAY, got {arrayType}", KongType.Unknown, result);
+        }
+
         var _ = InferExpression(callExpression.Function, result, env);
 
         foreach (var argument in callExpression.Arguments)

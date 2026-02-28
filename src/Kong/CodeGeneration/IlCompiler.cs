@@ -753,6 +753,11 @@ public class IlCompiler
             return EmitLenBuiltinCall(callExpression, context);
         }
 
+        if (callExpression.Function is Identifier { Value: "push" })
+        {
+            return EmitPushBuiltinCall(callExpression, context);
+        }
+
         if (callExpression.Function is Identifier functionIdentifier
             && context.Functions.TryGetValue(functionIdentifier.Value, out var functionMetadata)
             && !IsVariableBound(functionIdentifier.Value, context))
@@ -958,6 +963,109 @@ public class IlCompiler
         context.Il.Emit(OpCodes.Throw);
 
         context.Il.Append(invalidArgLabel);
+    }
+
+    private string? EmitPushBuiltinCall(CallExpression callExpression, EmitContext context)
+    {
+        if (callExpression.Arguments.Count != 2)
+        {
+            return $"wrong number of arguments. got={callExpression.Arguments.Count}, want=2";
+        }
+
+        var arrayExpr = callExpression.Arguments[0];
+        var arrayErr = EmitExpression(arrayExpr, context);
+        if (arrayErr is not null)
+        {
+            return arrayErr;
+        }
+
+        var arrayType = context.Types.GetNodeType(arrayExpr);
+        if (arrayType == KongType.Array)
+        {
+            return EmitPushForArrayOnStack(callExpression.Arguments[1], context);
+        }
+
+        if (arrayType != KongType.Unknown)
+        {
+            return $"argument to `push` must be ARRAY, got {arrayType}";
+        }
+
+        return EmitPushWithRuntimeTypeCheck(callExpression.Arguments[1], context);
+    }
+
+    private string? EmitPushForArrayOnStack(IExpression valueExpr, EmitContext context)
+    {
+        var oldArrayLocal = new VariableDefinition(context.ObjectArrayType);
+        var newArrayLocal = new VariableDefinition(context.ObjectArrayType);
+        var lengthLocal = new VariableDefinition(context.Module.TypeSystem.Int32);
+        context.Method.Body.Variables.Add(oldArrayLocal);
+        context.Method.Body.Variables.Add(newArrayLocal);
+        context.Method.Body.Variables.Add(lengthLocal);
+
+        EmitCastToObjectArray(context);
+        context.Il.Emit(OpCodes.Stloc, oldArrayLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, oldArrayLocal);
+        context.Il.Emit(OpCodes.Ldlen);
+        EmitConvertInt64ToInt32(context);
+        context.Il.Emit(OpCodes.Stloc, lengthLocal);
+
+        context.Il.Emit(OpCodes.Ldloc, lengthLocal);
+        context.Il.Emit(OpCodes.Ldc_I4_1);
+        context.Il.Emit(OpCodes.Add);
+        context.Il.Emit(OpCodes.Newarr, context.Module.TypeSystem.Object);
+        context.Il.Emit(OpCodes.Stloc, newArrayLocal);
+
+        var arrayCopyMethod = context.Module.ImportReference(
+            typeof(Array).GetMethod(nameof(Array.Copy), [typeof(Array), typeof(Array), typeof(int)])!);
+        context.Il.Emit(OpCodes.Ldloc, oldArrayLocal);
+        context.Il.Emit(OpCodes.Ldloc, newArrayLocal);
+        context.Il.Emit(OpCodes.Ldloc, lengthLocal);
+        context.Il.Emit(OpCodes.Call, arrayCopyMethod);
+
+        context.Il.Emit(OpCodes.Ldloc, newArrayLocal);
+        context.Il.Emit(OpCodes.Ldloc, lengthLocal);
+        var valueErr = EmitExpression(valueExpr, context);
+        if (valueErr is not null)
+        {
+            return valueErr;
+        }
+
+        EmitBoxIfNeeded(context.Types.GetNodeType(valueExpr), context);
+        context.Il.Emit(OpCodes.Stelem_Ref);
+        context.Il.Emit(OpCodes.Ldloc, newArrayLocal);
+        return null;
+    }
+
+    private string? EmitPushWithRuntimeTypeCheck(IExpression valueExpr, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Dup);
+        context.Il.Emit(OpCodes.Isinst, context.ObjectArrayType);
+
+        var throwLabel = context.Il.Create(OpCodes.Nop);
+        var continueLabel = context.Il.Create(OpCodes.Nop);
+        context.Il.Emit(OpCodes.Brtrue, continueLabel);
+        context.Il.Emit(OpCodes.Pop);
+        context.Il.Emit(OpCodes.Br, throwLabel);
+
+        context.Il.Append(continueLabel);
+        var emitErr = EmitPushForArrayOnStack(valueExpr, context);
+        if (emitErr is not null)
+        {
+            return emitErr;
+        }
+
+        var doneLabel = context.Il.Create(OpCodes.Nop);
+        context.Il.Emit(OpCodes.Br, doneLabel);
+
+        context.Il.Append(throwLabel);
+        var invalidOperationCtor = context.Module.ImportReference(typeof(InvalidOperationException).GetConstructor([typeof(string)])!);
+        context.Il.Emit(OpCodes.Ldstr, "argument to `push` must be ARRAY");
+        context.Il.Emit(OpCodes.Newobj, invalidOperationCtor);
+        context.Il.Emit(OpCodes.Throw);
+
+        context.Il.Append(doneLabel);
+        return null;
     }
 
     private static bool IsVariableBound(string name, EmitContext context)

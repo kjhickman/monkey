@@ -169,6 +169,25 @@ public class ClrRegressionTests
     }
 
     [Theory]
+    [InlineData("puts(push([], 1));", "[1]")]
+    [InlineData("puts(push([1, 2], 3));", "[1, 2, 3]")]
+    [InlineData("let a = [1, 2]; let b = push(a, 3); puts(a); puts(b);", "[1, 2]\n[1, 2, 3]")]
+    public async Task TestPushBuiltin(string source, string expected)
+    {
+        var clrOutput = await CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
+    [InlineData("puts(push(1, 1));", "argument to `push` must be ARRAY")]
+    [InlineData("puts(push([1], 2, 3));", "wrong number of arguments. got=3, want=2")]
+    public void TestPushBuiltinErrors(string source, string expectedError)
+    {
+        var compileError = CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
+
+    [Theory]
     [InlineData("let fivePlusTen = fn() { 5 + 10; }; puts(fivePlusTen());", "15")]
     [InlineData("let one = fn() { 1; }; let two = fn() { 2; }; puts(one() + two());", "3")]
     [InlineData("let a = fn() { 1 }; let b = fn() { a() + 1 }; let c = fn() { b() + 1 }; puts(c());", "3")]
