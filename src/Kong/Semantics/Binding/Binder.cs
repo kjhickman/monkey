@@ -11,12 +11,14 @@ public sealed class Binder
     private readonly List<string> _errors = [];
     private readonly Dictionary<FunctionLiteral, BoundFunctionExpression> _functions = [];
     private readonly HashSet<FunctionSymbol> _topLevelFunctions = [];
+    private readonly HashSet<LetStatement> _duplicateTopLevelStatements = [];
 
     public BindingResult Bind(Program program)
     {
         _errors.Clear();
         _functions.Clear();
         _topLevelFunctions.Clear();
+        _duplicateTopLevelStatements.Clear();
 
         var globalScope = new SymbolScope();
         DeclareTopLevelFunctions(program, globalScope);
@@ -33,16 +35,35 @@ public sealed class Binder
 
     private void DeclareTopLevelFunctions(Program program, SymbolScope globalScope)
     {
+        var seenTopLevelBindings = new Dictionary<string, bool>(StringComparer.Ordinal);
+
         foreach (var statement in program.Statements)
         {
-            if (statement is not LetStatement { Value: FunctionLiteral functionLiteral } letStatement)
+            if (statement is not LetStatement letStatement)
             {
                 continue;
             }
 
-            if (globalScope.TryLookupFunction(letStatement.Name.Value, out _))
+            var isFunctionBinding = letStatement.Value is FunctionLiteral;
+            if (seenTopLevelBindings.TryGetValue(letStatement.Name.Value, out var firstBindingWasFunction))
             {
-                _errors.Add($"duplicate top-level function definition: {letStatement.Name.Value}");
+                _duplicateTopLevelStatements.Add(letStatement);
+                if (firstBindingWasFunction && isFunctionBinding)
+                {
+                    _errors.Add($"duplicate top-level function definition: {letStatement.Name.Value}");
+                }
+                else
+                {
+                    _errors.Add($"duplicate top-level binding: {letStatement.Name.Value}");
+                }
+
+                continue;
+            }
+
+            seenTopLevelBindings[letStatement.Name.Value] = isFunctionBinding;
+
+            if (letStatement.Value is not FunctionLiteral functionLiteral)
+            {
                 continue;
             }
 
@@ -179,6 +200,12 @@ public sealed class Binder
 
     private BoundLetStatement BindLetStatement(LetStatement letStatement, SymbolScope scope, FunctionBindingContext? functionContext)
     {
+        if (scope.Parent is null && _duplicateTopLevelStatements.Contains(letStatement))
+        {
+            var duplicateValue = BindExpression(letStatement.Value!, scope, functionContext);
+            return new BoundLetStatement(letStatement, null, duplicateValue);
+        }
+
         if (letStatement.Value is FunctionLiteral functionLiteral)
         {
             FunctionSymbol functionSymbol;

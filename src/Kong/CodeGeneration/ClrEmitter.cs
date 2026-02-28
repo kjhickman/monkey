@@ -758,6 +758,8 @@ public class ClrEmitter
             typeof(Dictionary<object, object>).GetMethod(nameof(Dictionary<object, object>.ContainsKey), [typeof(object)])!);
         var itemGetterMethod = context.Module.ImportReference(
             typeof(Dictionary<object, object>).GetProperty("Item")!.GetGetMethod()!);
+        var keyNotFoundCtor = context.Module.ImportReference(
+            typeof(KeyNotFoundException).GetConstructor([typeof(string)])!);
 
         var keyMissingLabel = context.Il.Create(OpCodes.Nop);
         var endLabel = context.Il.Create(OpCodes.Nop);
@@ -791,7 +793,9 @@ public class ClrEmitter
         context.Il.Emit(OpCodes.Br, endLabel);
 
         context.Il.Append(keyMissingLabel);
-        context.Il.Emit(OpCodes.Ldnull);
+        context.Il.Emit(OpCodes.Ldstr, "key not found in hash map");
+        context.Il.Emit(OpCodes.Newobj, keyNotFoundCtor);
+        context.Il.Emit(OpCodes.Throw);
 
         context.Il.Append(endLabel);
         return null;
