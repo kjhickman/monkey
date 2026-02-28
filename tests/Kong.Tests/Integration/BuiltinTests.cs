@@ -18,6 +18,9 @@ public class BuiltinTests
     [InlineData("puts(len(\"hello world\"));", "11")]
     [InlineData("puts(len([1, 2, 3]));", "3")]
     [InlineData("puts(len([]));", "0")]
+    [InlineData("puts(len([\"a\", \"b\"]));", "2")]
+    [InlineData("puts(len([true, false, true]));", "3")]
+    [InlineData("puts(len(\"x\") + 10);", "11")]
     public async Task TestLenBuiltin(string source, string expected)
     {
         var clrOutput = await IntegrationTestHarness.CompileAndRunOnClr(source);
@@ -37,6 +40,8 @@ public class BuiltinTests
     [InlineData("puts(push([], 1));", "[1]")]
     [InlineData("puts(push([1, 2], 3));", "[1, 2, 3]")]
     [InlineData("let a = [1, 2]; let b = push(a, 3); puts(a); puts(b);", "[1, 2]\n[1, 2, 3]")]
+    [InlineData("puts(push([\"a\", \"b\"], \"c\"));", "[a, b, c]")]
+    [InlineData("let a = push([1, 2], 3); puts(a[2]);", "3")]
     public async Task TestPushBuiltin(string source, string expected)
     {
         var clrOutput = await IntegrationTestHarness.CompileAndRunOnClr(source);

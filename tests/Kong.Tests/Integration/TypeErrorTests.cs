@@ -29,4 +29,39 @@ public class TypeErrorTests
         var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
         Assert.Contains(expectedError, compileError);
     }
+
+    [Theory]
+    [InlineData("let x = 1; x = 2; puts(x);", "no prefix parse function for Assign found")]
+    [InlineData("let x = \"hello\"; x = \"world\"; puts(x);", "no prefix parse function for Assign found")]
+    public void TestVariableReassignmentIsCompileError(string source, string expectedError)
+    {
+        var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
+
+    [Theory]
+    [InlineData("puts(z);", "Undefined variable: z")]
+    [InlineData("let f = fn() { undeclared }; puts(f());", "Undefined variable: undeclared")]
+    public void TestUndefinedVariableErrors(string source, string expectedError)
+    {
+        var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
+
+    [Theory]
+    [InlineData("puts(if (true) { puts(1) } else { puts(2) });", "if/else used as an expression must produce a value")]
+    public void TestVoidIfElseExpressionError(string source, string expectedError)
+    {
+        var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
+
+    [Theory]
+    [InlineData("let f = fn(x) { x + 1 }; puts(f(5));", "expected ':' after function parameter name")]
+    [InlineData("let f = fn(x: blorp) { x }; puts(f(1));", "invalid type annotation for parameter 'x'")]
+    public void TestMissingOrInvalidTypeAnnotationErrors(string source, string expectedError)
+    {
+        var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
+        Assert.Contains(expectedError, compileError);
+    }
 }

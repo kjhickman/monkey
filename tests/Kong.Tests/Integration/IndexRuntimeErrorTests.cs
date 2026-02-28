@@ -20,4 +20,13 @@ public class IndexRuntimeErrorTests
         var runtimeError = await IntegrationTestHarness.CompileAndRunOnClrExpectRuntimeError(source);
         Assert.Contains(expectedRuntimeError, runtimeError);
     }
+
+    [Theory]
+    [InlineData("puts(1 / 0);", "DivideByZeroException")]
+    [InlineData("let x = 0; puts(10 / x);", "DivideByZeroException")]
+    public async Task TestDivisionByZeroRaisesRuntimeError(string source, string expectedRuntimeError)
+    {
+        var runtimeError = await IntegrationTestHarness.CompileAndRunOnClrExpectRuntimeError(source);
+        Assert.Contains(expectedRuntimeError, runtimeError);
+    }
 }

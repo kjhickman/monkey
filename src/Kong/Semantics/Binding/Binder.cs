@@ -181,10 +181,20 @@ public sealed class Binder
                 => new BoundReturnStatement(returnStatement, BindExpression(returnStatement.ReturnValue, scope, functionContext)),
             BlockStatement blockStatement
                 => BindBlockStatement(blockStatement, new SymbolScope(scope), functionContext),
+            AssignStatement assignStatement
+                => BindAssignStatement(assignStatement),
             _ => new BoundExpressionStatement(
                 new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
                 new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null)),
         };
+    }
+
+    private BoundStatement BindAssignStatement(AssignStatement assignStatement)
+    {
+        _errors.Add($"variable reassignment is not supported: '{assignStatement.Name.Value}'");
+        return new BoundExpressionStatement(
+            new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
+            new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null));
     }
 
     private BoundBlockStatement BindBlockStatement(BlockStatement blockStatement, SymbolScope scope, FunctionBindingContext? functionContext)
