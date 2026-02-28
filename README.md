@@ -5,19 +5,19 @@ Kong is a small, for-fun programming language implemented in C# that runs on the
 ## Example
 
 ```text
-let age = 10;
-let isAdult = fn(x) { x > 18 };
+let baseScore = 12;
+let hitTarget = fn(points: int) { points >= 15 };
 
-let multiply = fn(a, b) { a * b };
-let double = fn(x) { multiply(x, 2) };
+let multiply = fn(a: int, b: int) { a * b };
+let bonus = fn(points: int) { multiply(points, 2) };
 
-let result = if (isAdult(age)) {
-    double(age)
+let result = if (hitTarget(baseScore)) {
+    bonus(baseScore)
 } else {
-    age + 5
+    baseScore + 5
 };
 
-puts(result); // Outputs: 15
+puts(result); // Outputs: 17
 ```
 
 ## Running
