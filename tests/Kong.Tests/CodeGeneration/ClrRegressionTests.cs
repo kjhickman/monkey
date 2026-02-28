@@ -143,6 +143,7 @@ public class ClrRegressionTests
     [InlineData("let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)", "10")]
     [InlineData("let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)", "20")]
     [InlineData("let get = fn(h: map[string]int) { h[\"answer\"] }; get({\"answer\": 42})", "42")]
+    [InlineData("let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; factorial(5)", "120")]
     public async Task TestTopLevelFunctionDeclarations(string source, string expected)
     {
         var clrOutput = await CompileAndRunOnClr(source);
@@ -152,7 +153,6 @@ public class ClrRegressionTests
     [Theory]
     [InlineData("let outer = fn(x: int) { let inner = fn(y: int) { y }; inner(x) }; outer(1)", "nested function declarations are not supported")]
     [InlineData("let base = 10; let addBase = fn(x: int) { x + base }; addBase(1)", "captured variables are not supported")]
-    [InlineData("let loop = fn(x: int) { loop(x) }; loop(1)", "recursion is not supported")]
     public void TestClrFunctionDeclarationLimitations(string source, string expectedError)
     {
         var tempDirectory = Path.Combine(Path.GetTempPath(), $"kong-clr-fn-limit-{Guid.NewGuid():N}");

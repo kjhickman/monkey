@@ -110,8 +110,8 @@ public class TypeInferer
 
     public TypeInferenceResult InferTypes(Program root)
     {
-        var result = new TypeInferenceResult();
-        var env = new Dictionary<string, KongType>();
+        var bootstrap = new TypeInferenceResult();
+        var bootstrapEnv = new Dictionary<string, KongType>();
 
         foreach (var statement in root.Statements)
         {
@@ -120,9 +120,19 @@ public class TypeInferer
                 var parameterTypes = fl.Parameters
                     .Select(p => p.TypeAnnotation is null ? KongType.Unknown : ConvertTypeAnnotationToKongType(p.TypeAnnotation))
                     .ToList();
-                result.AddFunctionSignature(fl.Name, parameterTypes, KongType.Unknown);
-                env[fl.Name] = KongType.Unknown;
+                bootstrap.AddFunctionSignature(fl.Name, parameterTypes, KongType.Unknown);
+                bootstrapEnv[fl.Name] = KongType.Unknown;
             }
+        }
+
+        InferNode(root, bootstrap, bootstrapEnv);
+
+        var result = new TypeInferenceResult();
+        var env = new Dictionary<string, KongType>();
+        foreach (var signature in bootstrap.GetFunctionSignatures())
+        {
+            result.AddFunctionSignature(signature.Name, signature.ParameterTypes, signature.ReturnType);
+            env[signature.Name] = signature.ReturnType;
         }
 
         InferNode(root, result, env);
@@ -201,11 +211,28 @@ public class TypeInferer
                 return SetType(infix, KongType.Int64, result);
             }
 
+            if ((leftType == KongType.Int64 && rightType == KongType.Unknown)
+                || (leftType == KongType.Unknown && rightType == KongType.Int64))
+            {
+                return SetType(infix, KongType.Int64, result);
+            }
+
+            if ((leftType == KongType.String && rightType == KongType.Unknown)
+                || (leftType == KongType.Unknown && rightType == KongType.String))
+            {
+                return SetType(infix, KongType.String, result);
+            }
+
             return AddErrorAndSetType(infix, $"Type error: cannot apply operator '+' to types {leftType} and {rightType}", KongType.Unknown, result);
         }
         
         if (infix.Operator is "-" or "*" or "/")
         {
+            if (leftType == KongType.Unknown || rightType == KongType.Unknown)
+            {
+                return SetType(infix, KongType.Int64, result);
+            }
+
             if (leftType != KongType.Int64 || rightType != KongType.Int64)
             {
                 return AddErrorAndSetType(infix, $"Type error: cannot apply operator '{infix.Operator}' to types {leftType} and {rightType}", KongType.Unknown, result);
@@ -216,6 +243,11 @@ public class TypeInferer
 
         if (infix.Operator is "==" or "!=" or "<" or ">")
         {
+            if (leftType == KongType.Unknown || rightType == KongType.Unknown)
+            {
+                return SetType(infix, KongType.Boolean, result);
+            }
+
             if (leftType != rightType)
             {
                 return AddErrorAndSetType(infix, $"Type error: cannot compare types {leftType} and {rightType} with operator '{infix.Operator}'", KongType.Unknown, result);
@@ -1016,12 +1048,6 @@ public class TypeInferer
                 if (callExpression.Function is not Identifier callIdentifier)
                 {
                     errors.Add("function values and higher-order function calls are not supported in CLR backend");
-                    return;
-                }
-
-                if (callIdentifier.Value == currentFunctionName)
-                {
-                    errors.Add($"recursion is not supported in CLR backend function '{currentFunctionName}' yet");
                     return;
                 }
 

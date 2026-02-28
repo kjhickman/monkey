@@ -79,6 +79,7 @@ public class VmClrOutputComparisonTests
         "let identity = fn(x: int) { x }; identity(42)",
         "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(8)",
         "let choose = fn(x: int) { if (x > 5) { 10 } else { 20 } }; choose(3)",
+        "let factorial = fn(x: int) { if (x == 0) { 1 } else { x * factorial(x - 1) } }; factorial(5)",
     ];
 
     [Theory]
