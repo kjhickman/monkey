@@ -1,5 +1,6 @@
 using Kong.Parsing;
 using Kong.Semantics;
+using Kong.Semantics.Binding;
 using Kong.Semantics.Symbols;
 using System.Text;
 using Mono.Cecil;
@@ -20,12 +21,12 @@ public class ClrEmitter
     private sealed class FunctionMetadata
     {
         public required MethodDefinition Method { get; init; }
-        public required TypeInferenceResult.FunctionSignature Signature { get; init; }
+        public required SemanticModel.FunctionSignature Signature { get; init; }
     }
 
     private sealed class EmitContext
     {
-        public EmitContext(TypeInferenceResult types, ModuleDefinition module, MethodDefinition method, Dictionary<string, FunctionMetadata> functions)
+        public EmitContext(SemanticModel types, ModuleDefinition module, MethodDefinition method, Dictionary<string, FunctionMetadata> functions, BoundProgram boundProgram)
         {
             Types = types;
             Module = module;
@@ -34,6 +35,7 @@ public class ClrEmitter
             Locals = [];
             Parameters = [];
             Functions = functions;
+            BoundProgram = boundProgram;
             ClosureParameterIndices = [];
             ClosureCaptureIndices = [];
             ObjectArrayType = new ArrayType(module.TypeSystem.Object);
@@ -44,13 +46,14 @@ public class ClrEmitter
             }
         }
 
-        public TypeInferenceResult Types { get; }
+        public SemanticModel Types { get; }
         public ModuleDefinition Module { get; }
         public MethodDefinition Method { get; }
         public ILProcessor Il { get; }
         public Dictionary<string, VariableDefinition> Locals { get; }
         public Dictionary<string, ParameterDefinition> Parameters { get; }
         public Dictionary<string, FunctionMetadata> Functions { get; }
+        public BoundProgram BoundProgram { get; }
         public Dictionary<string, int> ClosureParameterIndices { get; }
         public Dictionary<string, int> ClosureCaptureIndices { get; }
         public ArrayType ObjectArrayType { get; }
@@ -60,8 +63,15 @@ public class ClrEmitter
             && Method.Parameters[1].ParameterType.FullName == ObjectArrayType.FullName;
     }
 
-    public string? CompileProgramToMain(Program program, TypeInferenceResult types, ModuleDefinition module, MethodDefinition mainMethod)
+    public string? CompileProgramToMain(BoundProgram boundProgram, ModuleDefinition module, MethodDefinition mainMethod)
     {
+        var program = boundProgram.Syntax;
+        var types = boundProgram.TypeInfo;
+        if (types is null)
+        {
+            return "missing semantic type information";
+        }
+
         var functions = new Dictionary<string, FunctionMetadata>();
         var functionDeclErr = DeclareTopLevelFunctions(program, module, functions, types);
         if (functionDeclErr is not null)
@@ -69,13 +79,13 @@ public class ClrEmitter
             return functionDeclErr;
         }
 
-        var functionBodyErr = CompileFunctionBodies(program, module, functions, types);
+        var functionBodyErr = CompileFunctionBodies(program, module, functions, types, boundProgram);
         if (functionBodyErr is not null)
         {
             return functionBodyErr;
         }
 
-        var context = new EmitContext(types, module, mainMethod, functions);
+        var context = new EmitContext(types, module, mainMethod, functions, boundProgram);
 
         for (int i = 0; i < program.Statements.Count; i++)
         {
@@ -105,7 +115,7 @@ public class ClrEmitter
         return statement is LetStatement { Value: FunctionLiteral };
     }
 
-    private static string? DeclareTopLevelFunctions(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, TypeInferenceResult types)
+    private static string? DeclareTopLevelFunctions(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, SemanticModel types)
     {
         var programType = module.Types.FirstOrDefault(t => t.Name == "Program");
         if (programType is null)
@@ -122,7 +132,7 @@ public class ClrEmitter
 
             if (!types.TryGetFunctionSignature(letStatement.Name.Value, out var signature))
             {
-                signature = new TypeInferenceResult.FunctionSignature(letStatement.Name.Value, [], TypeSymbol.Unknown);
+                signature = new SemanticModel.FunctionSignature(letStatement.Name.Value, [], TypeSymbol.Unknown);
             }
 
             var method = new MethodDefinition(
@@ -151,7 +161,7 @@ public class ClrEmitter
         return null;
     }
 
-    private string? CompileFunctionBodies(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, TypeInferenceResult types)
+    private string? CompileFunctionBodies(Program program, ModuleDefinition module, Dictionary<string, FunctionMetadata> functions, SemanticModel types, BoundProgram boundProgram)
     {
         foreach (var statement in program.Statements)
         {
@@ -160,7 +170,7 @@ public class ClrEmitter
                 continue;
             }
 
-            var functionContext = new EmitContext(types, module, functions[letStatement.Name.Value].Method, functions);
+            var functionContext = new EmitContext(types, module, functions[letStatement.Name.Value].Method, functions, boundProgram);
             for (var i = 0; i < functionLiteral.Parameters.Count; i++)
             {
                 var parameter = functionLiteral.Parameters[i];
@@ -687,6 +697,7 @@ public class ClrEmitter
 
         EmitConvertInt64ToInt32(context);
         context.Il.Emit(OpCodes.Ldelem_Ref);
+        EmitReadFromObject(context.Types.GetNodeType(indexExpression), context);
         return null;
     }
 
@@ -1079,7 +1090,7 @@ public class ClrEmitter
 
     private string? EmitFunctionLiteralExpression(FunctionLiteral functionLiteral, EmitContext outerContext)
     {
-        var captures = ResolveFreeVariables(functionLiteral, outerContext);
+        var captures = outerContext.BoundProgram.GetClosureCaptureNames(functionLiteral).ToList();
         var (closureMethod, createErr) = CreateClosureMethod(functionLiteral, captures, outerContext);
         if (createErr is not null)
         {
@@ -1143,7 +1154,7 @@ public class ClrEmitter
         var programType = outerContext.Module.Types.First(t => t.Name == "Program");
         programType.Methods.Add(method);
 
-        var closureContext = new EmitContext(outerContext.Types, outerContext.Module, method, outerContext.Functions);
+        var closureContext = new EmitContext(outerContext.Types, outerContext.Module, method, outerContext.Functions, outerContext.BoundProgram);
         for (var i = 0; i < captures.Count; i++)
         {
             closureContext.ClosureCaptureIndices[captures[i]] = i;
@@ -1156,189 +1167,6 @@ public class ClrEmitter
 
         var err = EmitFunctionBody(functionLiteral.Body, closureContext);
         return (method, err);
-    }
-
-    private static List<string> ResolveFreeVariables(FunctionLiteral functionLiteral, EmitContext context)
-    {
-        var referenced = new HashSet<string>();
-        CollectReferencedIdentifiers(functionLiteral.Body, referenced);
-
-        var declared = new HashSet<string>(functionLiteral.Parameters.Select(p => p.Name.Value));
-        CollectDeclaredNames(functionLiteral.Body, declared);
-
-        var captures = new List<string>();
-        foreach (var name in referenced)
-        {
-            if (declared.Contains(name))
-            {
-                continue;
-            }
-
-            if (context.Functions.ContainsKey(name) && !IsVariableBound(name, context))
-            {
-                continue;
-            }
-
-            if (IsVariableBound(name, context))
-            {
-                captures.Add(name);
-            }
-        }
-
-        return captures;
-    }
-
-    private static void CollectDeclaredNames(IStatement statement, HashSet<string> declared)
-    {
-        switch (statement)
-        {
-            case LetStatement letStatement:
-                declared.Add(letStatement.Name.Value);
-                if (letStatement.Value is not null)
-                {
-                    CollectDeclaredNames(letStatement.Value, declared);
-                }
-                break;
-            case ExpressionStatement expressionStatement when expressionStatement.Expression is not null:
-                CollectDeclaredNames(expressionStatement.Expression, declared);
-                break;
-            case ReturnStatement returnStatement when returnStatement.ReturnValue is not null:
-                CollectDeclaredNames(returnStatement.ReturnValue, declared);
-                break;
-            case BlockStatement blockStatement:
-                foreach (var inner in blockStatement.Statements)
-                {
-                    CollectDeclaredNames(inner, declared);
-                }
-                break;
-        }
-    }
-
-    private static void CollectDeclaredNames(IExpression expression, HashSet<string> declared)
-    {
-        switch (expression)
-        {
-            case FunctionLiteral functionLiteral:
-                foreach (var parameter in functionLiteral.Parameters)
-                {
-                    declared.Add(parameter.Name.Value);
-                }
-                CollectDeclaredNames(functionLiteral.Body, declared);
-                break;
-            case PrefixExpression prefixExpression:
-                CollectDeclaredNames(prefixExpression.Right, declared);
-                break;
-            case InfixExpression infixExpression:
-                CollectDeclaredNames(infixExpression.Left, declared);
-                CollectDeclaredNames(infixExpression.Right, declared);
-                break;
-            case IfExpression ifExpression:
-                CollectDeclaredNames(ifExpression.Condition, declared);
-                CollectDeclaredNames(ifExpression.Consequence, declared);
-                if (ifExpression.Alternative is not null)
-                {
-                    CollectDeclaredNames(ifExpression.Alternative, declared);
-                }
-                break;
-            case ArrayLiteral arrayLiteral:
-                foreach (var element in arrayLiteral.Elements)
-                {
-                    CollectDeclaredNames(element, declared);
-                }
-                break;
-            case HashLiteral hashLiteral:
-                foreach (var pair in hashLiteral.Pairs)
-                {
-                    CollectDeclaredNames(pair.Key, declared);
-                    CollectDeclaredNames(pair.Value, declared);
-                }
-                break;
-            case IndexExpression indexExpression:
-                CollectDeclaredNames(indexExpression.Left, declared);
-                CollectDeclaredNames(indexExpression.Index, declared);
-                break;
-            case CallExpression callExpression:
-                CollectDeclaredNames(callExpression.Function, declared);
-                foreach (var argument in callExpression.Arguments)
-                {
-                    CollectDeclaredNames(argument, declared);
-                }
-                break;
-        }
-    }
-
-    private static void CollectReferencedIdentifiers(IStatement statement, HashSet<string> identifiers)
-    {
-        switch (statement)
-        {
-            case LetStatement letStatement when letStatement.Value is not null:
-                CollectReferencedIdentifiers(letStatement.Value, identifiers);
-                break;
-            case ExpressionStatement expressionStatement when expressionStatement.Expression is not null:
-                CollectReferencedIdentifiers(expressionStatement.Expression, identifiers);
-                break;
-            case ReturnStatement returnStatement when returnStatement.ReturnValue is not null:
-                CollectReferencedIdentifiers(returnStatement.ReturnValue, identifiers);
-                break;
-            case BlockStatement blockStatement:
-                foreach (var inner in blockStatement.Statements)
-                {
-                    CollectReferencedIdentifiers(inner, identifiers);
-                }
-                break;
-        }
-    }
-
-    private static void CollectReferencedIdentifiers(IExpression expression, HashSet<string> identifiers)
-    {
-        switch (expression)
-        {
-            case Identifier identifier:
-                identifiers.Add(identifier.Value);
-                break;
-            case PrefixExpression prefixExpression:
-                CollectReferencedIdentifiers(prefixExpression.Right, identifiers);
-                break;
-            case InfixExpression infixExpression:
-                CollectReferencedIdentifiers(infixExpression.Left, identifiers);
-                CollectReferencedIdentifiers(infixExpression.Right, identifiers);
-                break;
-            case IfExpression ifExpression:
-                CollectReferencedIdentifiers(ifExpression.Condition, identifiers);
-                CollectReferencedIdentifiers(ifExpression.Consequence, identifiers);
-                if (ifExpression.Alternative is not null)
-                {
-                    CollectReferencedIdentifiers(ifExpression.Alternative, identifiers);
-                }
-                break;
-            case FunctionLiteral functionLiteral:
-                CollectReferencedIdentifiers(functionLiteral.Body, identifiers);
-                break;
-            case CallExpression callExpression:
-                CollectReferencedIdentifiers(callExpression.Function, identifiers);
-                foreach (var argument in callExpression.Arguments)
-                {
-                    CollectReferencedIdentifiers(argument, identifiers);
-                }
-                break;
-            case ArrayLiteral arrayLiteral:
-                foreach (var element in arrayLiteral.Elements)
-                {
-                    CollectReferencedIdentifiers(element, identifiers);
-                }
-                break;
-            case HashLiteral hashLiteral:
-                foreach (var pair in hashLiteral.Pairs)
-                {
-                    CollectReferencedIdentifiers(pair.Key, identifiers);
-                    CollectReferencedIdentifiers(pair.Value, identifiers);
-                }
-                break;
-            case IndexExpression indexExpression:
-                CollectReferencedIdentifiers(indexExpression.Left, identifiers);
-                CollectReferencedIdentifiers(indexExpression.Index, identifiers);
-                break;
-        }
     }
 
     private static string? EmitLoadIdentifierAsObject(string name, EmitContext context)

@@ -55,7 +55,7 @@ public class ClrArtifactBuilder
     private static string? CompileMainBody(LoweringResult loweringResult, ModuleDefinition module, MethodDefinition mainMethod)
     {
         var emitter = new ClrEmitter();
-        return emitter.CompileProgramToMain(loweringResult.Program, loweringResult.Types, module, mainMethod);
+        return emitter.CompileProgramToMain(loweringResult.BoundProgram, module, mainMethod);
     }
 
     private static void WriteArtifacts(AssemblyDefinition assembly, string outputAssembly)

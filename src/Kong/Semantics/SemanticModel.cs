@@ -3,7 +3,7 @@ using Kong.Semantics.Symbols;
 
 namespace Kong.Semantics;
 
-public sealed class TypeInferenceResult
+public sealed class SemanticModel
 {
     public sealed record FunctionSignature(string Name, IReadOnlyList<TypeSymbol> ParameterTypes, TypeSymbol ReturnType);
 
@@ -15,11 +15,6 @@ public sealed class TypeInferenceResult
     public void AddNodeType(INode node, TypeSymbol type)
     {
         Types[node] = type;
-    }
-
-    public void AddNodeType(INode node, KongType type)
-    {
-        AddNodeType(node, TypeSymbol.FromKongType(type));
     }
 
     public KongType GetNodeType(INode node)
@@ -45,14 +40,6 @@ public sealed class TypeInferenceResult
     public void AddFunctionSignature(string name, IReadOnlyList<TypeSymbol> parameterTypes, TypeSymbol returnType)
     {
         FunctionSignatures[name] = new FunctionSignature(name, parameterTypes, returnType);
-    }
-
-    public void AddFunctionSignature(string name, IReadOnlyList<KongType> parameterTypes, KongType returnType)
-    {
-        AddFunctionSignature(
-            name,
-            parameterTypes.Select(TypeSymbol.FromKongType).ToList(),
-            TypeSymbol.FromKongType(returnType));
     }
 
     public bool TryGetFunctionSignature(string name, out FunctionSignature signature)

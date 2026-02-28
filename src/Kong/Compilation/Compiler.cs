@@ -22,13 +22,13 @@ public class Compiler
 
         var semanticResult = AnalyzeSemantics(parseResult.Program);
         diagnostics.AddRange(semanticResult.DiagnosticBag);
-        if (semanticResult.DiagnosticBag.HasErrors || semanticResult.Types is null)
+        if (semanticResult.DiagnosticBag.HasErrors || semanticResult.BoundProgram is null)
         {
             return new CompilationResult(parseResult, semanticResult, null, null, diagnostics);
         }
 
         var lowerer = new IdentityLowerer();
-        var loweringResult = lowerer.Lower(semanticResult.Program, semanticResult.Types);
+        var loweringResult = lowerer.Lower(semanticResult.Program, semanticResult.BoundProgram);
         diagnostics.AddRange(CompilationStage.Lowering, loweringResult.DiagnosticBag);
         if (loweringResult.DiagnosticBag.HasErrors)
         {
@@ -65,20 +65,16 @@ public class Compiler
 
     private static SemanticResult AnalyzeSemantics(Program program)
     {
-        var inferer = new TypeInferer();
+        var analyzer = new SemanticAnalyzer();
         var diagnostics = new DiagnosticBag();
 
-        var annotationErrors = inferer.ValidateFunctionTypeAnnotations(program);
-        diagnostics.AddRange(CompilationStage.SemanticAnalysis, annotationErrors);
+        var semanticResult = analyzer.Analyze(program);
+        diagnostics.AddRange(CompilationStage.SemanticAnalysis, semanticResult.Errors);
         if (diagnostics.HasErrors)
         {
-            return new SemanticResult(program, null, diagnostics);
+            return new SemanticResult(program, null, semanticResult.Types, diagnostics);
         }
 
-        var types = inferer.InferTypes(program);
-        diagnostics.AddRange(CompilationStage.SemanticAnalysis, types.GetErrors());
-        return diagnostics.HasErrors
-            ? new SemanticResult(program, null, diagnostics)
-            : new SemanticResult(program, types, diagnostics);
+        return new SemanticResult(program, semanticResult.BoundProgram, semanticResult.Types, diagnostics);
     }
 }

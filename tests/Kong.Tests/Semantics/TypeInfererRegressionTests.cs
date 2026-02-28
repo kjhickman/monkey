@@ -11,9 +11,7 @@ public class TypeInfererRegressionTests
     public void InferTypes_ResolvesForwardTopLevelFunctionReturnTypes()
     {
         var program = Parse("let a = fn() { b() }; let b = fn() { true }; puts(a());");
-        var inferer = new TypeInferer();
-
-        var types = inferer.InferTypes(program);
+        var types = AnalyzeAndGetTypes(program);
 
         Assert.True(types.TryGetFunctionSignature("a", out var signature));
         Assert.Equal(TypeSymbol.Bool, signature.ReturnType);
@@ -23,9 +21,7 @@ public class TypeInfererRegressionTests
     public void InferTypes_ReportsTypeMismatchForFunctionLiteralCallee()
     {
         var program = Parse("let value = (fn(x: int) { x })(true);");
-        var inferer = new TypeInferer();
-
-        var types = inferer.InferTypes(program);
+        var types = AnalyzeAndGetTypes(program);
 
         Assert.Contains(types.GetErrors(), e => e.Contains("Type error: argument 1"));
     }
@@ -34,11 +30,32 @@ public class TypeInfererRegressionTests
     public void InferTypes_ReportsInvalidTopLevelParameterAnnotations()
     {
         var program = Parse("let identity = fn(x: banana) { x }; identity(1);");
-        var inferer = new TypeInferer();
+        var analyzer = new SemanticAnalyzer();
 
-        var types = inferer.InferTypes(program);
+        var result = analyzer.Analyze(program);
 
-        Assert.Contains(types.GetErrors(), e => e.Contains("invalid type annotation for parameter 'x': unknown type 'banana'"));
+        Assert.Contains(result.Errors, e => e.Contains("invalid type annotation for parameter 'x': unknown type 'banana'"));
+    }
+
+    [Fact]
+    public void ValidateFunctionTypeAnnotations_ReportsCheckerErrors()
+    {
+        var program = Parse("puts(len(1));");
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+
+        Assert.Contains(result.Errors, e => e.Contains("argument to `len` not supported"));
+    }
+
+    [Fact]
+    public void Analyze_ReportsHashMapKeyTypeMismatch()
+    {
+        var program = Parse("let get = fn(h: map[string]int) { h[1] }; puts(get({\"answer\": 42}));");
+        var analyzer = new SemanticAnalyzer();
+
+        var result = analyzer.Analyze(program);
+
+        Assert.Contains(result.Errors, e => e.Contains("hash map index must be string"));
     }
 
     private static Program Parse(string source)
@@ -47,5 +64,13 @@ public class TypeInfererRegressionTests
         var program = parser.ParseProgram();
         Assert.Empty(parser.Errors());
         return program;
+    }
+
+    private static SemanticModel AnalyzeAndGetTypes(Program program)
+    {
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.NotNull(result.Types);
+        return result.Types!;
     }
 }

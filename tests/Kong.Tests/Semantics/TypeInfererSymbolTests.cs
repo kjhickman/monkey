@@ -11,9 +11,7 @@ public class TypeInfererSymbolTests
     public void InferTypes_TracksStructuredFunctionParameterTypes()
     {
         var program = Parse("let get = fn(h: map[string]int, values: int[]) { h[\"answer\"] }; ");
-        var inferer = new TypeInferer();
-
-        var types = inferer.InferTypes(program);
+        var types = AnalyzeAndGetTypes(program);
 
         Assert.True(types.TryGetFunctionSignature("get", out var signature));
         var mapType = Assert.IsType<MapTypeSymbol>(signature.ParameterTypes[0]);
@@ -29,9 +27,7 @@ public class TypeInfererSymbolTests
     {
         const string source = "let add = fn(a: int, b: int) { a + b }; let wrapper = fn() { let add = fn(x: int) { x + 1 }; add(41); }; puts(wrapper());";
         var program = Parse(source);
-        var inferer = new TypeInferer();
-
-        var types = inferer.InferTypes(program);
+        var types = AnalyzeAndGetTypes(program);
 
         Assert.True(types.TryGetFunctionSignature("add", out var signature));
         Assert.Equal(2, signature.ParameterTypes.Count);
@@ -44,9 +40,7 @@ public class TypeInfererSymbolTests
     public void InferTypes_ExposesRichNodeTypesAndKongTypeCompatibility()
     {
         var program = Parse("let nums = [1, 2, 3];");
-        var inferer = new TypeInferer();
-
-        var types = inferer.InferTypes(program);
+        var types = AnalyzeAndGetTypes(program);
 
         var letStatement = Assert.IsType<LetStatement>(program.Statements[0]);
         var arrayLiteral = Assert.IsType<ArrayLiteral>(letStatement.Value);
@@ -62,5 +56,13 @@ public class TypeInfererSymbolTests
         var program = parser.ParseProgram();
         Assert.Empty(parser.Errors());
         return program;
+    }
+
+    private static SemanticModel AnalyzeAndGetTypes(Program program)
+    {
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.NotNull(result.Types);
+        return result.Types!;
     }
 }

@@ -18,6 +18,7 @@ public class CoreTests
     [InlineData("-5", -5L)]
     [InlineData("-10", -10L)]
     [InlineData("-50 + 100 + -50", 0L)]
+    [InlineData("[1, 2, 3][0] + 1", 2L)]
     [InlineData("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50L)]
     public async Task TestIntegerArithmetic(string source, long expected)
     {

@@ -8,7 +8,24 @@ public sealed class SymbolScope(SymbolScope? parent = null)
 
     public void Define(Symbol symbol)
     {
+        symbol.DeclaringScope = this;
         _symbols[symbol.Name] = symbol;
+    }
+
+    public bool IsWithin(SymbolScope ancestor)
+    {
+        SymbolScope? current = this;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
     }
 
     public bool TryLookup(string name, out Symbol? symbol)
