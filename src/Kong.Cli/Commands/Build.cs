@@ -1,4 +1,5 @@
 using DotMake.CommandLine;
+using Kong.Compilation;
 
 namespace Kong.Cli.Commands;
 
@@ -13,7 +14,6 @@ public class Build
         await BuildAsync(File);
     }
 
-    // todo: use some result type instead of null to indicate failure
     public static async Task<string?> BuildAsync(string filePath)
     {
         if (!System.IO.File.Exists(filePath))
@@ -25,11 +25,11 @@ public class Build
         var source = await System.IO.File.ReadAllTextAsync(filePath);
         var assemblyName = Path.GetFileNameWithoutExtension(filePath);
         var assemblyPath = GetOutputAssemblyPath(filePath);
-        var compiler = new KongCompiler();
-        var compilerError = compiler.CompileToAssembly(source, assemblyName, assemblyPath);
-        if (compilerError is not null)
+        var compiler = new Compiler();
+        var compileResult = compiler.Compile(source, assemblyName, assemblyPath);
+        if (!compileResult.Succeeded)
         {
-            Console.Error.WriteLine(compilerError);
+            Console.Error.WriteLine(compileResult.DiagnosticBag);
             return null;
         }
 

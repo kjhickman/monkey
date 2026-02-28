@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Kong.Compilation;
 
 namespace Kong.Tests.Integration;
 
@@ -12,7 +13,7 @@ internal static class IntegrationTestHarness
         try
         {
             var assemblyPath = Path.Combine(tempDirectory, "program.dll");
-            var compiler = new KongCompiler();
+            var compiler = new Compiler();
             var compileError = compiler.CompileToAssembly(source, "program", assemblyPath);
             Assert.Null(compileError);
 
@@ -53,7 +54,7 @@ internal static class IntegrationTestHarness
         try
         {
             var assemblyPath = Path.Combine(tempDirectory, "program.dll");
-            var compiler = new KongCompiler();
+            var compiler = new Compiler();
             var compileError = compiler.CompileToAssembly(source, "program", assemblyPath);
             Assert.NotNull(compileError);
             return compileError!;

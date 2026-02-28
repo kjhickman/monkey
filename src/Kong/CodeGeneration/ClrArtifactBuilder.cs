@@ -1,23 +1,25 @@
 using Mono.Cecil;
-using Kong.Parsing;
-using Kong.Semantics;
+using Kong.Diagnostics;
+using Kong.Lowering;
 
 namespace Kong.CodeGeneration;
 
 public class ClrArtifactBuilder
 {
-    public string? Build(Program program, string assemblyName, string outputAssembly)
+    public CodegenResult Build(LoweringResult loweringResult, string assemblyName, string outputAssembly)
     {
+        var diagnostics = new DiagnosticBag();
         var (assembly, module, mainMethod) = CreateProgramScaffold(assemblyName);
 
-        var compileErr = CompileMainBody(program, module, mainMethod);
+        var compileErr = CompileMainBody(loweringResult, module, mainMethod);
         if (compileErr is not null)
         {
-            return compileErr;
+            diagnostics.Add(CompilationStage.CodeGeneration, compileErr);
+            return new CodegenResult(outputAssembly, diagnostics);
         }
 
         WriteArtifacts(assembly, outputAssembly);
-        return null;
+        return new CodegenResult(outputAssembly, diagnostics);
     }
 
     private static (AssemblyDefinition Assembly, ModuleDefinition Module, MethodDefinition MainMethod) CreateProgramScaffold(string assemblyName)
@@ -50,25 +52,10 @@ public class ClrArtifactBuilder
         return (assembly, module, mainMethod);
     }
 
-    private static string? CompileMainBody(Program program, ModuleDefinition module, MethodDefinition mainMethod)
+    private static string? CompileMainBody(LoweringResult loweringResult, ModuleDefinition module, MethodDefinition mainMethod)
     {
-        var inferer = new TypeInferer();
-
-        var annotationErrors = inferer.ValidateFunctionTypeAnnotations(program);
-        if (annotationErrors.Count > 0)
-        {
-            return string.Join(Environment.NewLine, annotationErrors);
-        }
-
-        var types = inferer.InferTypes(program);
-        var typeErrors = types.GetErrors().ToList();
-        if (typeErrors.Count > 0)
-        {
-            return string.Join(Environment.NewLine, typeErrors);
-        }
-
         var emitter = new ClrEmitter();
-        return emitter.CompileProgramToMain(program, types, module, mainMethod);
+        return emitter.CompileProgramToMain(loweringResult.Program, loweringResult.Types, module, mainMethod);
     }
 
     private static void WriteArtifacts(AssemblyDefinition assembly, string outputAssembly)
