@@ -222,6 +222,8 @@ public partial class ClrEmitter
             InfixExpression neq when neq.Operator == "!=" => EmitNotEqualExpression(neq, context),
             InfixExpression lt when lt.Operator == "<" => EmitLessThanExpression(lt, context),
             InfixExpression gt when gt.Operator == ">" => EmitGreaterThanExpression(gt, context),
+            InfixExpression logicalAnd when logicalAnd.Operator == "&&" => EmitLogicalAndExpression(logicalAnd, context),
+            InfixExpression logicalOr when logicalOr.Operator == "||" => EmitLogicalOrExpression(logicalOr, context),
             PrefixExpression prefix when prefix.Operator == "-" => EmitNegatePrefix(prefix, context),
             PrefixExpression prefix when prefix.Operator == "!" => EmitBangPrefix(prefix, context),
             IfExpression ifExpr => EmitIfExpression(ifExpr, context),

@@ -334,6 +334,26 @@ public sealed class TypeChecker
             return SetType(infixExpression.Syntax, TypeSymbol.Bool, result);
         }
 
+        if (op is "&&" or "||")
+        {
+            if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
+            {
+                return SetType(infixExpression.Syntax, TypeSymbol.Bool, result);
+            }
+
+            if (leftType != TypeSymbol.Bool)
+            {
+                return AddErrorAndSetType(infixExpression.Syntax, $"Type error: left operand of '{op}' must be Boolean, but got {leftType}", TypeSymbol.Unknown, result);
+            }
+
+            if (rightType != TypeSymbol.Bool)
+            {
+                return AddErrorAndSetType(infixExpression.Syntax, $"Type error: right operand of '{op}' must be Boolean, but got {rightType}", TypeSymbol.Unknown, result);
+            }
+
+            return SetType(infixExpression.Syntax, TypeSymbol.Bool, result);
+        }
+
         return AddErrorAndSetType(infixExpression.Syntax, $"Type error: cannot apply operator '{op}' to types {leftType} and {rightType}", TypeSymbol.Unknown, result);
     }
 

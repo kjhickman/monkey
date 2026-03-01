@@ -26,6 +26,8 @@ public enum TokenType
 
     Eq,
     NotEq,
+    And,
+    Or,
 
     // Delimiters
     Comma,

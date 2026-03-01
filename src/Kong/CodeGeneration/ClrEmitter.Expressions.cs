@@ -283,6 +283,60 @@ public partial class ClrEmitter
         return null;
     }
 
+    private string? EmitLogicalAndExpression(InfixExpression expression, EmitContext context)
+    {
+        var leftErr = EmitExpression(expression.Left, context);
+        if (leftErr is not null)
+        {
+            return leftErr;
+        }
+
+        var falseLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+
+        context.Il.Emit(OpCodes.Brfalse, falseLabel);
+
+        var rightErr = EmitExpression(expression.Right, context);
+        if (rightErr is not null)
+        {
+            return rightErr;
+        }
+
+        context.Il.Emit(OpCodes.Br, endLabel);
+        context.Il.Append(falseLabel);
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Append(endLabel);
+
+        return null;
+    }
+
+    private string? EmitLogicalOrExpression(InfixExpression expression, EmitContext context)
+    {
+        var leftErr = EmitExpression(expression.Left, context);
+        if (leftErr is not null)
+        {
+            return leftErr;
+        }
+
+        var trueLabel = context.Il.Create(OpCodes.Nop);
+        var endLabel = context.Il.Create(OpCodes.Nop);
+
+        context.Il.Emit(OpCodes.Brtrue, trueLabel);
+
+        var rightErr = EmitExpression(expression.Right, context);
+        if (rightErr is not null)
+        {
+            return rightErr;
+        }
+
+        context.Il.Emit(OpCodes.Br, endLabel);
+        context.Il.Append(trueLabel);
+        context.Il.Emit(OpCodes.Ldc_I4_1);
+        context.Il.Append(endLabel);
+
+        return null;
+    }
+
     private string? EmitBinaryOperands(InfixExpression expression, EmitContext context)
     {
         var leftErr = EmitExpression(expression.Left, context);

@@ -231,4 +231,26 @@ public class LexerTests
         Assert.Equal("%", tok.Literal);
         Assert.Equal(TokenType.Int, l.NextToken().Type);
     }
+
+    [Fact]
+    public void TestAndToken()
+    {
+        var l = new Lexer("true && false");
+        Assert.Equal(TokenType.True, l.NextToken().Type);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.And, tok.Type);
+        Assert.Equal("&&", tok.Literal);
+        Assert.Equal(TokenType.False, l.NextToken().Type);
+    }
+
+    [Fact]
+    public void TestOrToken()
+    {
+        var l = new Lexer("true || false");
+        Assert.Equal(TokenType.True, l.NextToken().Type);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.Or, tok.Type);
+        Assert.Equal("||", tok.Literal);
+        Assert.Equal(TokenType.False, l.NextToken().Type);
+    }
 }

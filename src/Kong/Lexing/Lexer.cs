@@ -73,6 +73,32 @@ public class Lexer
             case '%':
                 tok = NewToken(TokenType.Percent, _ch, line, col);
                 break;
+            case '&':
+                if (PeekChar() == '&')
+                {
+                    var ch = _ch;
+                    ReadChar();
+                    var literal = $"{ch}{_ch}";
+                    tok = new Token(TokenType.And, literal, line, col);
+                }
+                else
+                {
+                    tok = NewToken(TokenType.Illegal, _ch, line, col);
+                }
+                break;
+            case '|':
+                if (PeekChar() == '|')
+                {
+                    var ch = _ch;
+                    ReadChar();
+                    var literal = $"{ch}{_ch}";
+                    tok = new Token(TokenType.Or, literal, line, col);
+                }
+                else
+                {
+                    tok = NewToken(TokenType.Illegal, _ch, line, col);
+                }
+                break;
             case '<':
                 tok = NewToken(TokenType.Lt, _ch, line, col);
                 break;
