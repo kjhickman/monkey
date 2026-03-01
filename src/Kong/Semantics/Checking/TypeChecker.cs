@@ -319,7 +319,7 @@ public sealed class TypeChecker
             return SetType(infixExpression.Syntax, TypeSymbol.Int, result);
         }
 
-        if (op is "==" or "!=" or "<" or ">")
+        if (op is "==" or "!=" or "<" or ">" or "<=" or ">=")
         {
             if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
             {

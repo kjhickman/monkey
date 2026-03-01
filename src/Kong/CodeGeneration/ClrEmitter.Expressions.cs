@@ -283,6 +283,58 @@ public partial class ClrEmitter
         return null;
     }
 
+    private string? EmitLessThanOrEqualExpression(InfixExpression expression, EmitContext context)
+    {
+        var operandsErr = EmitBinaryOperands(expression, context);
+        if (operandsErr is not null)
+        {
+            return operandsErr;
+        }
+
+        if (expression.Left.Type == KongType.String)
+        {
+            var compareMethod = context.Module.ImportReference(
+                typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)]));
+            context.Il.Emit(OpCodes.Call, compareMethod);
+            context.Il.Emit(OpCodes.Ldc_I4_0);
+            context.Il.Emit(OpCodes.Cgt);
+            context.Il.Emit(OpCodes.Ldc_I4_0);
+            context.Il.Emit(OpCodes.Ceq);
+            return null;
+        }
+
+        context.Il.Emit(OpCodes.Cgt);
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Emit(OpCodes.Ceq);
+        return null;
+    }
+
+    private string? EmitGreaterThanOrEqualExpression(InfixExpression expression, EmitContext context)
+    {
+        var operandsErr = EmitBinaryOperands(expression, context);
+        if (operandsErr is not null)
+        {
+            return operandsErr;
+        }
+
+        if (expression.Left.Type == KongType.String)
+        {
+            var compareMethod = context.Module.ImportReference(
+                typeof(string).GetMethod(nameof(string.Compare), [typeof(string), typeof(string)]));
+            context.Il.Emit(OpCodes.Call, compareMethod);
+            context.Il.Emit(OpCodes.Ldc_I4_0);
+            context.Il.Emit(OpCodes.Clt);
+            context.Il.Emit(OpCodes.Ldc_I4_0);
+            context.Il.Emit(OpCodes.Ceq);
+            return null;
+        }
+
+        context.Il.Emit(OpCodes.Clt);
+        context.Il.Emit(OpCodes.Ldc_I4_0);
+        context.Il.Emit(OpCodes.Ceq);
+        return null;
+    }
+
     private string? EmitLogicalAndExpression(InfixExpression expression, EmitContext context)
     {
         var leftErr = EmitExpression(expression.Left, context);

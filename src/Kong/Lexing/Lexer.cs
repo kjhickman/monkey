@@ -100,10 +100,30 @@ public class Lexer
                 }
                 break;
             case '<':
-                tok = NewToken(TokenType.Lt, _ch, line, col);
+                if (PeekChar() == '=')
+                {
+                    var ch = _ch;
+                    ReadChar();
+                    var literal = $"{ch}{_ch}";
+                    tok = new Token(TokenType.LtEq, literal, line, col);
+                }
+                else
+                {
+                    tok = NewToken(TokenType.Lt, _ch, line, col);
+                }
                 break;
             case '>':
-                tok = NewToken(TokenType.Gt, _ch, line, col);
+                if (PeekChar() == '=')
+                {
+                    var ch = _ch;
+                    ReadChar();
+                    var literal = $"{ch}{_ch}";
+                    tok = new Token(TokenType.GtEq, literal, line, col);
+                }
+                else
+                {
+                    tok = NewToken(TokenType.Gt, _ch, line, col);
+                }
                 break;
             case ';':
                 tok = NewToken(TokenType.Semicolon, _ch, line, col);

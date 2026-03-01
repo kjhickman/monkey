@@ -253,4 +253,26 @@ public class LexerTests
         Assert.Equal("||", tok.Literal);
         Assert.Equal(TokenType.False, l.NextToken().Type);
     }
+
+    [Fact]
+    public void TestLtEqToken()
+    {
+        var l = new Lexer("1 <= 2");
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.LtEq, tok.Type);
+        Assert.Equal("<=", tok.Literal);
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+    }
+
+    [Fact]
+    public void TestGtEqToken()
+    {
+        var l = new Lexer("2 >= 1");
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.GtEq, tok.Type);
+        Assert.Equal(">=", tok.Literal);
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+    }
 }
