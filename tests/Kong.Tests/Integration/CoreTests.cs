@@ -37,6 +37,16 @@ public class CoreTests
     }
 
     [Theory]
+    [InlineData("let one = 1 let two = 2 puts(one + two)", "3")]
+    [InlineData("let one = 1; let two = 2 puts(one + two)", "3")]
+    [InlineData("let one = 1 let two = 2; puts(one + two)", "3")]
+    public async Task TestSemicolonsAreOptionalEvenOnOneLine(string source, string expected)
+    {
+        var clrOutput = await IntegrationTestHarness.CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
     [InlineData("1 < 2", true)]
     [InlineData("1 > 2", false)]
     [InlineData("1 < 1", false)]

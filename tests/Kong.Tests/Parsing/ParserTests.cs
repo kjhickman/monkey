@@ -6,9 +6,9 @@ namespace Kong.Tests.Parsing;
 public class ParserTests
 {
     [Theory]
-    [InlineData("let x = 5;", "x", 5L)]
-    [InlineData("let y = true;", "y", true)]
-    [InlineData("let foobar = y;", "foobar", "y")]
+    [InlineData("let x = 5", "x", 5L)]
+    [InlineData("let y = true", "y", true)]
+    [InlineData("let foobar = y", "foobar", "y")]
     public void TestLetStatements(string input, string expectedIdentifier, object expectedValue)
     {
         var l = new Lexer(input);
@@ -26,9 +26,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("return 5;", 5L)]
-    [InlineData("return true;", true)]
-    [InlineData("return foobar;", "foobar")]
+    [InlineData("return 5", 5L)]
+    [InlineData("return true", true)]
+    [InlineData("return foobar", "foobar")]
     public void TestReturnStatements(string input, object expectedValue)
     {
         var l = new Lexer(input);
@@ -46,7 +46,7 @@ public class ParserTests
     [Fact]
     public void TestIdentifierExpression()
     {
-        var input = "foobar;";
+        var input = "foobar";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -64,7 +64,7 @@ public class ParserTests
     [Fact]
     public void TestIntegerLiteralExpression()
     {
-        var input = "5;";
+        var input = "5";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -80,12 +80,12 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("!5;", "!", 5L)]
-    [InlineData("-15;", "-", 15L)]
-    [InlineData("!foobar;", "!", "foobar")]
-    [InlineData("-foobar;", "-", "foobar")]
-    [InlineData("!true;", "!", true)]
-    [InlineData("!false;", "!", false)]
+    [InlineData("!5", "!", 5L)]
+    [InlineData("-15", "-", 15L)]
+    [InlineData("!foobar", "!", "foobar")]
+    [InlineData("-foobar", "-", "foobar")]
+    [InlineData("!true", "!", true)]
+    [InlineData("!false", "!", false)]
     public void TestParsingPrefixExpressions(string input, string op, object value)
     {
         var l = new Lexer(input);
@@ -102,22 +102,22 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("5 + 5;", 5L, "+", 5L)]
-    [InlineData("5 - 5;", 5L, "-", 5L)]
-    [InlineData("5 * 5;", 5L, "*", 5L)]
-    [InlineData("5 / 5;", 5L, "/", 5L)]
-    [InlineData("5 > 5;", 5L, ">", 5L)]
-    [InlineData("5 < 5;", 5L, "<", 5L)]
-    [InlineData("5 == 5;", 5L, "==", 5L)]
-    [InlineData("5 != 5;", 5L, "!=", 5L)]
-    [InlineData("foobar + barfoo;", "foobar", "+", "barfoo")]
-    [InlineData("foobar - barfoo;", "foobar", "-", "barfoo")]
-    [InlineData("foobar * barfoo;", "foobar", "*", "barfoo")]
-    [InlineData("foobar / barfoo;", "foobar", "/", "barfoo")]
-    [InlineData("foobar > barfoo;", "foobar", ">", "barfoo")]
-    [InlineData("foobar < barfoo;", "foobar", "<", "barfoo")]
-    [InlineData("foobar == barfoo;", "foobar", "==", "barfoo")]
-    [InlineData("foobar != barfoo;", "foobar", "!=", "barfoo")]
+    [InlineData("5 + 5", 5L, "+", 5L)]
+    [InlineData("5 - 5", 5L, "-", 5L)]
+    [InlineData("5 * 5", 5L, "*", 5L)]
+    [InlineData("5 / 5", 5L, "/", 5L)]
+    [InlineData("5 > 5", 5L, ">", 5L)]
+    [InlineData("5 < 5", 5L, "<", 5L)]
+    [InlineData("5 == 5", 5L, "==", 5L)]
+    [InlineData("5 != 5", 5L, "!=", 5L)]
+    [InlineData("foobar + barfoo", "foobar", "+", "barfoo")]
+    [InlineData("foobar - barfoo", "foobar", "-", "barfoo")]
+    [InlineData("foobar * barfoo", "foobar", "*", "barfoo")]
+    [InlineData("foobar / barfoo", "foobar", "/", "barfoo")]
+    [InlineData("foobar > barfoo", "foobar", ">", "barfoo")]
+    [InlineData("foobar < barfoo", "foobar", "<", "barfoo")]
+    [InlineData("foobar == barfoo", "foobar", "==", "barfoo")]
+    [InlineData("foobar != barfoo", "foobar", "!=", "barfoo")]
     [InlineData("true == true", true, "==", true)]
     [InlineData("true != false", true, "!=", false)]
     [InlineData("false == false", false, "==", false)]
@@ -173,8 +173,8 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("true;", true)]
-    [InlineData("false;", false)]
+    [InlineData("true", true)]
+    [InlineData("false", false)]
     public void TestBooleanExpression(string input, bool expectedBoolean)
     {
         var l = new Lexer(input);
@@ -268,10 +268,10 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("fn() {};", new string[] { }, new string[] { })]
-    [InlineData("fn(x: int) {};", new[] { "x" }, new[] { "int" })]
-    [InlineData("fn(x: int, y: bool, z: string) {};", new[] { "x", "y", "z" }, new[] { "int", "bool", "string" })]
-    [InlineData("fn(values: int[], lookup: map[string]int) {};", new[] { "values", "lookup" }, new[] { "int[]", "map[string]int" })]
+    [InlineData("fn() {}", new string[] { }, new string[] { })]
+    [InlineData("fn(x: int) {}", new[] { "x" }, new[] { "int" })]
+    [InlineData("fn(x: int, y: bool, z: string) {}", new[] { "x", "y", "z" }, new[] { "int", "bool", "string" })]
+    [InlineData("fn(values: int[], lookup: map[string]int) {}", new[] { "values", "lookup" }, new[] { "int[]", "map[string]int" })]
     public void TestFunctionParameterParsing(string input, string[] expectedParams, string[] expectedTypes)
     {
         var l = new Lexer(input);
@@ -308,7 +308,7 @@ public class ParserTests
     [Fact]
     public void TestCallExpressionParsing()
     {
-        var input = "add(1, 2 * 3, 4 + 5);";
+        var input = "add(1, 2 * 3, 4 + 5)";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -330,9 +330,9 @@ public class ParserTests
     }
 
     [Theory]
-    [InlineData("add();", "add", new string[] { })]
-    [InlineData("add(1);", "add", new[] { "1" })]
-    [InlineData("add(1, 2 * 3, 4 + 5);", "add", new[] { "1", "(2 * 3)", "(4 + 5)" })]
+    [InlineData("add()", "add", new string[] { })]
+    [InlineData("add(1)", "add", new[] { "1" })]
+    [InlineData("add(1, 2 * 3, 4 + 5)", "add", new[] { "1", "(2 * 3)", "(4 + 5)" })]
     public void TestCallExpressionParameterParsing(string input, string expectedIdent, string[] expectedArgs)
     {
         var l = new Lexer(input);
@@ -356,7 +356,7 @@ public class ParserTests
     [Fact]
     public void TestStringLiteralExpression()
     {
-        var input = "\"hello world\";";
+        var input = "\"hello world\"";
 
         var l = new Lexer(input);
         var p = new Parser(l);
@@ -485,7 +485,7 @@ public class ParserTests
     [Fact]
     public void TestFunctionLiteralWithName()
     {
-        var input = "let myFunction = fn() { };";
+        var input = "let myFunction = fn() { }";
 
         var l = new Lexer(input);
         var p = new Parser(l);
