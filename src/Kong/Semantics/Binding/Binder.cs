@@ -190,19 +190,33 @@ public sealed class Binder
             BlockStatement blockStatement
                 => BindBlockStatement(blockStatement, new SymbolScope(scope), functionContext),
             AssignStatement assignStatement
-                => BindAssignStatement(assignStatement),
+                => BindAssignStatement(assignStatement, scope, functionContext),
             _ => new BoundExpressionStatement(
                 new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
                 new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null)),
         };
     }
 
-    private BoundStatement BindAssignStatement(AssignStatement assignStatement)
+    private BoundStatement BindAssignStatement(AssignStatement assignStatement, SymbolScope scope, FunctionBindingContext? functionContext)
     {
-        ReportError($"variable reassignment is not supported: '{assignStatement.Name.Value}'", assignStatement);
-        return new BoundExpressionStatement(
-            new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
-            new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null));
+        if (!scope.TryLookupVariable(assignStatement.Name.Value, out var variable) || variable is null)
+        {
+            ReportError($"undefined variable: '{assignStatement.Name.Value}'", assignStatement);
+            return new BoundExpressionStatement(
+                new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
+                new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null));
+        }
+
+        if (!variable.IsMutable)
+        {
+            ReportError($"cannot assign to immutable variable '{assignStatement.Name.Value}' (declared with 'let')", assignStatement);
+            return new BoundExpressionStatement(
+                new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
+                new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null));
+        }
+
+        var value = BindExpression(assignStatement.Value, scope, functionContext);
+        return new BoundAssignStatement(assignStatement, variable, value);
     }
 
     private BoundBlockStatement BindBlockStatement(BlockStatement blockStatement, SymbolScope scope, FunctionBindingContext? functionContext)
@@ -244,7 +258,7 @@ public sealed class Binder
         }
 
         var value = BindExpression(letStatement.Value!, scope, functionContext);
-        var symbol = new VariableSymbol(letStatement.Name.Value, TypeSymbol.Unknown);
+        var symbol = new VariableSymbol(letStatement.Name.Value, TypeSymbol.Unknown, letStatement.IsMutable);
         scope.Define(symbol);
         return new BoundLetStatement(letStatement, symbol, value);
     }

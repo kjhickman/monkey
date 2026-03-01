@@ -275,4 +275,13 @@ public class LexerTests
         Assert.Equal(">=", tok.Literal);
         Assert.Equal(TokenType.Int, l.NextToken().Type);
     }
+
+    [Fact]
+    public void TestVarKeyword()
+    {
+        var l = new Lexer("var x = 5");
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.Var, tok.Type);
+        Assert.Equal("var", tok.Literal);
+    }
 }

@@ -31,9 +31,9 @@ public class TypeErrorTests
     }
 
     [Theory]
-    [InlineData("let x = 1; x = 2; puts(x);", "no prefix parse function for Assign found")]
-    [InlineData("let x = \"hello\"; x = \"world\"; puts(x);", "no prefix parse function for Assign found")]
-    public void TestVariableReassignmentIsCompileError(string source, string expectedError)
+    [InlineData("let x = 1; x = 2; puts(x);", "cannot assign to immutable variable 'x' (declared with 'let')")]
+    [InlineData("let x = \"hello\"; x = \"world\"; puts(x);", "cannot assign to immutable variable 'x' (declared with 'let')")]
+    public void TestLetVariableReassignmentIsCompileError(string source, string expectedError)
     {
         var compileError = IntegrationTestHarness.CompileWithExpectedError(source);
         Assert.Contains(expectedError, compileError);

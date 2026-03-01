@@ -61,6 +61,13 @@ public sealed class BoundLetStatement(LetStatement syntax, VariableSymbol? varia
     public BoundExpression Value { get; } = value;
 }
 
+public sealed class BoundAssignStatement(AssignStatement syntax, VariableSymbol variable, BoundExpression value) : BoundStatement(syntax)
+{
+    public VariableSymbol Variable { get; } = variable;
+
+    public BoundExpression Value { get; } = value;
+}
+
 public sealed class BoundReturnStatement(ReturnStatement syntax, BoundExpression value) : BoundStatement(syntax)
 {
     public BoundExpression Value { get; } = value;

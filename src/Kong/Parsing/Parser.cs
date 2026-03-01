@@ -168,7 +168,9 @@ public class Parser
         return _curToken.Type switch
         {
             TokenType.Let => ParseLetStatement(),
+            TokenType.Var => ParseVarStatement(),
             TokenType.Return => ParseReturnStatement(),
+            _ when _curToken.Type == TokenType.Ident && _peekToken.Type == TokenType.Assign => ParseAssignStatement(),
             _ => ParseExpressionStatement(),
         };
     }
@@ -197,6 +199,56 @@ public class Parser
         {
             fl.Name = statement.Name.Value;
         }
+
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+        }
+
+        return statement;
+    }
+
+    private LetStatement? ParseVarStatement()
+    {
+        var statement = new LetStatement { Token = _curToken, IsMutable = true };
+
+        if (!ExpectPeek(TokenType.Ident))
+        {
+            return null;
+        }
+
+        statement.Name = new Identifier { Token = _curToken, Value = _curToken.Literal };
+
+        if (!ExpectPeek(TokenType.Assign))
+        {
+            return null;
+        }
+
+        NextToken();
+
+        statement.Value = ParseExpression(Precedence.Lowest);
+
+        if (PeekTokenIs(TokenType.Semicolon))
+        {
+            NextToken();
+        }
+
+        return statement;
+    }
+
+    private AssignStatement ParseAssignStatement()
+    {
+        var name = new Identifier { Token = _curToken, Value = _curToken.Literal };
+        NextToken(); // consume the '=' token
+        var assignToken = _curToken;
+        NextToken(); // move to the value expression
+
+        var statement = new AssignStatement
+        {
+            Token = assignToken,
+            Name = name,
+            Value = ParseExpression(Precedence.Lowest)!,
+        };
 
         if (PeekTokenIs(TokenType.Semicolon))
         {

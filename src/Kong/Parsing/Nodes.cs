@@ -26,9 +26,10 @@ public class Program : INode
 
 public class LetStatement : IStatement
 {
-    public Token Token { get; set; } // the TokenType.Let token
+    public Token Token { get; set; } // the TokenType.Let or TokenType.Var token
     public Identifier Name { get; set; } = null!;
     public IExpression? Value { get; set; }
+    public bool IsMutable { get; set; }
 
     public string TokenLiteral() => Token.Literal;
 

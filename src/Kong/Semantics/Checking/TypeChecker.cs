@@ -113,6 +113,7 @@ public sealed class TypeChecker
         {
             BoundExpressionStatement expressionStatement => SetType(statement.Syntax, InferExpression(expressionStatement.Expression, result), result),
             BoundLetStatement letStatement => InferLetStatement(letStatement, result),
+            BoundAssignStatement assignStatement => InferAssignStatement(assignStatement, result),
             BoundReturnStatement returnStatement => SetType(statement.Syntax, InferExpression(returnStatement.Value, result), result),
             BoundBlockStatement blockStatement => InferBlockStatement(blockStatement, result),
             _ => AddErrorAndSetType(statement.Syntax, $"Unsupported statement type: {statement.GetType().Name}", TypeSymbol.Unknown, result),
@@ -133,6 +134,24 @@ public sealed class TypeChecker
         }
 
         return SetType(letStatement.Syntax, valueType, result);
+    }
+
+    private TypeSymbol InferAssignStatement(BoundAssignStatement assignStatement, SemanticModel result)
+    {
+        var valueType = InferExpression(assignStatement.Value, result);
+
+        if (valueType == TypeSymbol.Void)
+        {
+            return AddErrorAndSetType(assignStatement.Syntax, "Type error: cannot assign an expression with no value", TypeSymbol.Unknown, result);
+        }
+
+        var variableType = assignStatement.Variable.Type;
+        if (variableType != TypeSymbol.Unknown && !valueType.IsCompatibleWith(variableType))
+        {
+            return AddErrorAndSetType(assignStatement.Syntax, $"Type error: cannot assign {valueType} to variable '{assignStatement.Variable.Name}' of type {variableType}", TypeSymbol.Unknown, result);
+        }
+
+        return SetType(assignStatement.Syntax, valueType, result);
     }
 
     private TypeSymbol InferBlockStatement(BoundBlockStatement blockStatement, SemanticModel result)
