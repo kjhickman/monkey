@@ -106,6 +106,17 @@ public class CoreTests
     }
 
     [Theory]
+    [InlineData("// comment only\nputs(1)", "1")]
+    [InlineData("let x = 5 // trailing\nputs(x)", "5")]
+    [InlineData("let x = 10\nlet y = x / 2 // division still works\nputs(y)", "5")]
+    [InlineData("puts(\"http://example.com\") // // in string", "http://example.com")]
+    public async Task TestLineComments(string source, string expected)
+    {
+        var clrOutput = await IntegrationTestHarness.CompileAndRunOnClr(source);
+        Assert.Equal(expected, clrOutput);
+    }
+
+    [Theory]
     [InlineData("\"monkey\"", "monkey")]
     [InlineData("\"mon\" + \"key\"", "monkey")]
     [InlineData("\"mon\" + \"key\" + \"banana\"", "monkeybanana")]

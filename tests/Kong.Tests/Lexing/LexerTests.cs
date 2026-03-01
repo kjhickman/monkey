@@ -134,4 +134,43 @@ public class LexerTests
             Assert.Equal(tests[i].expectedLiteral, tok.Literal);
         }
     }
+
+    [Fact]
+    public void TestNextTokenWithLineComments()
+    {
+        var input = "// full line comment\n"
+            + "let x = 10 // trailing comment\n"
+            + "let y = x / 2\n"
+            + "let url = \"http://example.com\"\n"
+            + "// last comment without trailing newline";
+
+        var tests = new (TokenType expectedType, string expectedLiteral)[]
+        {
+            (TokenType.Let, "let"),
+            (TokenType.Ident, "x"),
+            (TokenType.Assign, "="),
+            (TokenType.Int, "10"),
+            (TokenType.Let, "let"),
+            (TokenType.Ident, "y"),
+            (TokenType.Assign, "="),
+            (TokenType.Ident, "x"),
+            (TokenType.Slash, "/"),
+            (TokenType.Int, "2"),
+            (TokenType.Let, "let"),
+            (TokenType.Ident, "url"),
+            (TokenType.Assign, "="),
+            (TokenType.String, "http://example.com"),
+            (TokenType.Eof, ""),
+        };
+
+        var l = new Lexer(input);
+
+        for (var i = 0; i < tests.Length; i++)
+        {
+            var tok = l.NextToken();
+
+            Assert.Equal(tests[i].expectedType, tok.Type);
+            Assert.Equal(tests[i].expectedLiteral, tok.Literal);
+        }
+    }
 }

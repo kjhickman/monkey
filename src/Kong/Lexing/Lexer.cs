@@ -54,6 +54,12 @@ public class Lexer
                 }
                 break;
             case '/':
+                if (PeekChar() == '/')
+                {
+                    SkipLineComment();
+                    return NextToken();
+                }
+
                 tok = NewToken(TokenType.Slash, _ch);
                 break;
             case '*':
@@ -177,6 +183,14 @@ public class Lexer
     private static Token NewToken(TokenType type, char ch)
     {
         return new Token(type, ch.ToString());
+    }
+
+    private void SkipLineComment()
+    {
+        while (_ch is not '\n' and not '\r' and not '\0')
+        {
+            ReadChar();
+        }
     }
 
     private static bool IsLetter(char ch)
