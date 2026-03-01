@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Lexing;
 
 namespace Kong.Parsing;
@@ -17,7 +18,7 @@ public enum Precedence
 public class Parser
 {
     private readonly Lexer _lexer;
-    private readonly List<string> _errors;
+    private readonly List<Diagnostic> _errors;
 
     private Token _curToken;
     private Token _peekToken;
@@ -79,7 +80,7 @@ public class Parser
         NextToken();
     }
 
-    public List<string> Errors() => _errors;
+    public List<Diagnostic> Errors() => _errors;
 
     public Program ParseProgram()
     {
@@ -129,13 +130,13 @@ public class Parser
     private void PeekError(TokenType t)
     {
         var msg = $"expected next token to be {t}, got {_peekToken.Type} instead";
-        _errors.Add(msg);
+        _errors.Add(new Diagnostic(CompilationStage.Parsing, msg, _peekToken.Line, _peekToken.Column));
     }
 
     private void NoPrefixParseFnError(TokenType t)
     {
         var msg = $"no prefix parse function for {t} found";
-        _errors.Add(msg);
+        _errors.Add(new Diagnostic(CompilationStage.Parsing, msg, _curToken.Line, _curToken.Column));
     }
 
     private Precedence PeekPrecedence()
@@ -310,7 +311,7 @@ public class Parser
         if (!long.TryParse(_curToken.Literal, out var value))
         {
             var msg = $"could not parse \"{_curToken.Literal}\" as integer";
-            _errors.Add(msg);
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, msg, _curToken.Line, _curToken.Column));
             return null!;
         }
 
@@ -454,7 +455,7 @@ public class Parser
     {
         if (!CurTokenIs(TokenType.Ident))
         {
-            _errors.Add($"expected function parameter name, got {_curToken.Type} instead");
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, $"expected function parameter name, got {_curToken.Type} instead", _curToken.Line, _curToken.Column));
             return null;
         }
 
@@ -462,7 +463,7 @@ public class Parser
 
         if (!PeekTokenIs(TokenType.Colon))
         {
-            _errors.Add($"expected ':' after function parameter name, got {_peekToken.Type} instead");
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, $"expected ':' after function parameter name, got {_peekToken.Type} instead", _peekToken.Line, _peekToken.Column));
             return null;
         }
 
@@ -475,7 +476,7 @@ public class Parser
             return null;
         }
 
-        return new FunctionParameter { Name = name, TypeAnnotation = typeAnnotation };
+        return new FunctionParameter { Token = name.Token, Name = name, TypeAnnotation = typeAnnotation };
     }
 
     private ITypeExpression? ParseTypeExpression()
@@ -510,7 +511,7 @@ public class Parser
     {
         if (!CurTokenIs(TokenType.Ident))
         {
-            _errors.Add($"expected type name, got {_curToken.Type} instead");
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, $"expected type name, got {_curToken.Type} instead", _curToken.Line, _curToken.Column));
             return null;
         }
 

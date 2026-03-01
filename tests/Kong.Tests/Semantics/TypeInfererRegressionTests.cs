@@ -23,7 +23,7 @@ public class TypeInfererRegressionTests
         var program = Parse("let value = (fn(x: int) { x })(true);");
         var types = AnalyzeAndGetTypes(program);
 
-        Assert.Contains(types.GetErrors(), e => e.Contains("Type error: argument 1"));
+        Assert.Contains(types.GetErrors(), e => e.Message.Contains("Type error: argument 1"));
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public class TypeInfererRegressionTests
 
         var result = analyzer.Analyze(program);
 
-        Assert.Contains(result.Errors, e => e.Contains("invalid type annotation for parameter 'x': unknown type 'banana'"));
+        Assert.Contains(result.Errors, e => e.Message.Contains("invalid type annotation for parameter 'x': unknown type 'banana'"));
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class TypeInfererRegressionTests
         var analyzer = new SemanticAnalyzer();
         var result = analyzer.Analyze(program);
 
-        Assert.Contains(result.Errors, e => e.Contains("argument to `len` not supported"));
+        Assert.Contains(result.Errors, e => e.Message.Contains("argument to `len` not supported"));
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class TypeInfererRegressionTests
 
         var result = analyzer.Analyze(program);
 
-        Assert.Contains(result.Errors, e => e.Contains("hash map index must be string"));
+        Assert.Contains(result.Errors, e => e.Message.Contains("hash map index must be string"));
     }
 
     private static Program Parse(string source)

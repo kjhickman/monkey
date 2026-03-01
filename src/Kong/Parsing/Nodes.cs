@@ -5,6 +5,7 @@ namespace Kong.Parsing;
 
 public class Program : INode
 {
+    public Token Token { get; set; }
     public List<IStatement> Statements { get; set; } = [];
 
     public string TokenLiteral()
@@ -272,6 +273,7 @@ public class MapTypeExpression : ITypeExpression
 
 public class FunctionParameter : INode
 {
+    public Token Token { get; set; }
     public Identifier Name { get; set; } = null!;
     public ITypeExpression? TypeAnnotation { get; set; }
 

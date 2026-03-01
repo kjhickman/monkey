@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Semantics.Binding;
 using Kong.Semantics.Checking;
 
@@ -26,4 +27,4 @@ public sealed class SemanticAnalyzer
     }
 }
 
-public sealed record SemanticAnalysisResult(BoundProgram? BoundProgram, SemanticModel? Types, IReadOnlyList<string> Errors);
+public sealed record SemanticAnalysisResult(BoundProgram? BoundProgram, SemanticModel? Types, IReadOnlyList<Diagnostic> Errors);

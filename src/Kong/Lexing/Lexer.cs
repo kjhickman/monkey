@@ -6,6 +6,8 @@ public class Lexer
     private int _position;     // current position in input (points to current char)
     private int _readPosition; // current reading position in input (after current char)
     private char _ch;          // current character under examination
+    private int _line = 1;
+    private int _column;
 
     public Lexer(string input)
     {
@@ -19,6 +21,9 @@ public class Lexer
 
         SkipWhitespace();
 
+        var line = _line;
+        var col = _column;
+
         switch (_ch)
         {
             case '=':
@@ -27,18 +32,18 @@ public class Lexer
                     var ch = _ch;
                     ReadChar();
                     var literal = $"{ch}{_ch}";
-                    tok = new Token(TokenType.Eq, literal);
+                    tok = new Token(TokenType.Eq, literal, line, col);
                 }
                 else
                 {
-                    tok = NewToken(TokenType.Assign, _ch);
+                    tok = NewToken(TokenType.Assign, _ch, line, col);
                 }
                 break;
             case '+':
-                tok = NewToken(TokenType.Plus, _ch);
+                tok = NewToken(TokenType.Plus, _ch, line, col);
                 break;
             case '-':
-                tok = NewToken(TokenType.Minus, _ch);
+                tok = NewToken(TokenType.Minus, _ch, line, col);
                 break;
             case '!':
                 if (PeekChar() == '=')
@@ -46,11 +51,11 @@ public class Lexer
                     var ch = _ch;
                     ReadChar();
                     var literal = $"{ch}{_ch}";
-                    tok = new Token(TokenType.NotEq, literal);
+                    tok = new Token(TokenType.NotEq, literal, line, col);
                 }
                 else
                 {
-                    tok = NewToken(TokenType.Bang, _ch);
+                    tok = NewToken(TokenType.Bang, _ch, line, col);
                 }
                 break;
             case '/':
@@ -60,65 +65,65 @@ public class Lexer
                     return NextToken();
                 }
 
-                tok = NewToken(TokenType.Slash, _ch);
+                tok = NewToken(TokenType.Slash, _ch, line, col);
                 break;
             case '*':
-                tok = NewToken(TokenType.Asterisk, _ch);
+                tok = NewToken(TokenType.Asterisk, _ch, line, col);
                 break;
             case '<':
-                tok = NewToken(TokenType.Lt, _ch);
+                tok = NewToken(TokenType.Lt, _ch, line, col);
                 break;
             case '>':
-                tok = NewToken(TokenType.Gt, _ch);
+                tok = NewToken(TokenType.Gt, _ch, line, col);
                 break;
             case ';':
-                tok = NewToken(TokenType.Semicolon, _ch);
+                tok = NewToken(TokenType.Semicolon, _ch, line, col);
                 break;
             case ',':
-                tok = NewToken(TokenType.Comma, _ch);
+                tok = NewToken(TokenType.Comma, _ch, line, col);
                 break;
             case ':':
-                tok = NewToken(TokenType.Colon, _ch);
+                tok = NewToken(TokenType.Colon, _ch, line, col);
                 break;
             case '(':
-                tok = NewToken(TokenType.LParen, _ch);
+                tok = NewToken(TokenType.LParen, _ch, line, col);
                 break;
             case ')':
-                tok = NewToken(TokenType.RParen, _ch);
+                tok = NewToken(TokenType.RParen, _ch, line, col);
                 break;
             case '{':
-                tok = NewToken(TokenType.LBrace, _ch);
+                tok = NewToken(TokenType.LBrace, _ch, line, col);
                 break;
             case '}':
-                tok = NewToken(TokenType.RBrace, _ch);
+                tok = NewToken(TokenType.RBrace, _ch, line, col);
                 break;
             case '[':
-                tok = NewToken(TokenType.LBracket, _ch);
+                tok = NewToken(TokenType.LBracket, _ch, line, col);
                 break;
             case ']':
-                tok = NewToken(TokenType.RBracket, _ch);
+                tok = NewToken(TokenType.RBracket, _ch, line, col);
                 break;
             case '"':
-                tok = new Token(TokenType.String, ReadString());
+                tok = new Token(TokenType.String, ReadString(), line, col);
                 break;
             case '\0':
-                tok = new Token(TokenType.Eof, "");
+                tok = new Token(TokenType.Eof, "", line, col);
                 break;
             default:
                 if (IsLetter(_ch))
                 {
                     var literal = ReadIdentifier();
                     var type = Token.LookupIdent(literal);
-                    return new Token(type, literal);
+                    return new Token(type, literal, line, col);
                 }
 
                 if (IsDigit(_ch))
                 {
                     var literal = ReadNumber();
-                    return new Token(TokenType.Int, literal);
+                    return new Token(TokenType.Int, literal, line, col);
                 }
 
-                tok = NewToken(TokenType.Illegal, _ch);
+                tok = NewToken(TokenType.Illegal, _ch, line, col);
                 break;
         }
 
@@ -136,9 +141,16 @@ public class Lexer
 
     private void ReadChar()
     {
+        if (_ch == '\n')
+        {
+            _line++;
+            _column = 0;
+        }
+
         _ch = _readPosition >= _input.Length ? '\0' : _input[_readPosition];
         _position = _readPosition;
         _readPosition++;
+        _column++;
     }
 
     private char PeekChar()
@@ -180,9 +192,9 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private static Token NewToken(TokenType type, char ch)
+    private static Token NewToken(TokenType type, char ch, int line, int column)
     {
-        return new Token(type, ch.ToString());
+        return new Token(type, ch.ToString(), line, column);
     }
 
     private void SkipLineComment()

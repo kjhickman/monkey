@@ -46,7 +46,7 @@ public enum TokenType
     Return,
 }
 
-public record struct Token(TokenType Type, string Literal)
+public record struct Token(TokenType Type, string Literal, int Line = 0, int Column = 0)
 {
     private static readonly Dictionary<string, TokenType> Keywords = new()
     {

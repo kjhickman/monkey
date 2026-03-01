@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Lexing;
 using Kong.Parsing;
 using Kong.Semantics.Symbols;
@@ -8,10 +9,15 @@ public sealed class Binder
 {
     private static readonly HashSet<string> Builtins = ["puts", "len", "push"];
 
-    private readonly List<string> _errors = [];
+    private readonly List<Diagnostic> _errors = [];
     private readonly Dictionary<FunctionLiteral, BoundFunctionExpression> _functions = [];
     private readonly HashSet<FunctionSymbol> _topLevelFunctions = [];
     private readonly HashSet<LetStatement> _duplicateTopLevelStatements = [];
+
+    private void ReportError(string message, INode node)
+    {
+        _errors.Add(new Diagnostic(CompilationStage.SemanticAnalysis, message, node.Token.Line, node.Token.Column));
+    }
 
     public BindingResult Bind(Program program)
     {
@@ -50,11 +56,11 @@ public sealed class Binder
                 _duplicateTopLevelStatements.Add(letStatement);
                 if (firstBindingWasFunction && isFunctionBinding)
                 {
-                    _errors.Add($"duplicate top-level function definition: {letStatement.Name.Value}");
+                    ReportError($"duplicate top-level function definition: {letStatement.Name.Value}", letStatement);
                 }
                 else
                 {
-                    _errors.Add($"duplicate top-level binding: {letStatement.Name.Value}");
+                    ReportError($"duplicate top-level binding: {letStatement.Name.Value}", letStatement);
                 }
 
                 continue;
@@ -95,7 +101,7 @@ public sealed class Binder
             {
                 if (reportErrors)
                 {
-                    _errors.Add($"missing type annotation for parameter '{parameter.Name.Value}'");
+                    ReportError($"missing type annotation for parameter '{parameter.Name.Value}'", parameter.Name);
                 }
 
                 parameterTypes.Add(TypeSymbol.Unknown);
@@ -105,7 +111,7 @@ public sealed class Binder
             var type = ParseTypeAnnotation(parameter.TypeAnnotation, out var error);
             if (error is not null && reportErrors)
             {
-                _errors.Add($"invalid type annotation for parameter '{parameter.Name.Value}': {error}");
+                ReportError($"invalid type annotation for parameter '{parameter.Name.Value}': {error}", parameter.Name);
             }
 
             parameterTypes.Add(type);
@@ -191,7 +197,7 @@ public sealed class Binder
 
     private BoundStatement BindAssignStatement(AssignStatement assignStatement)
     {
-        _errors.Add($"variable reassignment is not supported: '{assignStatement.Name.Value}'");
+        ReportError($"variable reassignment is not supported: '{assignStatement.Name.Value}'", assignStatement);
         return new BoundExpressionStatement(
             new ExpressionStatement { Token = new Token(TokenType.Illegal, "") },
             new BoundIdentifierExpression(new Identifier { Token = new Token(TokenType.Illegal, ""), Value = "<unsupported>" }, null));
@@ -296,7 +302,7 @@ public sealed class Binder
                 return new BoundIdentifierExpression(identifier, null);
             }
 
-            _errors.Add($"Undefined variable: {identifier.Value}");
+            ReportError($"Undefined variable: {identifier.Value}", identifier);
             return new BoundIdentifierExpression(identifier, null);
         }
 
@@ -366,4 +372,4 @@ public sealed class Binder
     }
 }
 
-public sealed record BindingResult(BoundProgram BoundProgram, IReadOnlyList<string> Errors);
+public sealed record BindingResult(BoundProgram BoundProgram, IReadOnlyList<Diagnostic> Errors);

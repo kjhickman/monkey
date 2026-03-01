@@ -302,7 +302,7 @@ public class ParserTests
 
         var errors = p.Errors();
         Assert.NotEmpty(errors);
-        Assert.Contains(errors, e => e.Contains("expected ':' after function parameter name"));
+        Assert.Contains(errors, e => e.Message.Contains("expected ':' after function parameter name"));
     }
 
     [Fact]
@@ -510,7 +510,7 @@ public class ParserTests
         var message = $"parser has {errors.Count} errors\n";
         foreach (var err in errors)
         {
-            message += $"parser error: \"{err}\"\n";
+            message += $"parser error: \"{err.FormatMessage()}\"\n";
         }
         Assert.Fail(message);
     }

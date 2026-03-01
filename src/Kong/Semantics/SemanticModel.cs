@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Parsing;
 using Kong.Semantics.Symbols;
 
@@ -7,9 +8,8 @@ public sealed class SemanticModel
 {
     public sealed record FunctionSignature(string Name, IReadOnlyList<TypeSymbol> ParameterTypes, TypeSymbol ReturnType);
 
-    // Maps each node to its inferred type. Note: uses reference equality for keys
     private Dictionary<INode, TypeSymbol> Types { get; set; } = [];
-    private List<string> Errors { get; set; } = [];
+    private List<Diagnostic> Errors { get; set; } = [];
     private Dictionary<string, FunctionSignature> FunctionSignatures { get; set; } = [];
 
     public void AddNodeType(INode node, TypeSymbol type)
@@ -27,12 +27,12 @@ public sealed class SemanticModel
         return Types.TryGetValue(node, out var type) ? type : TypeSymbol.Unknown;
     }
 
-    public void AddError(string error)
+    public void AddError(string error, int line = 0, int column = 0)
     {
-        Errors.Add(error);
+        Errors.Add(new Diagnostic(CompilationStage.SemanticAnalysis, error, line, column));
     }
 
-    public IEnumerable<string> GetErrors()
+    public IEnumerable<Diagnostic> GetErrors()
     {
         return Errors;
     }

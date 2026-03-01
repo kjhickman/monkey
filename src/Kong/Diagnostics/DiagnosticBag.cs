@@ -8,16 +8,16 @@ public sealed class DiagnosticBag
 
     public bool HasErrors => _items.Count > 0;
 
-    public void Add(CompilationStage stage, string message)
+    public void Add(CompilationStage stage, string message, int line = 0, int column = 0)
     {
-        _items.Add(new Diagnostic(stage, message));
+        _items.Add(new Diagnostic(stage, message, line, column));
     }
 
-    public void AddRange(CompilationStage stage, IEnumerable<string> messages)
+    public void AddRange(CompilationStage stage, IEnumerable<Diagnostic> diagnostics)
     {
-        foreach (var message in messages)
+        foreach (var diagnostic in diagnostics)
         {
-            Add(stage, message);
+            _items.Add(new Diagnostic(stage, diagnostic.Message, diagnostic.Line, diagnostic.Column));
         }
     }
 
@@ -40,12 +40,12 @@ public sealed class DiagnosticBag
 
         foreach (var diagnostic in diagnostics._items)
         {
-            Add(stage, diagnostic.Message);
+            Add(stage, diagnostic.Message, diagnostic.Line, diagnostic.Column);
         }
     }
 
     public override string ToString()
     {
-        return string.Join(Environment.NewLine, _items.Select(d => d.Message));
+        return string.Join(Environment.NewLine, _items.Select(d => d.FormatMessage()));
     }
 }

@@ -1,3 +1,4 @@
+using Kong.Diagnostics;
 using Kong.Parsing;
 using Kong.Semantics.Binding;
 using Kong.Semantics.Symbols;
@@ -499,9 +500,9 @@ public sealed class TypeChecker
 
     private static TypeSymbol AddErrorAndSetType(INode node, string error, TypeSymbol type, SemanticModel result)
     {
-        result.AddError(error);
+        result.AddError(error, node.Token.Line, node.Token.Column);
         return SetType(node, type, result);
     }
 }
 
-public sealed record TypeCheckResult(SemanticModel TypeInfo, IReadOnlyList<string> Errors);
+public sealed record TypeCheckResult(SemanticModel TypeInfo, IReadOnlyList<Diagnostic> Errors);
