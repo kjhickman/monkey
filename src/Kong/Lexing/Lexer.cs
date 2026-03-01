@@ -122,8 +122,8 @@ public class Lexer
 
                 if (IsDigit(_ch))
                 {
-                    var literal = ReadNumber();
-                    return new Token(TokenType.Int, literal, line, col);
+                    var (literal, isFloat) = ReadNumber();
+                    return new Token(isFloat ? TokenType.Float : TokenType.Int, literal, line, col);
                 }
 
                 tok = NewToken(TokenType.Illegal, _ch, line, col);
@@ -171,14 +171,25 @@ public class Lexer
         return _input[position.._position];
     }
 
-    private string ReadNumber()
+    private (string literal, bool isFloat) ReadNumber()
     {
         var position = _position;
         while (IsDigit(_ch))
         {
             ReadChar();
         }
-        return _input[position.._position];
+
+        if (_ch == '.' && IsDigit(PeekChar()))
+        {
+            ReadChar(); // consume '.'
+            while (IsDigit(_ch))
+            {
+                ReadChar();
+            }
+            return (_input[position.._position], true);
+        }
+
+        return (_input[position.._position], false);
     }
 
     private string ReadString()

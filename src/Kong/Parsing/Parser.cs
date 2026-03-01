@@ -49,6 +49,7 @@ public class Parser
         {
             { TokenType.Ident, ParseIdentifier },
             { TokenType.Int, ParseIntegerLiteral },
+            { TokenType.Float, ParseDoubleLiteral },
             { TokenType.String, ParseStringLiteral },
             { TokenType.Char, ParseCharLiteral },
             { TokenType.Function, ParseFunctionLiteral },
@@ -338,6 +339,21 @@ public class Parser
         }
 
         literal.Value = _curToken.Literal[0];
+        return literal;
+    }
+
+    private IExpression ParseDoubleLiteral()
+    {
+        var literal = new DoubleLiteral { Token = _curToken };
+
+        if (!double.TryParse(_curToken.Literal, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value))
+        {
+            var msg = $"could not parse \"{_curToken.Literal}\" as double";
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, msg, _curToken.Line, _curToken.Column));
+            return null!;
+        }
+
+        literal.Value = value;
         return literal;
     }
 

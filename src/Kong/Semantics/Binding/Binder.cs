@@ -131,6 +131,7 @@ public sealed class Binder
                     "bool" => SetNoError(TypeSymbol.Bool, out error),
                     "string" => SetNoError(TypeSymbol.String, out error),
                     "char" => SetNoError(TypeSymbol.Char, out error),
+                    "double" => SetNoError(TypeSymbol.Double, out error),
                     _ => SetError(TypeSymbol.Unknown, $"unknown type '{named.Name}'", out error),
                 };
             case ArrayTypeExpression arrayType:
@@ -256,6 +257,7 @@ public sealed class Binder
             IntegerLiteral integerLiteral => new BoundIntegerLiteralExpression(integerLiteral),
             BooleanLiteral booleanLiteral => new BoundBooleanLiteralExpression(booleanLiteral),
             CharLiteral charLiteral => new BoundCharLiteralExpression(charLiteral),
+            DoubleLiteral doubleLiteral => new BoundDoubleLiteralExpression(doubleLiteral),
             StringLiteral stringLiteral => new BoundStringLiteralExpression(stringLiteral),
             ArrayLiteral arrayLiteral => new BoundArrayLiteralExpression(arrayLiteral, arrayLiteral.Elements.Select(e => BindExpression(e, scope, functionContext)).ToList()),
             HashLiteral hashLiteral => new BoundHashLiteralExpression(

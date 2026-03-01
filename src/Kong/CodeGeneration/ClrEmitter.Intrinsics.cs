@@ -256,6 +256,7 @@ public partial class ClrEmitter
             KongType.Boolean => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(bool)])),
             KongType.Int64 => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(long)])),
             KongType.Char => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(char)])),
+            KongType.Double => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(double)])),
             KongType.String => module.ImportReference(typeof(Console).GetMethod(nameof(Console.WriteLine), [typeof(string)])),
             _ => null,
         };

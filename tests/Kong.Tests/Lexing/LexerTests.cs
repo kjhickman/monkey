@@ -196,4 +196,28 @@ public class LexerTests
             Assert.Equal(tests[i].expectedLiteral, tok.Literal);
         }
     }
+
+    [Theory]
+    [InlineData("3.14", "3.14")]
+    [InlineData("1.0", "1.0")]
+    [InlineData("0.5", "0.5")]
+    [InlineData("100.001", "100.001")]
+    public void TestFloatLiteral(string input, string expectedLiteral)
+    {
+        var l = new Lexer(input);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.Float, tok.Type);
+        Assert.Equal(expectedLiteral, tok.Literal);
+    }
+
+    [Theory]
+    [InlineData("5")]
+    [InlineData("10")]
+    [InlineData("42")]
+    public void TestIntLiteralIsNotFloat(string input)
+    {
+        var l = new Lexer(input);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.Int, tok.Type);
+    }
 }

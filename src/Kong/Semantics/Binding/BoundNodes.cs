@@ -88,6 +88,10 @@ public sealed class BoundCharLiteralExpression(CharLiteral syntax) : BoundExpres
 {
 }
 
+public sealed class BoundDoubleLiteralExpression(DoubleLiteral syntax) : BoundExpression(syntax)
+{
+}
+
 public sealed class BoundStringLiteralExpression(StringLiteral syntax) : BoundExpression(syntax)
 {
 }

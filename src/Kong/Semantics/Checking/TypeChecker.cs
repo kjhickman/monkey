@@ -153,6 +153,7 @@ public sealed class TypeChecker
             BoundIntegerLiteralExpression => SetType(expression.Syntax, TypeSymbol.Int, result),
             BoundBooleanLiteralExpression => SetType(expression.Syntax, TypeSymbol.Bool, result),
             BoundCharLiteralExpression => SetType(expression.Syntax, TypeSymbol.Char, result),
+            BoundDoubleLiteralExpression => SetType(expression.Syntax, TypeSymbol.Double, result),
             BoundStringLiteralExpression => SetType(expression.Syntax, TypeSymbol.String, result),
             BoundIdentifierExpression identifier => InferIdentifier(identifier, result),
             BoundArrayLiteralExpression arrayLiteral => InferArrayLiteral(arrayLiteral, result),
@@ -272,10 +273,21 @@ public sealed class TypeChecker
                 return SetType(infixExpression.Syntax, TypeSymbol.Int, result);
             }
 
+            if (leftType == TypeSymbol.Double && rightType == TypeSymbol.Double)
+            {
+                return SetType(infixExpression.Syntax, TypeSymbol.Double, result);
+            }
+
             if ((leftType == TypeSymbol.Int && rightType == TypeSymbol.Unknown)
                 || (leftType == TypeSymbol.Unknown && rightType == TypeSymbol.Int))
             {
                 return SetType(infixExpression.Syntax, TypeSymbol.Int, result);
+            }
+
+            if ((leftType == TypeSymbol.Double && rightType == TypeSymbol.Unknown)
+                || (leftType == TypeSymbol.Unknown && rightType == TypeSymbol.Double))
+            {
+                return SetType(infixExpression.Syntax, TypeSymbol.Double, result);
             }
 
             if ((leftType == TypeSymbol.String && rightType == TypeSymbol.Unknown)
@@ -292,6 +304,11 @@ public sealed class TypeChecker
             if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
             {
                 return SetType(infixExpression.Syntax, TypeSymbol.Int, result);
+            }
+
+            if (leftType == TypeSymbol.Double && rightType == TypeSymbol.Double)
+            {
+                return SetType(infixExpression.Syntax, TypeSymbol.Double, result);
             }
 
             if (leftType != TypeSymbol.Int || rightType != TypeSymbol.Int)

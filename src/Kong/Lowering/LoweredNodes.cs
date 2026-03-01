@@ -87,6 +87,13 @@ public sealed class CharLiteral : IExpression
     public KongType Type => KongType.Char;
 }
 
+public sealed class DoubleLiteral : IExpression
+{
+    public Token Token { get; set; }
+    public double Value { get; set; }
+    public KongType Type => KongType.Double;
+}
+
 public sealed class StringLiteral : IExpression
 {
     public Token Token { get; set; }

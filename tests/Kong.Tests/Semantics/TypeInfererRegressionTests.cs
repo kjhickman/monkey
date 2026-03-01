@@ -91,4 +91,32 @@ public class TypeInfererRegressionTests
         var result = analyzer.Analyze(program);
         Assert.Empty(result.Errors);
     }
+
+    [Fact]
+    public void InferTypes_DoubleLiteralHasDoubleType()
+    {
+        var program = Parse("let x = 3.14;");
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void InferTypes_DoubleParameterAnnotationIsRecognized()
+    {
+        var program = Parse("let identity = fn(x: double) { x }; identity(1.0);");
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void InferTypes_DoubleArithmeticResultIsDouble()
+    {
+        var program = Parse("let add = fn() { 1.5 + 2.5 };");
+        var types = AnalyzeAndGetTypes(program);
+
+        Assert.True(types.TryGetFunctionSignature("add", out var sig));
+        Assert.Equal(TypeSymbol.Double, sig.ReturnType);
+    }
 }

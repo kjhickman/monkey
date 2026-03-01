@@ -8,6 +8,7 @@ public enum KongType
     Boolean,
     String,
     Char,
+    Double,
     Array,
     HashMap,
 }

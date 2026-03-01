@@ -25,6 +25,12 @@ public partial class ClrEmitter
         return null;
     }
 
+    private static string? EmitDoubleLiteral(DoubleLiteral literal, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Ldc_R8, literal.Value);
+        return null;
+    }
+
     private static string? EmitStringLiteral(StringLiteral literal, EmitContext context)
     {
         context.Il.Emit(OpCodes.Ldstr, literal.Value);
@@ -162,6 +168,9 @@ public partial class ClrEmitter
         switch (plusType)
         {
             case KongType.Int64:
+                context.Il.Emit(OpCodes.Add);
+                return null;
+            case KongType.Double:
                 context.Il.Emit(OpCodes.Add);
                 return null;
             case KongType.String:
