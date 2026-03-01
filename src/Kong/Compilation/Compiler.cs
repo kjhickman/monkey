@@ -63,7 +63,7 @@ public class Compiler
         return new ParseResult(program, diagnostics);
     }
 
-    private static SemanticResult AnalyzeSemantics(Kong.Parsing.Program program)
+    private static SemanticResult AnalyzeSemantics(Parsing.Program program)
     {
         var analyzer = new SemanticAnalyzer();
         var diagnostics = new DiagnosticBag();

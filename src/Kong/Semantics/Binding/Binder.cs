@@ -30,7 +30,7 @@ public sealed class Binder
         }
 
         var boundProgram = new BoundProgram(program, statements, new Dictionary<FunctionLiteral, BoundFunctionExpression>(_functions));
-        return new BindingResult(boundProgram, _errors.ToList());
+        return new BindingResult(boundProgram, [.. _errors]);
     }
 
     private void DeclareTopLevelFunctions(Program program, SymbolScope globalScope)
