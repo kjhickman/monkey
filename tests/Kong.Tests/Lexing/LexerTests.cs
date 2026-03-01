@@ -173,4 +173,27 @@ public class LexerTests
             Assert.Equal(tests[i].expectedLiteral, tok.Literal);
         }
     }
+
+    [Fact]
+    public void TestCharLiteral()
+    {
+        var input = "'a' 'z' ' '";
+
+        var tests = new (TokenType expectedType, string expectedLiteral)[]
+        {
+            (TokenType.Char, "a"),
+            (TokenType.Char, "z"),
+            (TokenType.Char, " "),
+            (TokenType.Eof, ""),
+        };
+
+        var l = new Lexer(input);
+
+        for (var i = 0; i < tests.Length; i++)
+        {
+            var tok = l.NextToken();
+            Assert.Equal(tests[i].expectedType, tok.Type);
+            Assert.Equal(tests[i].expectedLiteral, tok.Literal);
+        }
+    }
 }

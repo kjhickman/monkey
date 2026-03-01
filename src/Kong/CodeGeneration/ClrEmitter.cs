@@ -182,6 +182,13 @@ public partial class ClrEmitter
             return null;
         }
 
+        if (context.Method.ReturnType.FullName == context.Module.TypeSystem.Char.FullName)
+        {
+            context.Il.Emit(OpCodes.Ldc_I4_0);
+            context.Il.Emit(OpCodes.Ret);
+            return null;
+        }
+
         context.Il.Emit(OpCodes.Ldnull);
         context.Il.Emit(OpCodes.Ret);
         return null;
@@ -194,6 +201,7 @@ public partial class ClrEmitter
             Identifier id => EmitIdentifier(id, context),
             IntegerLiteral intLit => EmitIntegerLiteral(intLit, context),
             BooleanLiteral boolLit => EmitBooleanLiteral(boolLit, context),
+            CharLiteral charLit => EmitCharLiteral(charLit, context),
             StringLiteral strLit => EmitStringLiteral(strLit, context),
             ArrayLiteral arrayLit => EmitArrayLiteral(arrayLit, context),
             HashLiteral hashLiteral => EmitHashLiteral(hashLiteral, context),

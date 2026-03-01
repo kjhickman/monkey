@@ -50,6 +50,7 @@ public class Parser
             { TokenType.Ident, ParseIdentifier },
             { TokenType.Int, ParseIntegerLiteral },
             { TokenType.String, ParseStringLiteral },
+            { TokenType.Char, ParseCharLiteral },
             { TokenType.Function, ParseFunctionLiteral },
             { TokenType.True, ParseBoolean },
             { TokenType.False, ParseBoolean },
@@ -323,6 +324,21 @@ public class Parser
     private IExpression ParseStringLiteral()
     {
         return new StringLiteral { Token = _curToken, Value = _curToken.Literal };
+    }
+
+    private IExpression ParseCharLiteral()
+    {
+        var literal = new CharLiteral { Token = _curToken };
+
+        if (_curToken.Literal.Length != 1)
+        {
+            var msg = $"invalid character literal: '{_curToken.Literal}'";
+            _errors.Add(new Diagnostic(CompilationStage.Parsing, msg, _curToken.Line, _curToken.Column));
+            return null!;
+        }
+
+        literal.Value = _curToken.Literal[0];
+        return literal;
     }
 
     private IExpression ParseFunctionLiteral()

@@ -112,6 +112,11 @@ public sealed class CanonicalLowerer
                 Token = booleanLiteral.Token,
                 Value = booleanLiteral.Value,
             },
+            P.CharLiteral charLiteral => new CharLiteral
+            {
+                Token = charLiteral.Token,
+                Value = charLiteral.Value,
+            },
             P.StringLiteral stringLiteral => new StringLiteral
             {
                 Token = stringLiteral.Token,
@@ -602,6 +607,7 @@ public sealed class CanonicalLowerer
             P.Identifier => false,
             P.IntegerLiteral => false,
             P.BooleanLiteral => false,
+            P.CharLiteral => false,
             P.StringLiteral => false,
             P.FunctionLiteral => false,
             _ => true,

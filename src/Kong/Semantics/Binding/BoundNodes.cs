@@ -84,6 +84,10 @@ public sealed class BoundBooleanLiteralExpression(BooleanLiteral syntax) : Bound
 {
 }
 
+public sealed class BoundCharLiteralExpression(CharLiteral syntax) : BoundExpression(syntax)
+{
+}
+
 public sealed class BoundStringLiteralExpression(StringLiteral syntax) : BoundExpression(syntax)
 {
 }

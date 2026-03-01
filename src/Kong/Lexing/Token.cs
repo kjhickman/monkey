@@ -9,6 +9,7 @@ public enum TokenType
     Ident,
     Int,
     String,
+    Char,
 
     // Operators
     Assign,

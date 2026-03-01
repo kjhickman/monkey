@@ -73,4 +73,22 @@ public class TypeInfererRegressionTests
         Assert.NotNull(result.Types);
         return result.Types!;
     }
+
+    [Fact]
+    public void InferTypes_CharLiteralHasCharType()
+    {
+        var program = Parse("let c = 'a';");
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.Empty(result.Errors);
+    }
+
+    [Fact]
+    public void InferTypes_CharParameterAnnotationIsRecognized()
+    {
+        var program = Parse("let identity = fn(c: char) { c }; identity('z');");
+        var analyzer = new SemanticAnalyzer();
+        var result = analyzer.Analyze(program);
+        Assert.Empty(result.Errors);
+    }
 }

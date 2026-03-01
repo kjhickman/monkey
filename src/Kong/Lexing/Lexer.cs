@@ -106,6 +106,9 @@ public class Lexer
             case '"':
                 tok = new Token(TokenType.String, ReadString(), line, col);
                 break;
+            case '\'':
+                tok = new Token(TokenType.Char, ReadCharLiteral(), line, col);
+                break;
             case '\0':
                 tok = new Token(TokenType.Eof, "", line, col);
                 break;
@@ -190,6 +193,14 @@ public class Lexer
             }
         }
         return _input[position.._position];
+    }
+
+    private string ReadCharLiteral()
+    {
+        ReadChar();
+        var ch = _ch;
+        ReadChar(); // consume closing '
+        return ch.ToString();
     }
 
     private static Token NewToken(TokenType type, char ch, int line, int column)

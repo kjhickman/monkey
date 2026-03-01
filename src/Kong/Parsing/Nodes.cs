@@ -328,6 +328,15 @@ public class StringLiteral : IExpression
     public string String() => Token.Literal;
 }
 
+public class CharLiteral : IExpression
+{
+    public Token Token { get; set; }
+    public char Value { get; set; }
+
+    public string TokenLiteral() => Token.Literal;
+    public string String() => $"'{Token.Literal}'";
+}
+
 public class ArrayLiteral : IExpression
 {
     public Token Token { get; set; } // the '[' token

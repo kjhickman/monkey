@@ -80,6 +80,13 @@ public sealed class BooleanLiteral : IExpression
     public KongType Type => KongType.Boolean;
 }
 
+public sealed class CharLiteral : IExpression
+{
+    public Token Token { get; set; }
+    public char Value { get; set; }
+    public KongType Type => KongType.Char;
+}
+
 public sealed class StringLiteral : IExpression
 {
     public Token Token { get; set; }

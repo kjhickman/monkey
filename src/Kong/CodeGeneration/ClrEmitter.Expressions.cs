@@ -19,6 +19,12 @@ public partial class ClrEmitter
         return null;
     }
 
+    private static string? EmitCharLiteral(CharLiteral literal, EmitContext context)
+    {
+        context.Il.Emit(OpCodes.Ldc_I4, (int)literal.Value);
+        return null;
+    }
+
     private static string? EmitStringLiteral(StringLiteral literal, EmitContext context)
     {
         context.Il.Emit(OpCodes.Ldstr, literal.Value);

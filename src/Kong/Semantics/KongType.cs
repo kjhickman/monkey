@@ -7,6 +7,7 @@ public enum KongType
     Int64,
     Boolean,
     String,
+    Char,
     Array,
     HashMap,
 }

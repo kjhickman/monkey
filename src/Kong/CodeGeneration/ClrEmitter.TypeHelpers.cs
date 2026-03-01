@@ -12,6 +12,7 @@ public partial class ClrEmitter
         {
             KongType.Int64 => module.TypeSystem.Int64,
             KongType.Boolean => module.TypeSystem.Boolean,
+            KongType.Char => module.TypeSystem.Char,
             KongType.Void => module.TypeSystem.Object,
             KongType.String => module.TypeSystem.String,
             KongType.Array => new ArrayType(module.TypeSystem.Object),
@@ -26,6 +27,7 @@ public partial class ClrEmitter
         {
             KongType.Int64 => module.TypeSystem.Int64,
             KongType.Boolean => module.TypeSystem.Boolean,
+            KongType.Char => module.TypeSystem.Char,
             KongType.String => module.TypeSystem.String,
             _ => module.TypeSystem.Object,
         };
@@ -51,6 +53,9 @@ public partial class ClrEmitter
             case KongType.Boolean:
                 context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Boolean);
                 break;
+            case KongType.Char:
+                context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Char);
+                break;
         }
     }
 
@@ -66,6 +71,11 @@ public partial class ClrEmitter
         {
             context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Boolean);
         }
+
+        if (type.FullName == context.Module.TypeSystem.Char.FullName)
+        {
+            context.Il.Emit(OpCodes.Box, context.Module.TypeSystem.Char);
+        }
     }
 
     private static void EmitReadFromObject(KongType type, EmitContext context)
@@ -77,6 +87,9 @@ public partial class ClrEmitter
                 break;
             case KongType.Boolean:
                 context.Il.Emit(OpCodes.Unbox_Any, context.Module.TypeSystem.Boolean);
+                break;
+            case KongType.Char:
+                context.Il.Emit(OpCodes.Unbox_Any, context.Module.TypeSystem.Char);
                 break;
             case KongType.String:
                 context.Il.Emit(OpCodes.Castclass, context.Module.TypeSystem.String);
@@ -105,6 +118,9 @@ public partial class ClrEmitter
             case KongType.Boolean:
                 context.Il.Emit(OpCodes.Unbox_Any, context.Module.TypeSystem.Boolean);
                 break;
+            case KongType.Char:
+                context.Il.Emit(OpCodes.Unbox_Any, context.Module.TypeSystem.Char);
+                break;
             case KongType.String:
                 context.Il.Emit(OpCodes.Castclass, context.Module.TypeSystem.String);
                 break;
@@ -125,6 +141,11 @@ public partial class ClrEmitter
         }
 
         if (expectedType.FullName == context.Module.TypeSystem.Boolean.FullName)
+        {
+            return;
+        }
+
+        if (expectedType.FullName == context.Module.TypeSystem.Char.FullName)
         {
             return;
         }

@@ -152,6 +152,7 @@ public sealed class TypeChecker
         {
             BoundIntegerLiteralExpression => SetType(expression.Syntax, TypeSymbol.Int, result),
             BoundBooleanLiteralExpression => SetType(expression.Syntax, TypeSymbol.Bool, result),
+            BoundCharLiteralExpression => SetType(expression.Syntax, TypeSymbol.Char, result),
             BoundStringLiteralExpression => SetType(expression.Syntax, TypeSymbol.String, result),
             BoundIdentifierExpression identifier => InferIdentifier(identifier, result),
             BoundArrayLiteralExpression arrayLiteral => InferArrayLiteral(arrayLiteral, result),
@@ -375,7 +376,7 @@ public sealed class TypeChecker
             return AddErrorAndSetType(indexExpression.Syntax, $"Type error: array index must be Int64, but got {indexType}", TypeSymbol.Unknown, result);
         }
 
-        if (leftKind == KongType.HashMap && indexKind is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Unknown)
+        if (leftKind == KongType.HashMap && indexKind is not KongType.Int64 and not KongType.Boolean and not KongType.String and not KongType.Char and not KongType.Unknown)
         {
             return AddErrorAndSetType(indexExpression.Syntax, $"Type error: hash map index must be Int64, Boolean, or String, but got {indexType}", TypeSymbol.Unknown, result);
         }

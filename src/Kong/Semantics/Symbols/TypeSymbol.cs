@@ -7,6 +7,7 @@ public abstract record TypeSymbol
     public static TypeSymbol Int { get; } = new PrimitiveTypeSymbol("int", KongType.Int64);
     public static TypeSymbol Bool { get; } = new PrimitiveTypeSymbol("bool", KongType.Boolean);
     public static TypeSymbol String { get; } = new PrimitiveTypeSymbol("string", KongType.String);
+    public static TypeSymbol Char { get; } = new PrimitiveTypeSymbol("char", KongType.Char);
     public static TypeSymbol Array { get; } = new ArrayTypeSymbol(Unknown);
     public static TypeSymbol HashMap { get; } = new MapTypeSymbol(Unknown, Unknown);
 
@@ -32,6 +33,7 @@ public abstract record TypeSymbol
             KongType.Int64 => Int,
             KongType.Boolean => Bool,
             KongType.String => String,
+            KongType.Char => Char,
             KongType.Array => Array,
             KongType.HashMap => HashMap,
             KongType.Void => Void,
