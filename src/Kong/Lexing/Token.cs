@@ -19,6 +19,7 @@ public enum TokenType
     Bang,
     Asterisk,
     Slash,
+    Percent,
 
     Lt,
     Gt,

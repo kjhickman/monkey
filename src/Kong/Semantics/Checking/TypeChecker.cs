@@ -299,7 +299,7 @@ public sealed class TypeChecker
             return AddErrorAndSetType(infixExpression.Syntax, $"Type error: cannot apply operator '+' to types {leftType} and {rightType}", TypeSymbol.Unknown, result);
         }
 
-        if (op is "-" or "*" or "/")
+        if (op is "-" or "*" or "/" or "%")
         {
             if (leftType == TypeSymbol.Unknown || rightType == TypeSymbol.Unknown)
             {

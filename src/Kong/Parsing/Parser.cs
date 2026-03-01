@@ -36,6 +36,7 @@ public class Parser
         { TokenType.Minus, Precedence.Sum },
         { TokenType.Slash, Precedence.Product },
         { TokenType.Asterisk, Precedence.Product },
+        { TokenType.Percent, Precedence.Product },
         { TokenType.LParen, Precedence.Call },
         { TokenType.LBracket, Precedence.Index },
     };
@@ -69,6 +70,7 @@ public class Parser
             { TokenType.Minus, ParseInfixExpression },
             { TokenType.Asterisk, ParseInfixExpression },
             { TokenType.Slash, ParseInfixExpression },
+            { TokenType.Percent, ParseInfixExpression },
             { TokenType.Eq, ParseInfixExpression },
             { TokenType.NotEq, ParseInfixExpression },
             { TokenType.Lt, ParseInfixExpression },

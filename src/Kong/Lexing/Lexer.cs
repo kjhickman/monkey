@@ -70,6 +70,9 @@ public class Lexer
             case '*':
                 tok = NewToken(TokenType.Asterisk, _ch, line, col);
                 break;
+            case '%':
+                tok = NewToken(TokenType.Percent, _ch, line, col);
+                break;
             case '<':
                 tok = NewToken(TokenType.Lt, _ch, line, col);
                 break;

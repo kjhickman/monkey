@@ -220,4 +220,15 @@ public class LexerTests
         var tok = l.NextToken();
         Assert.Equal(TokenType.Int, tok.Type);
     }
+
+    [Fact]
+    public void TestPercentToken()
+    {
+        var l = new Lexer("10 % 3");
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+        var tok = l.NextToken();
+        Assert.Equal(TokenType.Percent, tok.Type);
+        Assert.Equal("%", tok.Literal);
+        Assert.Equal(TokenType.Int, l.NextToken().Type);
+    }
 }

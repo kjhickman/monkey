@@ -217,6 +217,7 @@ public partial class ClrEmitter
             InfixExpression minus when minus.Operator == "-" => EmitBinaryExpression(minus, OpCodes.Sub, context),
             InfixExpression times when times.Operator == "*" => EmitBinaryExpression(times, OpCodes.Mul, context),
             InfixExpression div when div.Operator == "/" => EmitBinaryExpression(div, OpCodes.Div, context),
+            InfixExpression mod when mod.Operator == "%" => EmitBinaryExpression(mod, OpCodes.Rem, context),
             InfixExpression eq when eq.Operator == "==" => EmitEqualExpression(eq, context),
             InfixExpression neq when neq.Operator == "!=" => EmitNotEqualExpression(neq, context),
             InfixExpression lt when lt.Operator == "<" => EmitLessThanExpression(lt, context),
